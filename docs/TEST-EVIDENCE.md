@@ -95,6 +95,85 @@ Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI. See `docs/TEST-MATRIX.md`.
 
 ---
 
+## 2026-09-04 — the plugin loads into a real DeepSeek Harness (gate Y)
+
+**Environment.** Windows 11, Node v24.12.0, `@deepseek-ai/dsh` 0.1.2-rc.1 installed from npm into a
+throwaway `DSH_HOME`, pnpm 11.5.2.
+
+### The published artifact, not the source tree
+
+```
+npm pack                 # companion/ -> corsen-ai-dsh-browser-connector-0.1.0.tgz, 32 files, 50909 bytes
+dsh plugin --profile headless add ./corsen-ai-dsh-browser-connector-0.1.0.tgz
+```
+
+DeepSeek Harness initialised the profile and, without any YAML being edited, appended the package to
+the profile layer stack because its manifest declares `dsh.bundle.patch`:
+
+```json
+"dsh": { "profile": { "bundles": [
+  "@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless", "@corsen-ai/dsh-browser-connector"
+] } }
+```
+
+This is ADR 0002 confirmed against the shipped CLI rather than against its source.
+
+### The composed Cordis tree
+
+```
+dsh --profile headless --dump-config
+```
+
+```yaml
+# == @corsen-ai/dsh-browser-connector
+- id: corsen-browser-connector
+  name: "@corsen-ai/dsh-browser-connector"
+  inject:
+    - tools
+  config:
+    port: 8781
+    profileName: ""
+    requireSupportedHarness: true
+```
+
+### The plugin applies
+
+```
+dsh --profile headless "say hi"
+```
+
+```
+dsh: MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"
+```
+
+The only failure is the absent API key. The connector produced no error, which means its version
+gate resolved `@deepseek-ai/dsh-tools` and accepted the runtime, and `ctx.effect`,
+`observeSessions`, and `registerBrowserTools` all ran. Had the gate rejected the runtime it would
+have thrown `corsen-browser-connector: ...` naming the supported range.
+
+### Tool registration, automated
+
+```
+node --test --experimental-strip-types companion/tests/tools.test.ts
+```
+
+```
+ℹ tests 20
+ℹ pass 20
+ℹ fail 0
+```
+
+Run against the real published `defineTool`, so the schemas and renderers are exercised by
+DeepSeek Harness code. Proves the five implemented tools register, that a call with no `exec.agent`
+refuses and contacts no browser, that the session is read per call rather than cached, and that
+typed text is never echoed back into the transcript.
+
+### What this does not yet prove
+
+A model actually calling these tools end to end needs a `DEEPSEEK_API_KEY`, which this environment
+does not have. Gate Y is therefore proven up to plugin application and tool registration, not up to
+a live model turn. That remains recorded as partial rather than claimed as complete.
+
 ## Findings this evidence run produced
 
 Three defects were found by these tests and fixed in the implementation, not worked around in the

@@ -64,7 +64,7 @@ called ready while they are open.
 
 | # | Gate | What will prove it | State |
 |---|---|---|---|
-| Y | The plugin loads into a real DeepSeek Harness and registers its tools | An integration test running `dsh` with the bundle installed | open |
+| Y | The plugin loads into a real DeepSeek Harness and registers its tools | `npm pack` + `dsh plugin add` + `--dump-config` against dsh 0.1.2-rc.1, plus `companion/tests/tools.test.ts` | partial — applies and registers; a live model turn needs an API key |
 | Z | Compatibility across the declared DSH range, plus an upstream lane | `docs/COMPATIBILITY.md` rows with CI evidence | open |
 | AA | Service-worker eviction and recovery | Forced worker termination mid-request, then a successful next request | open |
 | AB | Broker restart, DSH restart, and Chrome restart recovery | Component-by-component restart with verified recovery | open |
