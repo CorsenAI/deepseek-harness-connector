@@ -218,6 +218,39 @@ export function removeScope(registry: Registry, scope: Scope): Registry {
 }
 
 /**
+ * Install one complete binding, taking its tabs from every other scope in this registry.
+ *
+ * The broker uses this for an explicit attachment rather than assigning the entry directly: the
+ * extension is authoritative for its own tabs, but the broker must not depend on it being
+ * well-behaved. A browser that reported the same tab under two scopes would otherwise leave the
+ * broker routing two sessions to one signed-in page, which is the exact leak ADR 0007 forbids.
+ * @param registry - the registry to derive from.
+ * @param binding - the binding to install, already normalised.
+ * @returns a new registry in which only this scope holds these tabs.
+ */
+export function applyBinding(registry: Registry, binding: Binding): Registry {
+  const key = scopeKey(binding.profileId, binding.sessionId)
+  const claimed = new Set(binding.tabIds)
+  const next = mutable(registry)
+  for (const [otherKey, other] of Object.entries(next)) {
+    if (otherKey === key) continue
+    const remaining = other.tabIds.filter((tabId) => !claimed.has(tabId))
+    if (remaining.length === other.tabIds.length) continue
+    if (remaining.length === 0) delete next[otherKey]
+    else {
+      next[otherKey] = {
+        profileId: other.profileId,
+        sessionId: other.sessionId,
+        tabIds: Object.freeze(remaining),
+        activeTabId: remaining.includes(other.activeTabId) ? other.activeTabId : (remaining[0] as number),
+      }
+    }
+  }
+  next[key] = binding
+  return Object.freeze(next)
+}
+
+/**
  * Restrict a registry to tabs that still exist.
  *
  * Chrome reuses tab ids after a restart, so a restored binding is a claim to verify, not a fact.
