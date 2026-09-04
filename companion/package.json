@@ -1,0 +1,79 @@
+{
+  "name": "@corsen-ai/dsh-browser-connector",
+  "version": "0.1.0",
+  "description": "Connect exact DeepSeek Harness sessions to explicitly selected tabs in your own signed-in Chrome profile. Unofficial, local-first, by Corsen AI.",
+  "license": "MIT",
+  "author": "Corsen AI",
+  "homepage": "https://github.com/CorsenAI/deepseek-harness-connector",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CorsenAI/deepseek-harness-connector.git",
+    "directory": "companion"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "browser",
+    "chrome-extension",
+    "agent"
+  ],
+  "type": "module",
+  "main": "lib/plugin.js",
+  "types": "lib/types/plugin.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/plugin.d.ts",
+      "default": "./lib/plugin.js"
+    },
+    "./broker": {
+      "types": "./lib/types/broker-main.d.ts",
+      "default": "./lib/broker-main.js"
+    },
+    "./protocol": {
+      "types": "./lib/types/protocol.d.ts",
+      "default": "./lib/protocol.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": "^22.19 || >=24"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types \"tests/**/*.test.ts\"",
+    "clean": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/dsh-tools": ">=0.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": false
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.0"
+  }
+}
