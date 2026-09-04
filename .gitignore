@@ -1,0 +1,17 @@
+# Reference clones (behavioral/implementation references, never shipped)
+.refs/
+
+# Build + dependency output
+node_modules/
+dist/
+lib/
+*.tsbuildinfo
+
+# Local runtime state
+.dsh-connector-home/
+*.log
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+desktop.ini

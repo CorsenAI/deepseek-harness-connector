@@ -1,0 +1,13 @@
+# Deterministic release packaging depends on stable bytes: normalise to LF in
+# the repository and check out LF everywhere, including Windows.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.zip binary
+*.ico binary
+
+# Windows-only entry points that cmd.exe must parse.
+*.cmd text eol=crlf
+*.bat text eol=crlf
