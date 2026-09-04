@@ -1,0 +1,25 @@
+# The @corsen-ai/dsh-browser-connector bundle patch.
+#
+# `dsh plugin --profile <name> add @corsen-ai/dsh-browser-connector` installs this package into the
+# profile and appends it to `dsh.profile.bundles`, which applies this patch as one more layer over
+# the profile's existing tree. The row is inserted rather than configured, because the connector
+# contributes a new capability instead of changing an existing one.
+#
+# The plugin injects `tools` and registers its browser tools as effects, so removing the package
+# unregisters them with the fiber.
+
+- insert:
+    - id: corsen-browser-connector
+      name: '@corsen-ai/dsh-browser-connector'
+      inject: [tools]
+      config:
+        # The loopback port the connector broker owns. Change it only when another program already
+        # holds this port, and change the Chrome extension's setting to match.
+        port: 8781
+        # Empty means derive the profile name from the installation path, which is correct for a
+        # normal `dsh plugin` installation. Set it when the bundle resolves from the installation
+        # anchor rather than the profile directory.
+        profileName: ''
+        # Refuse to register browser tools on a DeepSeek Harness version this connector has not been
+        # tested against. Turning this off runs an untested runtime against a signed-in browser.
+        requireSupportedHarness: true
