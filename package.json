@@ -1,0 +1,23 @@
+{
+  "name": "deepseek-harness-connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Development and test orchestration for the DeepSeek Harness Connector. The published package is companion/; the Chrome Web Store package is extension/.",
+  "license": "MIT",
+  "author": "Corsen AI",
+  "type": "module",
+  "engines": {
+    "node": "^22.19 || >=24"
+  },
+  "scripts": {
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test --experimental-strip-types \"companion/tests/*.test.ts\"",
+    "test:e2e": "node --test --test-concurrency=1 --experimental-strip-types \"tests/e2e/*.test.ts\"",
+    "typecheck": "node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.json --noEmit",
+    "build": "node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.build.json",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1"
+  }
+}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Connector fixture A</title></head>
+<body>
+  <h1>Fixture A</h1>
+  <p id="lead">The quick brown fox jumps over the lazy dog.</p>
+
+  <form id="signin" onsubmit="event.preventDefault(); document.getElementById('outcome').textContent = 'submitted';">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" value="">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" value="hunter2-the-real-password">
+
+    <label for="otp">One time code</label>
+    <input id="otp" name="otp" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="\d{6}" value="123456">
+
+    <label for="card">Card number</label>
+    <input id="card" name="cardNumber" type="text" autocomplete="cc-number" value="4111111111111111">
+
+    <input id="csrf" name="csrf" type="hidden" value="csrf-token-should-never-appear">
+
+    <button id="submit" type="submit">Sign in</button>
+  </form>
+
+  <button id="counter" type="button" onclick="this.dataset.clicks = String(Number(this.dataset.clicks || 0) + 1); document.getElementById('outcome').textContent = 'clicked ' + this.dataset.clicks;">Click me</button>
+  <button id="disabled-button" type="button" disabled>Cannot click</button>
+
+  <p id="outcome">untouched</p>
+</body>
+</html>

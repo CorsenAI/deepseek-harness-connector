@@ -132,9 +132,9 @@ describe('panel copy', () => {
       { ...ready(), updateNotice: { required: true } },
     ]
     for (const snapshot of snapshots) {
-      const state = resolvePanelState(snapshot as never) as Record<string, string>
-      assert.ok(reference[state['titleKey'] as string], `${state['titleKey']} is missing from the reference locale`)
-      assert.ok(reference[state['detailKey'] as string], `${state['detailKey']} is missing from the reference locale`)
+      const state = resolvePanelState(snapshot as never) as { titleKey: string, detailKey: string }
+      assert.ok(reference[state.titleKey], `${state.titleKey} is missing from the reference locale`)
+      assert.ok(reference[state.detailKey], `${state.detailKey} is missing from the reference locale`)
     }
   })
 

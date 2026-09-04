@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Connector fixture B</title></head>
+<body>
+  <h1>Fixture B</h1>
+  <p id="lead">Distinct content that must never reach the session that owns fixture A.</p>
+  <button id="counter" type="button" onclick="document.getElementById('outcome').textContent = 'B was clicked';">Click me on B</button>
+  <p id="outcome">untouched</p>
+</body>
+</html>

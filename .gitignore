@@ -15,3 +15,8 @@ lib/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Playwright browser downloads and test output
+test-results/
+playwright-report/
+.scratch/
