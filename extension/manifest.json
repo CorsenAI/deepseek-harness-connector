@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "DeepSeek Harness Connector — by Corsen AI",
+  "version": "0.1.0",
+  "description": "Let an exact DeepSeek Harness session operate tabs you choose, in your own signed-in Chrome. Local, unofficial, by Corsen AI.",
+  "homepage_url": "https://github.com/CorsenAI/deepseek-harness-connector",
+  "minimum_chrome_version": "120",
+  "incognito": "not_allowed",
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:*; frame-src http://127.0.0.1:* http://localhost:*; child-src http://127.0.0.1:* http://localhost:*;"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open DeepSeek Harness Connector"
+  },
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "scripting",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "icons": {
+    "16": "assets/icon-16.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      }
+    }
+  }
+}
