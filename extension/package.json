@@ -1,0 +1,6 @@
+{
+  "name": "dsh-browser-connector-extension",
+  "private": true,
+  "type": "module",
+  "description": "Marks the extension sources as ES modules for Node-based tests and tooling. Chrome reads extension/manifest.json, not this file."
+}

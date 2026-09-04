@@ -20,14 +20,16 @@ import type { Role } from './protocol.ts'
 /** Bytes of entropy in a nonce. 16 bytes makes accidental reuse impossible in practice. */
 const NONCE_BYTES = 16
 
-/** Bytes of entropy in the pairing secret. */
-const SECRET_BYTES = 32
-
 /**
- * Groups in the human-entered pairing code. The code is a short display encoding of the secret's
- * first bytes, not the secret itself.
+ * Shape of the pairing secret.
+ *
+ * The secret is the code the user types, not a digest of it. It has to be: a Chrome extension
+ * cannot read a file, so the only channel from the installer to the extension is the user's
+ * keyboard, and both sides need the same value to compute a proof. Five groups of four characters
+ * from a 25-character alphabet is about 93 bits — ample for a local secret that additionally
+ * requires an extension origin — while staying short enough to type once.
  */
-const PAIRING_CODE_GROUPS = 4
+const PAIRING_CODE_GROUPS = 5
 const PAIRING_CODE_GROUP_CHARS = 4
 
 /**
@@ -44,12 +46,44 @@ export function createNonce(): string {
   return randomBytes(NONCE_BYTES).toString('hex')
 }
 
+/** Total characters in a normalised secret. */
+const SECRET_CHARS = PAIRING_CODE_GROUPS * PAIRING_CODE_GROUP_CHARS
+
+/** A normalised secret: exactly the confusion-free alphabet, at the expected length. */
+const SECRET_PATTERN = new RegExp(`^[${PAIRING_ALPHABET}]{${SECRET_CHARS}}$`)
+
 /**
  * Generate a fresh pairing secret.
- * @returns 64 lowercase hex characters.
+ *
+ * Drawn by rejection sampling so every character is uniform over the alphabet: taking a random byte
+ * modulo 25 would make the first six characters of the alphabet measurably more likely, throwing
+ * away entropy for no reason.
+ * @returns {@link SECRET_CHARS} characters from the confusion-free alphabet.
  */
 export function createSecret(): string {
-  return randomBytes(SECRET_BYTES).toString('hex')
+  const limit = Math.floor(256 / PAIRING_ALPHABET.length) * PAIRING_ALPHABET.length
+  let secret = ''
+  while (secret.length < SECRET_CHARS) {
+    for (const byte of randomBytes(SECRET_CHARS)) {
+      if (byte >= limit) continue
+      secret += PAIRING_ALPHABET[byte % PAIRING_ALPHABET.length]
+      if (secret.length === SECRET_CHARS) break
+    }
+  }
+  return secret
+}
+
+/**
+ * Reduce whatever the user typed to the canonical secret.
+ *
+ * Case, spaces, and dashes carry no information, so accepting them all removes an entire class of
+ * "the code does not work" support question.
+ * @param entered - the user's input.
+ * @returns the normalised secret, or an empty string when the input cannot be one.
+ */
+export function normalizePairingCode(entered: string): string {
+  const normalized = String(entered ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return SECRET_PATTERN.test(normalized) ? normalized : ''
 }
 
 /**
@@ -102,43 +136,38 @@ export function proofsMatch(left: string, right: string): boolean {
 }
 
 /**
- * Derive the code the user types into the extension once.
+ * Render the secret as the code the installer shows and the user types.
  *
- * The code is a truncated HMAC of a fixed label under the secret, rendered in a
- * confusion-free alphabet. It identifies the secret without being the secret: knowing the code does
- * not let a caller compute {@link roleProof} for an arbitrary nonce.
+ * Grouping is presentation only; {@link normalizePairingCode} reverses it.
  * @param secret - the pairing secret.
- * @returns a grouped code such as `A3KD-7FMQ-XE94-RTUV`.
+ * @returns a grouped code such as `A3KD-7FMQ-XE94-RTUV-9CTG`.
  */
 export function pairingCode(secret: string): string {
-  const digest = createHmac('sha256', secret).update('pairing-code').digest()
   const groups: string[] = []
-  let index = 0
-  for (let group = 0; group < PAIRING_CODE_GROUPS; group += 1) {
-    let chars = ''
-    for (let position = 0; position < PAIRING_CODE_GROUP_CHARS; position += 1) {
-      chars += PAIRING_ALPHABET[(digest[index] ?? 0) % PAIRING_ALPHABET.length]
-      index += 1
-    }
-    groups.push(chars)
+  for (let index = 0; index < secret.length; index += PAIRING_CODE_GROUP_CHARS) {
+    groups.push(secret.slice(index, index + PAIRING_CODE_GROUP_CHARS))
   }
   return groups.join('-')
 }
 
 /**
- * Whether a user-entered pairing code matches this secret, ignoring case, spacing, and dashes.
+ * Whether what the user typed is this broker's secret.
+ *
+ * The broker never uses this to admit a client: authentication is the proof, so a wrong code simply
+ * produces a proof that does not verify. This exists for the installer's own "did you type it
+ * correctly" check, and compares in constant time so it does not become a way to probe the secret.
  * @param secret - the pairing secret held by the broker.
  * @param entered - what the user typed.
- * @returns whether the code identifies this secret.
+ * @returns whether they match.
  */
 export function pairingCodeMatches(secret: string, entered: string): boolean {
-  const normalize = (value: string): string => value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-  return proofsMatch(normalize(pairingCode(secret)), normalize(String(entered ?? '')))
+  const normalized = normalizePairingCode(entered)
+  return normalized !== '' && proofsMatch(normalized, secret)
 }
 
 /** The persisted pairing material and the broker identity it belongs to. */
 export interface Credentials {
-  /** The shared secret, 64 hex characters. */
+  /** The shared secret: the pairing code the user types, normalised. */
   readonly secret: string
   /** When the secret was first created, ISO 8601. */
   readonly createdAt: string
@@ -161,7 +190,7 @@ export function loadOrCreateCredentials(path: string): Credentials {
     if (typeof parsed !== 'object' || parsed === null) throw new Error('credentials file is not an object')
     const record = parsed as Record<string, unknown>
     const secret = record['secret']
-    if (typeof secret !== 'string' || !/^[0-9a-f]{64}$/.test(secret)) {
+    if (typeof secret !== 'string' || normalizePairingCode(secret) !== secret) {
       throw new Error('credentials file holds no usable secret')
     }
     const createdAt = typeof record['createdAt'] === 'string' ? record['createdAt'] : new Date(0).toISOString()
