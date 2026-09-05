@@ -116,7 +116,10 @@ export class AgentClient {
     this.#closed = true
     if (this.#reconnectTimer !== null) clearTimeout(this.#reconnectTimer)
     this.#reconnectTimer = null
-    this.#failAll(ERROR.NO_BROWSER, 'the connector plugin was unloaded')
+    this.#failAll(
+      ERROR.INTERRUPTED,
+      'the connector plugin was unloaded while this action was in flight; the browser may have performed it',
+    )
     this.#socket?.close()
     this.#socket = null
     this.#authenticated = false
@@ -205,7 +208,13 @@ export class AgentClient {
       if (this.#socket !== socket) return
       this.#socket = null
       this.#authenticated = false
-      this.#failAll(ERROR.NO_BROWSER, 'the connection to the connector broker closed')
+      // Every request still waiting here had already been sent, so its action may have run in the
+      // browser before the connection dropped. Nothing is ever re-sent on reconnect: a replay could
+      // submit a form or close a tab a second time.
+      this.#failAll(
+        ERROR.INTERRUPTED,
+        'the connection to the connector broker closed while this action was in flight; the browser may have performed it',
+      )
       this.#report('disconnected', 'the broker connection closed')
       this.#scheduleReconnect()
     })

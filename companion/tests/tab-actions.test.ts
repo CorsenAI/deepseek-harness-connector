@@ -79,6 +79,12 @@ Object.assign(globalThis, {
         set: async (bag: Record<string, unknown>) => { for (const [key, value] of Object.entries(bag)) stub.storage.set(key, value) },
         remove: async (key: string) => { stub.storage.delete(key) },
       },
+      // Session storage lives for one browser session; the worker reads a marker from it on wake to
+      // tell a fresh browser session (bindings must go) from a mere worker restart (bindings stay).
+      session: {
+        get: async () => ({}),
+        set: async () => {},
+      },
     },
     tabs: {
       onRemoved: inertEvent,

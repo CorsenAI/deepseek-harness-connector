@@ -248,7 +248,14 @@ export class Broker {
     if (peer.kind === 'browser') {
       if (this.#browsers.get(peer.browserId) === peer) this.#browsers.delete(peer.browserId)
       for (const [id, action] of [...this.#pending]) {
-        if (action.browser === peer) this.#settle(id, { code: ERROR.NO_BROWSER, message: 'the browser disconnected while the action was running' })
+        // The action reached the browser and may have run there before the connection died; the
+        // caller must be told the outcome is unknown, not that nothing happened.
+        if (action.browser === peer) {
+          this.#settle(id, {
+            code: ERROR.INTERRUPTED,
+            message: 'the browser disconnected while the action was running; it may have performed it',
+          })
+        }
       }
     } else {
       if (this.#agents.get(peer.agentId) === peer) this.#agents.delete(peer.agentId)

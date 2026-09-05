@@ -108,6 +108,10 @@ function explain(cause: BrowserActionError): string {
       return 'The attached tab no longer exists. Ask the user to attach a tab to this session again.'
     case 'TIMEOUT':
       return 'The browser did not finish the action in time. The page may still be loading.'
+    case 'INTERRUPTED':
+      return 'The connection to the browser was lost while this action was running, so its outcome is unknown: '
+        + 'the page may or may not have performed it. Take a fresh snapshot to see the page’s actual state before '
+        + 'retrying anything that changes data.'
     case 'UNSUPPORTED_ACTION':
       return `${cause.message}. The installed Chrome extension may be older than this connector.`
     default:

@@ -507,13 +507,25 @@ describe('post-action revalidation', () => {
     assert.deepEqual(response['data'], { closed: 11 })
   })
 
-  it('fails the request when the browser disconnects mid-action', () => {
+  it('reports an unknown outcome, not a refusal, when the browser disconnects mid-action', () => {
     const browser = browserWith('browser-1', WEB_A, [11])
     const agent = agentWith('agent-1', 'web', ['session-a'])
     request(agent, 'req-1', WEB_A)
 
     broker.close(browser)
-    assert.equal(errorCode(responseFor(agent, 'req-1')), ERROR.NO_BROWSER)
+    // The action had reached the browser; NO_BROWSER would falsely claim nothing was performed.
+    const response = responseFor(agent, 'req-1')
+    assert.equal(errorCode(response), ERROR.INTERRUPTED)
+    assert.match(String((response['error'] as Record<string, unknown>)['message']), /may have performed it/)
+  })
+
+  it('refuses before dispatch, with NO_BROWSER, when the owning browser is already gone', () => {
+    const browser = browserWith('browser-1', WEB_A, [11])
+    const agent = agentWith('agent-1', 'web', ['session-a'])
+    broker.close(browser)
+
+    request(agent, 'req-1', WEB_A)
+    assert.equal(errorCode(responseFor(agent, 'req-1')), ERROR.NO_BROWSER, 'nothing was dispatched, so nothing may have run')
   })
 
   it('fails the request when the browser never answers', async () => {

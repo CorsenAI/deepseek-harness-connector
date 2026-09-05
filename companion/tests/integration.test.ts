@@ -250,7 +250,8 @@ describe('the full route over real sockets', () => {
     await settle()
     browser.socket.terminate()
 
-    await assert.rejects(pending, (cause: unknown) => cause instanceof BrowserActionError && cause.code === ERROR.NO_BROWSER)
+    // The request had been dispatched, so the honest answer is "outcome unknown", never "refused".
+    await assert.rejects(pending, (cause: unknown) => cause instanceof BrowserActionError && cause.code === ERROR.INTERRUPTED)
     agent.dispose()
   })
 })

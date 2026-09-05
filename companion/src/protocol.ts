@@ -167,6 +167,14 @@ export const ERROR = {
   UNSUPPORTED_ACTION: 'UNSUPPORTED_ACTION',
   /** The action did not settle within its deadline. */
   TIMEOUT: 'TIMEOUT',
+  /**
+   * The action was dispatched and its outcome is unknown: the browser, the broker, or a connection
+   * went away while it ran, and the page may have performed it. Sent by the broker when the owning
+   * browser disconnects mid-action; raised locally by a client whose own connection drops with
+   * requests in flight. Added without a protocol bump: no frame changed, and a peer that predates
+   * the code shows the message rather than misreading it.
+   */
+  INTERRUPTED: 'INTERRUPTED',
   /** Protocol generations differ. Carries both versions and which side is older. */
   PROTOCOL_VERSION: 'PROTOCOL_VERSION',
   /** The handshake proof, role, or origin precondition failed. */

@@ -9,6 +9,7 @@ import {
   applyBinding,
   bindingList,
   detachTab,
+  EMPTY,
   forgetTab,
   lookup,
   normalizeBinding,
@@ -456,7 +457,15 @@ async function onAction(frame) {
     });
   } catch (cause) {
     // Injection failure is reported as a failure. Reporting success here would tell the model an
-    // action happened that Chrome refused to perform.
+    // action happened that Chrome refused to perform. A tab that vanished while the action ran is
+    // the common cause; it is reported as such BEFORE the binding is cleaned, so the model learns
+    // the real reason rather than a later "binding changed".
+    const stillThere = await chrome.tabs.get(targetTabId).then(() => true).catch(() => false);
+    if (!stillThere) {
+      refuse(ERROR.TAB_GONE, "the attached tab was closed while the action was running");
+      await releaseClosedTab(targetTabId);
+      return;
+    }
     refuse(ERROR.ACTION_FAILED, `Chrome refused to run the action in that tab: ${String(cause?.message ?? cause)}`);
     return;
   }
@@ -972,8 +981,29 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 /** Restore everything this worker needs after an eviction. */
+/** Key in session storage marking the browser session this worker has already seen. */
+const BROWSER_SESSION_MARKER = "browserSession";
+
+/**
+ * Drop every binding on the first worker start of a browser session.
+ *
+ * Chrome tab ids are meaningful only within one browser session, and a new session hands them out
+ * again from the start, so a binding restored from the previous session could point at an
+ * unrelated page that happens to carry the same id — and pass a liveness check. `storage.session`
+ * lives in memory for exactly one browser session: a missing marker means this is a new one, and
+ * every attachment must be made again by the user. A worker merely evicted and restarted
+ * mid-session finds the marker and keeps its bindings.
+ */
+async function forgetPreviousBrowserSession() {
+  const bag = await chrome.storage.session.get(BROWSER_SESSION_MARKER);
+  if (bag[BROWSER_SESSION_MARKER]) return;
+  await write(STORE.BINDINGS, EMPTY);
+  await chrome.storage.session.set({ [BROWSER_SESSION_MARKER]: crypto.randomUUID() });
+}
+
 async function wake() {
   await identity();
+  await forgetPreviousBrowserSession();
   await chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: KEEPALIVE_MINUTES });
   await validateAgainstLiveTabs();
   await connect();

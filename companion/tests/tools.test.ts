@@ -340,6 +340,13 @@ describe('explaining a refusal to the model', () => {
   it('passes an unrecognised failure through rather than inventing an explanation', async () => {
     assert.match(await messageFor(ERROR.INTERNAL), /raw: INTERNAL/)
   })
+
+  it('says the outcome is unknown, not that nothing happened, when a connection was lost mid-action', async () => {
+    const message = await messageFor(ERROR.INTERRUPTED)
+    assert.match(message, /may or may not have performed/i)
+    assert.match(message, /fresh snapshot/i)
+    assert.doesNotMatch(message, /No browser action was performed/)
+  })
 })
 
 describe('rendering for the model', () => {

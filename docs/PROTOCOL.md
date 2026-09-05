@@ -129,6 +129,7 @@ Every rejection carries a code. Callers and tests match on the code, never on th
 | `RESTRICTED_PAGE` | A Chrome-internal or Web Store page extensions may not script. |
 | `UNSUPPORTED_ACTION` | The peer does not implement this kind. |
 | `TIMEOUT` | The action did not settle within its deadline. |
+| `INTERRUPTED` | The action was dispatched and its outcome is unknown: the browser, the broker, or a connection went away while it ran, and the page may have performed it. Sent by the broker when the owning browser disconnects mid-action; raised locally by a client whose own connection drops with requests in flight. Never a refusal, and never replayed. |
 | `PROTOCOL_VERSION` | Protocol generations differ. |
 | `UNAUTHENTICATED` | The proof, role, or origin precondition failed. |
 | `MALFORMED` | Not valid JSON, not an object, or a field failed validation. |

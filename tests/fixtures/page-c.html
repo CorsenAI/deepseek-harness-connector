@@ -39,6 +39,13 @@
   <div id="draggable" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', 'payload-42');">Drag me</div>
   <div id="dropzone" ondragover="event.preventDefault();" ondrop="event.preventDefault(); document.getElementById('outcome').textContent = 'dropped:' + event.dataTransfer.getData('text/plain');">Drop here</div>
 
+  <!-- recovery: a submission that takes a while, so a component can die while it runs. The handler
+       blocks the page for 1.5 s and counts how many times it ran; a replayed action shows up as 2. -->
+  <form id="slow-form" onsubmit="event.preventDefault(); const end = Date.now() + 1500; while (Date.now() < end) {} this.dataset.submissions = String(Number(this.dataset.submissions || 0) + 1); document.getElementById('outcome').textContent = 'slow submitted ' + this.dataset.submissions;">
+    <label for="slow">Slow field</label>
+    <input id="slow" name="slow" type="text" value="">
+  </form>
+
   <!-- navigate/back/forward -->
   <a id="to-a" href="page-a.html">Go to fixture A</a>
 
