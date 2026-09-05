@@ -68,6 +68,14 @@ Legend: **pass** — evidence recorded. **open** — not yet implemented or not 
 | AN | The `tabs` permission is not needed, and a tab whose address Chrome withholds is treated as restricted, never as safe | The complete real-browser suite run with the permission (41/41) and without it (41/41); `tests/e2e/restricted.test.ts` for a browser-internal page in the chooser, on attach, and after an attached tab navigates to one | pass |
 | AO | All twenty actions perform in a real browser, each proven by the page's own recorded state rather than the extension's report | `tests/e2e/actions.test.ts`, 12 cases over `tests/fixtures/page-c.html` | pass |
 
+### Recovery (added 2026-09-05)
+
+| # | Gate | Proof | State |
+|---|---|---|---|
+| AA | Service-worker eviction and recovery: an action in flight when the worker dies is reported `INTERRUPTED`, ran exactly once, and the next request after the worker returns succeeds | `tests/e2e/recovery.test.ts` — the worker is stopped through CDP `ServiceWorker.stopWorker` in the middle of a 1.5 s form submission; the page counts one run; an ordinary panel message wakes the worker, which reconnects and restores its bindings from storage | pass |
+| AB | Broker, plugin, Chrome, and tab loss recovery: both sides reconnect with bounded backoff and ownership comes back from the broker's state file; a plugin instance that dies is replaced and its late result is dropped by the broker rather than delivered to the successor; a tab closed mid-action is reported gone and leaves the binding; a Chrome relaunch on the same profile keeps pairing and identity but drops every binding, so a reissued tab id is never acted on | `tests/e2e/recovery.test.ts`, six cases each taking one real component away mid-flight, on a persisted profile and state file | pass |
+| AP | A destructive action cut off mid-flight is reported as an unknown outcome — never as a refusal, never as a success — and is never replayed by any reconnect | `tests/e2e/recovery.test.ts` (the submission count stays at 1 across a broker restart and a worker kill), `companion/tests/broker.test.ts` (`INTERRUPTED` on browser loss, `NO_BROWSER` only before dispatch), `companion/tests/tools.test.ts` (the model is told the page may or may not have performed it) | pass |
+
 ## Gates not yet met
 
 These are release blockers that have no evidence yet. They are listed so the project cannot be
@@ -77,8 +85,6 @@ called ready while they are open.
 |---|---|---|---|
 | Y | The plugin loads into a real DeepSeek Harness and registers its tools | `npm pack` + `dsh plugin add` + `--dump-config` against dsh 0.1.2-rc.1, plus `companion/tests/tools.test.ts` | partial — applies and registers; a live model turn needs an API key |
 | Z | Compatibility across the declared DSH range, plus an upstream lane | `docs/COMPATIBILITY.md` rows with CI evidence | open |
-| AA | Service-worker eviction and recovery | Forced worker termination mid-request, then a successful next request | open |
-| AB | Broker restart, DSH restart, and Chrome restart recovery | Component-by-component restart with verified recovery | open |
 | AC | Installer: fresh, upgrade, reinstall, uninstall, spaces in paths, non-default `DSH_HOME` | `tests/installer/linux-installer.sh` (WSL Ubuntu 24.04, 21/21) and `tests/installer/windows-installer.ps1` (Windows 11, 19/19), each against a real `dsh` through the packaged tarball from a spaced path | **pass on Windows and Linux**; macOS open until its CI lane runs |
 | AD | Packaged-artifact tests: the release ZIP, not the source tree | `tests/e2e/packaged.test.ts` builds the ZIP in-process, unpacks its own bytes, and Chromium loads that directory: allowlist match, pair, snapshot, secret masking, click confirmed by the page (4/4). The in-process build is byte-identical to `dist/dsh-browser-connector-extension-0.1.0.zip`, SHA-256 `2a76f138…d2c4`, built from clean commit `5e935d2` | pass |
 | AE | Reproducible packaging with a content allowlist | `scripts/package.mjs` + `scripts/verify-package.mjs`: 152 checks; the ZIP is byte-identical across two builds; the allowlist refused a stray `tsconfig.json` on its first run | pass |

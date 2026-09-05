@@ -18,12 +18,13 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the Chrome
 extension with all twenty browser actions, the installers, and the release packaging work end to
-end and are covered by 263 tests: 222 unit and protocol tests, and 41 real-browser end-to-end
-cases including multi-session isolation and a page built to leak hidden content. Installer
-acceptance runs against a real `dsh` on Windows and Linux. CI is written but has not yet run, and
-the Chrome Web Store submission is prepared only on paper.
+end and are covered by 271 tests: 224 unit and protocol tests, and 47 real-browser end-to-end
+cases including multi-session isolation, a page built to leak hidden content, and recovery from a
+killed service worker, a restarted broker, a restarted plugin, a closed tab, and a relaunched
+Chrome. Installer acceptance runs against a real `dsh` on Windows and Linux. CI is written but has
+not yet run, and the Chrome Web Store submission is prepared only on paper.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state. Four are still open and three
+`docs/TEST-MATRIX.md` lists every release gate and its honest state. Two are still open and three
 are partial. Do not treat this as shippable until they are closed.
 
 ## What it does
@@ -90,7 +91,8 @@ tabs (`browser_list_tabs`, `browser_open_tab`, `browser_switch_tab`, `browser_cl
 
 Every tool tells the truth about what happened. A control the user cannot see is never listed and
 never acted on; a tab Chrome refused to close is reported as detached-but-open, not as closed; a
-navigation that did not finish says so.
+navigation that did not finish says so; an action cut off by a lost connection is reported as an
+unknown outcome, and nothing is ever replayed on reconnect.
 
 The panel always shows the truth:
 
@@ -151,7 +153,7 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 222 tests, no browser needed
+npm run test:unit    # 224 tests, no browser needed
 npm run test:e2e     # real Chromium with the extension loaded
 ```
 
