@@ -9,7 +9,6 @@ import {
   applyBinding,
   bindingList,
   detachTab,
-  EMPTY,
   forgetTab,
   lookup,
   normalizeBinding,
@@ -30,7 +29,6 @@ import {
   ROLE,
   SERVER,
   STORE,
-  scopeKey,
 } from "./protocol.js";
 
 /** Bounded reconnect schedule. A tight loop against a dead port would drain the user's battery. */
@@ -58,7 +56,7 @@ let reconnectTimer = null;
  * Read one storage key.
  * @param {string} key The key.
  * @param {unknown} fallback What to return when it is absent.
- * @returns {Promise<unknown>} The stored value.
+ * @returns {Promise<any>} The stored value. Storage is untyped; every caller validates what it reads.
  */
 async function read(key, fallback) {
   const bag = await chrome.storage.local.get(key);

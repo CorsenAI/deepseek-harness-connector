@@ -274,7 +274,8 @@ export function runPageAction(kind, args, config) {
     while (walker.nextNode()) {
       visited += 1;
       if (visited > MAX_VISITED_NODES) { truncated = true; break; }
-      const element = walker.currentNode;
+      // A SHOW_ELEMENT walker yields only elements; the cast records what the filter guarantees.
+      const element = /** @type {Element} */ (walker.currentNode);
       if (!isInteractive(element) || !isVisible(element)) continue;
       if (elements.length >= MAX_INTERACTIVE) { truncated = true; break; }
 
@@ -284,17 +285,18 @@ export function runPageAction(kind, args, config) {
       const entry = { ref, role: roleOf(element), name: accessibleName(element) };
       const tag = element.tagName.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") {
+        const control = /** @type {HTMLInputElement} */ (element);
         const secret = isSecret(element);
-        const raw = String(element.value ?? "");
+        const raw = String(control.value ?? "");
         entry.value = secret
           ? MASK
           : (raw.length > MAX_VALUE_CHARS ? `${raw.slice(0, MAX_VALUE_CHARS)}...` : raw);
         if (secret) entry.masked = true;
-        if (element.disabled === true) entry.disabled = true;
-        if (element.getAttribute("aria-required") === "true" || element.required === true) entry.required = true;
+        if (control.disabled === true) entry.disabled = true;
+        if (element.getAttribute("aria-required") === "true" || control.required === true) entry.required = true;
         if (tag === "input") {
           const type = String(element.getAttribute("type") ?? "text").toLowerCase();
-          if (type === "checkbox" || type === "radio") entry.checked = element.checked === true;
+          if (type === "checkbox" || type === "radio") entry.checked = control.checked === true;
         }
       }
       if (element.getAttribute("aria-expanded") !== null) {
@@ -307,21 +309,25 @@ export function runPageAction(kind, args, config) {
 
   /**
    * Resolve one element reference minted by the current snapshot.
+   *
+   * Returns the element or the reason as two nullable fields rather than a tagged union, because
+   * the caller narrows on `element` alone and needs no literal-type tricks to do so.
    * @param {unknown} ref The reference.
-   * @returns {{ok: true, element: Element}|{ok: false, error: {code: string, message: string}}} The element.
+   * @returns {{element: HTMLElement|null, error: {code: string, message: string}|null}} The element, or why not.
    */
   function resolve(ref) {
     const value = String(ref ?? "");
     const generation = Number(value.split("@")[1] ?? "-1");
+    const stale = (message) => ({ element: null, error: { code: "STALE_REF", message } });
     if (generation !== state.generation) {
-      return fail("STALE_REF", `${value} is from an earlier snapshot; take a fresh browser_snapshot`);
+      return stale(`${value} is from an earlier snapshot; take a fresh browser_snapshot`);
     }
-    const element = state.refs.get(value);
-    if (!element) return fail("STALE_REF", `${value} is not a reference from the latest snapshot`);
+    const element = /** @type {HTMLElement|undefined} */ (state.refs.get(value));
+    if (!element) return stale(`${value} is not a reference from the latest snapshot`);
     if (!element.isConnected) {
-      return fail("STALE_REF", `${value} no longer exists on the page; take a fresh browser_snapshot`);
+      return stale(`${value} no longer exists on the page; take a fresh browser_snapshot`);
     }
-    return { ok: true, element };
+    return { element, error: null };
   }
 
   /**
@@ -369,10 +375,9 @@ export function runPageAction(kind, args, config) {
     }
 
     if (kind === "click") {
-      const found = resolve(args.ref);
-      if (!found.ok) return found;
-      const element = found.element;
-      if (element.disabled === true) {
+      const { element, error } = resolve(args.ref);
+      if (!element) return fail(error.code, error.message);
+      if (/** @type {HTMLButtonElement} */ (element).disabled === true) {
         return fail("ACTION_FAILED", `${accessibleName(element)} is disabled and cannot be clicked`);
       }
       element.scrollIntoView({ block: "center", inline: "nearest" });
@@ -390,10 +395,10 @@ export function runPageAction(kind, args, config) {
     }
 
     if (kind === "type") {
-      const found = resolve(args.ref);
-      if (!found.ok) return found;
-      const element = found.element;
-      if (element.disabled === true || element.readOnly === true) {
+      const { element, error } = resolve(args.ref);
+      if (!element) return fail(error.code, error.message);
+      const control = /** @type {HTMLInputElement} */ (element);
+      if (control.disabled === true || control.readOnly === true) {
         return fail("ACTION_FAILED", `${accessibleName(element)} does not accept input`);
       }
       const text = String(args.text ?? "");
@@ -415,9 +420,9 @@ export function runPageAction(kind, args, config) {
           ? HTMLTextAreaElement.prototype
           : HTMLInputElement.prototype;
         const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-        const next = args.replace === true ? text : `${String(element.value ?? "")}${text}`;
+        const next = args.replace === true ? text : `${String(control.value ?? "")}${text}`;
         if (setter) setter.call(element, next);
-        else element.value = next;
+        else control.value = next;
       }
       element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
       element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));

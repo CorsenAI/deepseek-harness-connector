@@ -12,12 +12,12 @@ const dict = dictionary();
 const el = {
   status: document.getElementById("status"),
   pairing: document.getElementById("pairing"),
-  pairingCode: document.getElementById("pairing-code"),
+  pairingCode: /** @type {HTMLInputElement} */ (document.getElementById("pairing-code")),
   pairingError: document.getElementById("pairing-error"),
   settings: document.getElementById("settings"),
   settingsToggle: document.getElementById("settings-toggle"),
-  brokerUrl: document.getElementById("broker-url"),
-  settingsCode: document.getElementById("settings-code"),
+  brokerUrl: /** @type {HTMLInputElement} */ (document.getElementById("broker-url")),
+  settingsCode: /** @type {HTMLInputElement} */ (document.getElementById("settings-code")),
   reconnect: document.getElementById("reconnect"),
   versionLine: document.getElementById("version-line"),
   sessions: document.getElementById("sessions"),
@@ -54,7 +54,7 @@ async function ask(message) {
 
 /** Replace every element carrying a `data-i18n` key with its localized copy. */
 function localizeStaticCopy() {
-  for (const node of document.querySelectorAll("[data-i18n]")) {
+  for (const node of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-i18n]"))) {
     node.textContent = t(dict, node.dataset.i18n);
   }
 }

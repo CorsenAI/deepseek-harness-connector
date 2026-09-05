@@ -28,8 +28,10 @@
       Run the installer, then type the pairing code it printed.
     </p>
     <label for="pairing-code" data-i18n="pairingCodeLabel">Pairing code</label>
+    <!-- The placeholder uses zeros, which the pairing alphabet excludes, so it can never be mistaken
+         for a real code by a reader or by the release leak scanner. -->
     <input id="pairing-code" name="pairing-code" autocomplete="off" spellcheck="false"
-           placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" inputmode="latin" required>
+           placeholder="0000-0000-0000-0000-0000" inputmode="latin" required>
     <p id="pairing-error" class="error" hidden></p>
     <button type="submit" class="primary" data-i18n="pairAction">Pair</button>
   </form>

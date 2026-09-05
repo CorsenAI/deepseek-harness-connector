@@ -19,7 +19,7 @@ export const EMPTY = Object.freeze({});
  * @returns {boolean} Whether it is a non-negative safe integer.
  */
 function isTabId(value) {
-  return Number.isSafeInteger(value) && value >= 0;
+  return Number.isSafeInteger(value) && /** @type {number} */ (value) >= 0;
 }
 
 /**
@@ -38,22 +38,23 @@ function mutable(registry) {
  */
 export function normalizeBinding(raw) {
   if (typeof raw !== "object" || raw === null) throw new Error("binding must be an object");
-  const profileId = String(raw.profileId ?? "");
-  const sessionId = String(raw.sessionId ?? "");
+  const record = /** @type {Record<string, unknown>} */ (raw);
+  const profileId = String(record.profileId ?? "");
+  const sessionId = String(record.sessionId ?? "");
   if (!ID_PATTERN.test(profileId)) throw new Error(`invalid profileId: ${JSON.stringify(profileId)}`);
   if (!ID_PATTERN.test(sessionId)) throw new Error(`invalid sessionId: ${JSON.stringify(sessionId)}`);
 
-  if (!Array.isArray(raw.tabIds)) throw new Error("tabIds must be an array");
-  if (raw.tabIds.length > LIMITS.MAX_TABS_PER_BINDING) throw new Error("too many tabs for one scope");
+  if (!Array.isArray(record.tabIds)) throw new Error("tabIds must be an array");
+  if (record.tabIds.length > LIMITS.MAX_TABS_PER_BINDING) throw new Error("too many tabs for one scope");
 
   const tabIds = [];
-  for (const candidate of raw.tabIds) {
+  for (const candidate of record.tabIds) {
     if (!isTabId(candidate)) throw new Error(`invalid tabId: ${JSON.stringify(candidate)}`);
     if (!tabIds.includes(candidate)) tabIds.push(candidate);
   }
   if (tabIds.length === 0) return null;
 
-  const claimed = raw.activeTabId;
+  const claimed = record.activeTabId;
   const activeTabId = isTabId(claimed) && tabIds.includes(claimed) ? claimed : tabIds[0];
   return { profileId, sessionId, tabIds: Object.freeze(tabIds), activeTabId };
 }
