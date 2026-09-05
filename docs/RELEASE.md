@@ -116,17 +116,31 @@ behaviour — that is the rollback safety net, and why the mismatch check must n
 
 ## Code signing on macOS and Windows
 
-Nothing this project ships is a native executable, so no platform code signing is required today.
+Nothing this project ships is a native executable, so **no signing certificate is required today**:
 
 - The companion is an npm package (`@corsen-ai/dsh-browser-connector`) of plain JavaScript that
   runs under the user's own Node.js, installed by `dsh plugin ... add`. It is the same trust model
   as DeepSeek Harness itself, which is also an npm package. macOS Gatekeeper and notarization apply
   to Mach-O binaries, `.app` bundles, and `.pkg` installers, none of which exist here.
-- The installers are scripts: `install.sh` run by `bash`, `install.ps1` run by PowerShell through
-  the `.cmd` wrapper with an explicit execution policy. A script downloaded by a browser carries a
-  quarantine or Mark-of-the-Web flag, which can make a *double-click* warn; running it from a
-  terminal, as the instructions say, does not involve Gatekeeper or SmartScreen.
 - The Chrome extension is signed by the Chrome Web Store at publication; nothing is signed locally.
+
+**That answers whether we need a certificate. It does not answer whether the install path works on
+a machine that has just downloaded these files, and the two are not the same question** — a point
+an external review made on 2026-09-05, correctly. The operating systems apply controls to scripts as
+well as to binaries, by how the file arrives and how it is opened:
+
+| Path | What the OS does | State |
+|---|---|---|
+| `bash install.sh` in Terminal, from a clone | Nothing; Gatekeeper gates *launching* quarantined applications, not an interpreter reading a file | verified on Linux (WSL), assumed on macOS |
+| `install.sh` downloaded by a browser, then run in Terminal | The file carries `com.apple.quarantine`; running it through `bash` is still not gated | **untested** |
+| `install.sh` double-clicked in Finder | Gatekeeper may refuse or warn, depending on quarantine and the user's settings | **untested** |
+| `Install Connector.cmd` double-clicked on Windows | SmartScreen may warn on a file carrying Mark-of-the-Web. The wrapper passes `-ExecutionPolicy Bypass` to **that one PowerShell process**, which changes no machine or user setting and leaves the system policy alone | verified on Windows 11 from a local path; **untested** after a browser download |
+| `install.ps1` run directly by a user whose policy is `Restricted` | PowerShell refuses the script; that user should run it as the `.cmd` does, or unblock the file deliberately | **untested** |
+
+The untested rows belong to the macOS lane still to run and to a Windows download
+rehearsal. Whatever they show, the answer must never be to tell a user to turn a protection off
+globally: no `Set-ExecutionPolicy Unrestricted` for the machine, and no blanket `xattr -dr
+com.apple.quarantine` over a directory. Per-file, per-process, and explained, or not at all.
 
 If a native artifact is ever introduced — a menu-bar helper, a single-file executable of the
 broker, a `.pkg` or `.msi` — the requirements become:
