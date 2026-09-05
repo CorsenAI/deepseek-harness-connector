@@ -18,8 +18,8 @@ import {
   sameRegistry,
   setActiveTab,
 } from "./bindings.js";
-import { IMPLEMENTED_ACTIONS, runPageAction } from "./page-actions.js";
-import { redactionConfig } from "./redact.js";
+import { IMPLEMENTED_ACTIONS, TAB_ACTIONS, runPageAction } from "./page-actions.js";
+import { redactionConfig, scrubUrl } from "./redact.js";
 import {
   CLIENT,
   DEFAULT_SETTINGS,
@@ -138,10 +138,12 @@ async function validateAgainstLiveTabs() {
  * @param {chrome.tabs.Tab|undefined} tab The tab.
  * @returns {string|null} A reason for the user and the model.
  */
-function restrictionReason(tab) {
+export function restrictionReason(tab) {
   if (!tab || typeof tab.id !== "number") return "that tab no longer exists";
   const url = String(tab.url ?? tab.pendingUrl ?? "");
-  if (url === "") return "Chrome has not told the connector what this tab is showing yet";
+  // No address means Chrome withheld it, which it does for pages the extension may not touch. An
+  // unknown address is treated as restricted, never as safe.
+  if (url === "") return "Chrome does not expose this tab's address to the connector, so it is treated as restricted";
   let parsed;
   try {
     parsed = new URL(url);
@@ -412,6 +414,24 @@ async function onAction(frame) {
     return;
   }
 
+  const kind = String(frame.action?.kind ?? "");
+  if (!IMPLEMENTED_ACTIONS.includes(kind)) {
+    refuse(ERROR.UNSUPPORTED_ACTION, `this extension does not implement ${kind}`);
+    return;
+  }
+  const args = (frame.action?.args && typeof frame.action.args === "object") ? frame.action.args : {};
+
+  // Tab-level actions run here with chrome.tabs and never inject, so they work on a tab whose page
+  // cannot be scripted — navigating away from a chrome:// page is the point of navigate.
+  if (TAB_ACTIONS.includes(kind)) {
+    try {
+      reply(await performTabAction(kind, args, scope, binding, targetTabId));
+    } catch (cause) {
+      refuse(ERROR.ACTION_FAILED, String(cause?.message ?? cause));
+    }
+    return;
+  }
+
   let tab;
   try {
     tab = await chrome.tabs.get(targetTabId);
@@ -425,13 +445,6 @@ async function onAction(frame) {
     refuse(ERROR.RESTRICTED_PAGE, restricted);
     return;
   }
-
-  const kind = String(frame.action?.kind ?? "");
-  if (!IMPLEMENTED_ACTIONS.includes(kind)) {
-    refuse(ERROR.UNSUPPORTED_ACTION, `this extension does not implement ${kind}`);
-    return;
-  }
-  const args = (frame.action?.args && typeof frame.action.args === "object") ? frame.action.args : {};
 
   let injected;
   try {
@@ -470,6 +483,327 @@ async function onAction(frame) {
 async function releaseClosedTab(tabId) {
   const current = await registry();
   await persist(forgetTab(current, tabId), current);
+}
+
+// ---- tab-level actions ----------------------------------------------------
+
+/** Longest wait for a navigation to reach `complete`. */
+const TAB_LOAD_TIMEOUT_MS = 15000;
+
+/** How long a navigation gets to start loading before it is treated as same-document. */
+const TAB_LOAD_GRACE_MS = 1500;
+
+/** Bound on tab titles reported to the model. */
+const MAX_TAB_TITLE_CHARS = 160;
+
+/**
+ * The opaque reference a model uses for one of its scope's tabs.
+ * @param {number} tabId The Chrome tab id.
+ * @returns {string} A reference such as `t42`.
+ */
+function tabRef(tabId) {
+  return `t${tabId}`;
+}
+
+/**
+ * Parse a tab reference.
+ * @param {unknown} value The candidate.
+ * @returns {number|null} The tab id, or null when the value is not a reference.
+ */
+function parseTabRef(value) {
+  const match = String(value ?? "").match(/^t(\d{1,12})$/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * A URL a session may navigate to.
+ *
+ * Only ordinary web pages and `about:blank`: a model must not be able to reach `javascript:`,
+ * `file:`, or browser-internal pages through a navigation argument.
+ * @param {unknown} value The candidate.
+ * @returns {string} The validated URL.
+ * @throws When the URL is not navigable.
+ */
+function navigableUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (raw === "about:blank") return raw;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${raw || "(empty)"} is not a valid absolute URL`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`only http and https pages can be navigated to, not ${url.protocol}`);
+  }
+  return url.toString();
+}
+
+/**
+ * One of the scope's tabs as the model sees it.
+ * @param {number} tabId The Chrome tab id.
+ * @param {number} activeTabId The scope's active tab.
+ * @returns {Promise<object|null>} The summary, or null when the tab no longer exists.
+ */
+async function tabSummary(tabId, activeTabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return {
+      tabRef: tabRef(tabId),
+      title: String(tab.title ?? "").slice(0, MAX_TAB_TITLE_CHARS),
+      url: scrubUrl(String(tab.url ?? tab.pendingUrl ?? "")),
+      active: tabId === activeTabId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Start a navigation and wait for it to settle.
+ *
+ * Waits for the loading-then-complete transition rather than for a bare `complete`, because the
+ * tab is already `complete` before the navigation starts and a bare check would return at once.
+ * A navigation that never reports `loading` within the grace period is treated as same-document.
+ * @param {number} tabId The tab.
+ * @param {() => Promise<unknown>} start Begins the navigation.
+ * @returns {Promise<string>} `complete`, `same-document`, or `timeout`.
+ * @throws When starting the navigation fails, with Chrome's reason.
+ */
+async function watchNavigation(tabId, start, expectation = {}) {
+  const before = await chrome.tabs.get(tabId).then((tab) => String(tab.url ?? "")).catch(() => "");
+  const expectUrlChange = expectation.expectUrlChange === true
+    || (typeof expectation.target === "string" && expectation.target !== before);
+  return new Promise((resolve, reject) => {
+    let sawLoading = false;
+    let settled = false;
+    const finish = (how) => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timer);
+      clearTimeout(grace);
+      resolve(how);
+    };
+    const listener = (updatedId, info) => {
+      if (updatedId !== tabId) return;
+      if (info.status === "loading") sawLoading = true;
+      if (info.status !== "complete" || !sawLoading) return;
+      // A navigation can report an intermediate `complete` for the document being left before the
+      // new document starts loading. Only a tab Chrome says is complete NOW — at a new address when
+      // one is expected — counts. Acting on the earlier report (a `back` issued during the in-flight
+      // load) cancels the navigation and lands somewhere else entirely.
+      chrome.tabs.get(tabId).then((tab) => {
+        if (settled || tab.status !== "complete") return;
+        if (expectUrlChange && String(tab.url ?? "") === before) return;
+        finish("complete");
+      }).catch(() => finish("gone"));
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    const timer = setTimeout(() => finish("timeout"), TAB_LOAD_TIMEOUT_MS);
+    const grace = setTimeout(() => { if (!sawLoading) finish("same-document"); }, TAB_LOAD_GRACE_MS);
+    start().catch((cause) => {
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timer);
+      clearTimeout(grace);
+      reject(cause);
+    });
+  });
+}
+
+/**
+ * Wait for a newly created tab to finish loading.
+ * @param {number} tabId The tab.
+ * @returns {Promise<void>} Settlement at `complete` or at the deadline.
+ */
+function waitForTabComplete(tabId, expectedUrl) {
+  // A blank tab is complete the moment it exists; anything else must have left about:blank.
+  if (expectedUrl === "about:blank") return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timer);
+      resolve();
+    };
+    // A freshly created tab reports `complete` for its initial blank document before the requested
+    // page has even started loading, so the status alone would end the wait too early.
+    const check = () => chrome.tabs.get(tabId).then((tab) => {
+      if (tab.status === "complete" && /^https?:/.test(String(tab.url ?? ""))) finish();
+    }).catch(finish);
+    const listener = (updatedId, info) => { if (updatedId === tabId && info.status === "complete") void check(); };
+    chrome.tabs.onUpdated.addListener(listener);
+    const timer = setTimeout(finish, TAB_LOAD_TIMEOUT_MS);
+    void check();
+  });
+}
+
+/**
+ * Perform one tab-level action for a scope.
+ *
+ * Ownership changes made here are written to storage and announced to the broker *before* the
+ * result is returned, so the broker's revalidation of a binding-mutating action sees the new
+ * ownership on the same ordered socket the result travels on.
+ * @param {string} kind The action kind.
+ * @param {object} args The arguments.
+ * @param {{profileId: string, sessionId: string}} scope The calling scope.
+ * @param {object} binding The scope's current binding.
+ * @param {number} targetTabId The scope's active tab at dispatch.
+ * @returns {Promise<object>} `{ ok: true, data }` or `{ ok: false, error }`.
+ */
+export async function performTabAction(kind, args, scope, binding, targetTabId) {
+  const ok = (data) => ({ ok: true, data });
+  const failed = (message) => ({ ok: false, error: { code: ERROR.ACTION_FAILED, message } });
+  const gone = (message) => ({ ok: false, error: { code: ERROR.TAB_GONE, message } });
+
+  if (kind === "navigate" || kind === "back" || kind === "forward" || kind === "reload") {
+    let how;
+    if (kind === "navigate") {
+      const url = navigableUrl(args.url);
+      how = await watchNavigation(targetTabId, () => chrome.tabs.update(targetTabId, { url }), { target: url });
+    } else if (kind === "back") {
+      how = await watchNavigation(targetTabId, () => chrome.tabs.goBack(targetTabId), { expectUrlChange: true });
+    } else if (kind === "forward") {
+      how = await watchNavigation(targetTabId, () => chrome.tabs.goForward(targetTabId), { expectUrlChange: true });
+    } else {
+      how = await watchNavigation(targetTabId, () => chrome.tabs.reload(targetTabId));
+    }
+    const summary = await tabSummary(targetTabId, targetTabId);
+    if (!summary) {
+      await releaseClosedTab(targetTabId);
+      return { ok: false, error: { code: ERROR.TAB_GONE, message: "the attached tab no longer exists" } };
+    }
+    return ok({ ...summary, loaded: how });
+  }
+
+  if (kind === "list_tabs") {
+    const summaries = [];
+    for (const tabId of binding.tabIds) {
+      const summary = await tabSummary(tabId, binding.activeTabId);
+      if (summary) summaries.push(summary);
+      else await releaseClosedTab(tabId);
+    }
+    const current = lookup(await registry(), scope);
+    return ok({
+      tabs: summaries,
+      activeTabRef: current ? tabRef(current.activeTabId) : null,
+    });
+  }
+
+  if (kind === "open_tab") {
+    const url = args.url === undefined ? "about:blank" : navigableUrl(args.url);
+    const opener = await chrome.tabs.get(targetTabId).catch(() => null);
+    const created = await chrome.tabs.create({
+      url,
+      active: true,
+      ...(opener && typeof opener.windowId === "number" ? { windowId: opener.windowId, openerTabId: targetTabId } : {}),
+    });
+    if (typeof created.id !== "number") return failed("Chrome did not report an id for the new tab");
+    const current = await registry();
+    const next = applyBinding(current, normalizeBinding({
+      ...scope,
+      tabIds: [...(lookup(current, scope)?.tabIds ?? []), created.id],
+      activeTabId: created.id,
+    }));
+    await write(STORE.BINDINGS, next);
+    const updated = lookup(next, scope);
+    send({ type: CLIENT.BINDING_UPDATE, ...updated, tabIds: [...updated.tabIds] });
+    notifyPanel();
+    await waitForTabComplete(created.id, url);
+    const summary = await tabSummary(created.id, created.id);
+    if (!summary) {
+      // The tab vanished between creation and its first report. A partial success would tell the
+      // model it owns a tab that does not exist; the binding is cleaned and the truth reported.
+      await releaseClosedTab(created.id);
+      return gone("the new tab disappeared before it finished loading; it was detached from this session");
+    }
+    return ok({ opened: tabRef(created.id), ...summary, attachedTabs: updated.tabIds.length });
+  }
+
+  if (kind === "switch_tab") {
+    const tabId = parseTabRef(args.tabRef);
+    if (tabId === null) return failed("tabRef must be a reference from browser_list_tabs, such as t42");
+    if (!binding.tabIds.includes(tabId)) {
+      return failed(`${args.tabRef} is not attached to this session; use browser_list_tabs to see this session's tabs`);
+    }
+    // The tab must exist before the scope is pointed at it: pointing a session at a closed tab
+    // would leave its next action failing for a reason the model cannot see.
+    const exists = await chrome.tabs.get(tabId).then(() => true).catch(() => false);
+    if (!exists) {
+      await releaseClosedTab(tabId);
+      return gone(`${args.tabRef} no longer exists; it was detached from this session`);
+    }
+    const current = await registry();
+    let next;
+    try {
+      next = setActiveTab(current, scope, tabId);
+    } catch (cause) {
+      return failed(String(cause?.message ?? cause));
+    }
+    await write(STORE.BINDINGS, next);
+    const updated = lookup(next, scope);
+    send({ type: CLIENT.BINDING_UPDATE, ...updated, tabIds: [...updated.tabIds] });
+    notifyPanel();
+    // The contract has two parts. The scope change above is the security-relevant one and has
+    // already happened. Bringing the tab to the front is a courtesy to the user that Chrome may
+    // refuse (a tab in a closing window, a picture-in-picture tab); it is reported, not assumed.
+    let foregrounded = false;
+    try {
+      await chrome.tabs.update(tabId, { active: true });
+      foregrounded = true;
+    } catch {
+      foregrounded = false;
+    }
+    const summary = await tabSummary(tabId, tabId);
+    if (!summary) {
+      await releaseClosedTab(tabId);
+      return gone(`${args.tabRef} disappeared while being made active; it was detached from this session`);
+    }
+    return ok({ activeTabRef: tabRef(tabId), ...summary, foregrounded });
+  }
+
+  if (kind === "close_tab") {
+    const tabId = args.tabRef === undefined ? binding.activeTabId : parseTabRef(args.tabRef);
+    if (tabId === null) return failed("tabRef must be a reference from browser_list_tabs, such as t42");
+    if (!binding.tabIds.includes(tabId)) {
+      return failed(`${args.tabRef} is not attached to this session; use browser_list_tabs to see this session's tabs`);
+    }
+    const exists = await chrome.tabs.get(tabId).then(() => true).catch(() => false);
+    if (!exists) {
+      await releaseClosedTab(tabId);
+      return gone(`${tabRef(tabId)} no longer exists; it was detached from this session`);
+    }
+    // Authority is withdrawn BEFORE the close is attempted, and stays withdrawn whatever Chrome
+    // answers: a session that asked to close a tab must not keep acting in it, and restoring
+    // ownership on a failed close would reopen exactly that window.
+    const current = await registry();
+    const next = detachTab(current, scope, tabId);
+    await write(STORE.BINDINGS, next);
+    const remaining = lookup(next, scope);
+    if (remaining) send({ type: CLIENT.BINDING_UPDATE, ...remaining, tabIds: [...remaining.tabIds] });
+    else send({ type: CLIENT.BINDING_REMOVE, ...scope });
+    notifyPanel();
+    try {
+      await chrome.tabs.remove(tabId);
+    } catch (cause) {
+      // Chrome refused. Reporting "closed" here would tell the model a tab is gone while the user
+      // still sees it; the honest result is a failure that also says what did change.
+      return failed(
+        `${tabRef(tabId)} was detached from this session for safety, but Chrome could not close it: `
+        + `${String(cause?.message ?? cause)}`,
+      );
+    }
+    return ok({
+      closed: tabRef(tabId),
+      remainingTabs: remaining ? remaining.tabIds.length : 0,
+      activeTabRef: remaining ? tabRef(remaining.activeTabId) : null,
+    });
+  }
+
+  return { ok: false, error: { code: ERROR.UNSUPPORTED_ACTION, message: `this extension does not implement ${kind}` } };
 }
 
 // ---- panel API ------------------------------------------------------------

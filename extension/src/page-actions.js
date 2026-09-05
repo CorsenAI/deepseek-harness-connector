@@ -8,24 +8,61 @@
 //
 // It returns `{ ok: true, data }` or `{ ok: false, error: { code, message } }` and never throws
 // across the boundary, because a rejected injection would be indistinguishable from a page that
-// refused an action.
+// refused an action. It is async so that `wait` can observe the page settle; Chrome awaits the
+// returned promise.
+//
+// ONE visibility policy governs every byte of page data that leaves this function: the element
+// inventory, the visible text, `find`, accessible names, labels, and the guard before an action.
+// `isVisible()` below is that policy, and `subtreeMayBeVisible()` is its O(1) pruning companion.
+// Content the user cannot see — under an `opacity: 0`, `display: none`, or
+// `content-visibility: hidden` ancestor, inside a closed `<details>`, marked `aria-hidden`, or
+// `visibility: hidden` without a re-shown descendant — must never reach a model request, whatever
+// the field looks like. Ported from Corsen AI Hermes Connector v0.2.4
+// (`extension/src/page-actions.js`, `VIS` and the filtered text walker).
 
 import { ACTION } from "./protocol.js";
 
 /**
- * Action kinds this file actually implements.
- *
- * The extension declares exactly these in its handshake, so the broker refuses anything else and
- * the plugin never offers the model a tool the page cannot perform. Adding a kind here without
- * implementing it below would turn a clear refusal into a silent failure.
+ * Actions performed inside the page by `runPageAction`.
  */
-export const IMPLEMENTED_ACTIONS = Object.freeze([
+export const PAGE_ACTIONS = Object.freeze([
   ACTION.SNAPSHOT,
   ACTION.READ_TEXT,
   ACTION.CURRENT_URL,
   ACTION.CLICK,
   ACTION.TYPE,
+  ACTION.KEY,
+  ACTION.SCROLL,
+  ACTION.HOVER,
+  ACTION.SELECT_OPTION,
+  ACTION.DRAG,
+  ACTION.FIND,
+  ACTION.WAIT,
 ]);
+
+/**
+ * Actions performed by the service worker with `chrome.tabs`, never injected. They change which
+ * page a scope is looking at, or which tabs it owns.
+ */
+export const TAB_ACTIONS = Object.freeze([
+  ACTION.NAVIGATE,
+  ACTION.BACK,
+  ACTION.FORWARD,
+  ACTION.RELOAD,
+  ACTION.OPEN_TAB,
+  ACTION.LIST_TABS,
+  ACTION.SWITCH_TAB,
+  ACTION.CLOSE_TAB,
+]);
+
+/**
+ * Every action kind this extension actually performs, in the page or in the worker.
+ *
+ * The extension declares exactly these in its handshake, so the broker refuses anything else and
+ * the plugin never offers the model a tool the browser cannot perform. Adding a kind here without
+ * implementing it would turn a clear refusal into a silent failure.
+ */
+export const IMPLEMENTED_ACTIONS = Object.freeze([...PAGE_ACTIONS, ...TAB_ACTIONS]);
 
 /**
  * Perform one action inside the page.
@@ -33,21 +70,33 @@ export const IMPLEMENTED_ACTIONS = Object.freeze([
  * @param {string} kind The action kind.
  * @param {object} args The action arguments, already bounded by the caller.
  * @param {object} config The redaction configuration from `redactionConfig()`.
- * @returns {{ok: true, data: object}|{ok: false, error: {code: string, message: string}}} The outcome.
+ * @returns {Promise<{ok: true, data: object}|{ok: false, error: {code: string, message: string}}>} The outcome.
  */
-export function runPageAction(kind, args, config) {
+export async function runPageAction(kind, args, config) {
   // ---- bounds -------------------------------------------------------------
   // Every limit below exists so a hostile or merely enormous page cannot make this function run
   // long or return an unbounded payload.
   const MAX_VISITED_NODES = 6000;
+  const MAX_TEXT_NODES = 24000;
   const MAX_INTERACTIVE = 400;
   const MAX_NAME_CHARS = 160;
   const MAX_VALUE_CHARS = 200;
   const DEFAULT_TEXT_CHARS = 40000;
   const HARD_TEXT_CHARS = 200000;
   const MAX_TYPE_CHARS = 10000;
+  const MAX_SCROLL_PX = 20000;
+  const MAX_OPTIONS_LISTED = 50;
+  const DEFAULT_WAIT_MS = 5000;
+  const MAX_WAIT_MS = 15000;
+  // The quiet window after the last DOM mutation before the page counts as settled. Half a second
+  // is the same heuristic browser automation uses for "network idle": short enough not to stall a
+  // static page, long enough that a script's follow-up change lands inside it and extends the wait.
+  const SETTLE_QUIET_MS = 500;
 
   const MASK = config.mask;
+
+  /** Elements whose contents are never page content: code, styling, metadata, inert templates. */
+  const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD", "TITLE", "META", "LINK"]);
 
   /**
    * A per-page registry of element references.
@@ -123,6 +172,139 @@ export function runPageAction(kind, args, config) {
     return url.toString();
   }
 
+  // ---- the visibility policy ------------------------------------------------
+
+  /**
+   * Whether anything under this element could be visible: the O(1) prune.
+   *
+   * These states hide an entire subtree and cannot be undone by a descendant, so the walkers refuse
+   * the node and never descend. `visibility: hidden` is deliberately NOT here: a descendant may set
+   * `visibility: visible` and reappear, so that case is decided per element by {@link isVisible}.
+   * @param {Element} element The candidate.
+   * @returns {boolean} Whether the subtree is worth walking at all.
+   */
+  function subtreeMayBeVisible(element) {
+    if (SKIP_TAGS.has(element.tagName)) return false;
+    if (element.getAttribute("aria-hidden") === "true") return false;
+    const parent = element.parentElement;
+    if (parent && parent.tagName === "DETAILS" && !(/** @type {HTMLDetailsElement} */ (parent)).open
+      && element.tagName !== "SUMMARY") return false;
+    let style;
+    try {
+      style = getComputedStyle(element);
+    } catch {
+      return false;
+    }
+    if (style.display === "none") return false;
+    if (Number(style.opacity) === 0) return false;
+    if (style.contentVisibility === "hidden") return false;
+    return true;
+  }
+
+  /**
+   * The one authoritative answer to "could the user see this element".
+   *
+   * `Element.checkVisibility()` is preferred because it walks ancestors for every property asked
+   * for, and knows what a closed `<details>` and `content-visibility: hidden` mean without this
+   * code enumerating them. `contentVisibilityAuto` is left off on purpose: `content-visibility:
+   * auto` is a rendering optimisation for off-screen content, not an author's intent to hide it,
+   * and treating it as hidden would drop real page content below the fold. The manual walk is the
+   * fallback for a runtime without the native check, and repeats the ancestor-driven rules; it
+   * checks `visibility` on the element alone because that property inherits, so the element's own
+   * computed value already reflects a hidden ancestor and a re-shown descendant alike.
+   * @param {unknown} candidate The element.
+   * @returns {boolean} Whether it is visible under the policy.
+   */
+  function isVisible(candidate) {
+    if (!(candidate instanceof Element) || !candidate.isConnected) return false;
+    const element = candidate;
+    if (element.closest('[aria-hidden="true"]')) return false;
+    if (typeof element.checkVisibility === "function") {
+      try {
+        return element.checkVisibility({
+          opacityProperty: true,
+          visibilityProperty: true,
+          contentVisibilityAuto: false,
+          // Older spellings of the same options, for Chrome versions that predate the renames.
+          checkOpacity: true,
+          checkVisibilityCSS: true,
+        });
+      } catch {
+        // Fall through to the manual walk below.
+      }
+    }
+    if (element.getClientRects().length === 0) return false;
+    if (getComputedStyle(element).visibility === "hidden") return false;
+    for (let node = element; node; node = node.parentElement) {
+      if (!subtreeMayBeVisible(node)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Walk the visible text under a root, in document order, under a node budget.
+   *
+   * Hidden subtrees are pruned at the element that hides them, so a page with a hundred thousand
+   * hidden nodes costs a hundred thousand rejections at most, never a hundred thousand ancestor
+   * walks. Each accepted text node's parent still passes {@link isVisible}, which is what catches
+   * `visibility: hidden` and every ancestor-driven case the prune does not.
+   * @param {Node} root Where to start.
+   * @param {(text: string, parent: Element) => boolean} onText Called per visible text node; return false to stop.
+   * @param {number} budget The most nodes to consider.
+   * @returns {boolean} Whether the budget ran out before the walk finished.
+   */
+  function walkVisibleText(root, onText, budget) {
+    let remaining = budget;
+    let exhausted = false;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        remaining -= 1;
+        if (remaining < 0) { exhausted = true; return NodeFilter.FILTER_REJECT; }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // An element carries no text of its own: descend into it, or refuse its whole subtree.
+          return subtreeMayBeVisible(/** @type {Element} */ (node))
+            ? NodeFilter.FILTER_SKIP
+            : NodeFilter.FILTER_REJECT;
+        }
+        const value = node.nodeValue;
+        if (!value || value.trim() === "") return NodeFilter.FILTER_REJECT;
+        const parent = node.parentElement;
+        if (!parent || !isVisible(parent)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    let node;
+    while ((node = walker.nextNode())) {
+      const parent = /** @type {Element} */ (node.parentElement);
+      if (!onText(/** @type {string} */ (node.nodeValue), parent)) break;
+    }
+    return exhausted;
+  }
+
+  /**
+   * The visible text inside one element, collapsed, for names and labels.
+   *
+   * `textContent` would include a hidden child, so a visible button whose label wraps a
+   * `display: none` span would leak that span's text through its own name.
+   * @param {Element} element The element.
+   * @param {number} maxChars The cap.
+   * @returns {string} The visible text, whitespace-collapsed.
+   */
+  function visibleTextOf(element, maxChars) {
+    const parts = [];
+    let length = 0;
+    walkVisibleText(element, (text) => {
+      const piece = text.replace(/\s+/g, " ").trim();
+      if (piece === "") return true;
+      parts.push(piece);
+      length += piece.length + 1;
+      return length < maxChars;
+    }, MAX_TEXT_NODES);
+    return parts.join(" ").slice(0, maxChars);
+  }
+
+  // ---- naming and classification -------------------------------------------
+
   /**
    * The visible label associated with one form control.
    * @param {Element} element The control.
@@ -132,10 +314,10 @@ export function runPageAction(kind, args, config) {
     const id = element.getAttribute("id");
     if (id) {
       const explicit = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-      if (explicit) return (explicit.textContent ?? "").trim();
+      if (explicit) return visibleTextOf(explicit, MAX_NAME_CHARS);
     }
     const wrapping = element.closest("label");
-    return wrapping ? (wrapping.textContent ?? "").trim() : "";
+    return wrapping ? visibleTextOf(wrapping, MAX_NAME_CHARS) : "";
   }
 
   /**
@@ -169,28 +351,19 @@ export function runPageAction(kind, args, config) {
 
   /**
    * @param {Element} element The element.
-   * @returns {boolean} Whether the user could see it.
-   */
-  function isVisible(element) {
-    if (!(element instanceof Element)) return false;
-    if (element.getClientRects().length === 0) return false;
-    const style = getComputedStyle(element);
-    if (style.visibility === "hidden" || style.display === "none") return false;
-    return Number(style.opacity) !== 0;
-  }
-
-  /**
-   * @param {Element} element The element.
    * @returns {boolean} Whether an action could reach it.
    */
   function isInteractive(element) {
     const tag = element.tagName.toLowerCase();
     if (["a", "button", "input", "select", "textarea", "summary", "option"].includes(tag)) return true;
     if (element.hasAttribute("contenteditable")) return true;
+    if (element.hasAttribute("draggable") && element.getAttribute("draggable") !== "false") return true;
+    // An element that declares it accepts drops is a drop target the model may need to address.
+    if (element.hasAttribute("ondrop") || element.hasAttribute("ondragover")) return true;
     const role = String(element.getAttribute("role") ?? "").toLowerCase();
     if ([
       "button", "link", "checkbox", "radio", "tab", "menuitem", "menuitemcheckbox", "menuitemradio",
-      "switch", "combobox", "textbox", "searchbox", "option", "slider", "spinbutton",
+      "switch", "combobox", "textbox", "searchbox", "option", "slider", "spinbutton", "listbox",
     ].includes(role)) return true;
     const tabIndex = element.getAttribute("tabindex");
     return tabIndex !== null && tabIndex !== "-1";
@@ -198,6 +371,10 @@ export function runPageAction(kind, args, config) {
 
   /**
    * The name a person would use for one element.
+   *
+   * Every text-derived branch reads visible text only, so a hidden descendant cannot name a
+   * visible control. `aria-label` is taken as written: it is the author's name for the control,
+   * not page content.
    * @param {Element} element The element.
    * @returns {string} A short accessible name.
    */
@@ -210,7 +387,8 @@ export function runPageAction(kind, args, config) {
       const parts = labelledBy.split(/\s+/)
         .map((id) => document.getElementById(id))
         .filter((node) => node !== null)
-        .map((node) => (node.textContent ?? "").trim());
+        .map((node) => visibleTextOf(/** @type {Element} */ (node), MAX_NAME_CHARS))
+        .filter((text) => text !== "");
       if (parts.length > 0) return parts.join(" ").slice(0, MAX_NAME_CHARS);
     }
 
@@ -228,8 +406,8 @@ export function runPageAction(kind, args, config) {
       if (candidate && candidate.trim() !== "") return candidate.trim().slice(0, MAX_NAME_CHARS);
     }
 
-    const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
-    if (text !== "") return text.slice(0, MAX_NAME_CHARS);
+    const text = visibleTextOf(element, MAX_NAME_CHARS);
+    if (text !== "") return text;
     return element.tagName.toLowerCase();
   }
 
@@ -253,12 +431,15 @@ export function runPageAction(kind, args, config) {
     return tag;
   }
 
+  // ---- the inventory --------------------------------------------------------
+
   /**
    * Walk the document once and describe its interactive elements.
    *
    * The walk is iterative and node-capped rather than recursive, so a pathological DOM cannot blow
-   * the stack or run unbounded. Order is document order, which makes two snapshots of an unchanged
-   * page identical.
+   * the stack or run unbounded. Hidden subtrees are pruned by the filter, so a hidden node costs one
+   * rejection and its descendants cost nothing. Order is document order, which makes two snapshots
+   * of an unchanged page identical.
    * @returns {{elements: object[], truncated: boolean}} The inventory.
    */
   function inventory() {
@@ -269,11 +450,20 @@ export function runPageAction(kind, args, config) {
     const elements = [];
     let visited = 0;
     let truncated = false;
-    const walker = document.createTreeWalker(document.body ?? document, NodeFilter.SHOW_ELEMENT);
+    const root = document.body ?? document.documentElement;
+    if (!root) return { elements, truncated };
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+      acceptNode(node) {
+        visited += 1;
+        if (visited > MAX_VISITED_NODES) { truncated = true; return NodeFilter.FILTER_REJECT; }
+        return subtreeMayBeVisible(/** @type {Element} */ (node))
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    });
 
     while (walker.nextNode()) {
-      visited += 1;
-      if (visited > MAX_VISITED_NODES) { truncated = true; break; }
       // A SHOW_ELEMENT walker yields only elements; the cast records what the filter guarantees.
       const element = /** @type {Element} */ (walker.currentNode);
       if (!isInteractive(element) || !isVisible(element)) continue;
@@ -298,6 +488,14 @@ export function runPageAction(kind, args, config) {
           const type = String(element.getAttribute("type") ?? "text").toLowerCase();
           if (type === "checkbox" || type === "radio") entry.checked = control.checked === true;
         }
+        if (tag === "select") {
+          const select = /** @type {HTMLSelectElement} */ (element);
+          entry.options = [...select.options].slice(0, MAX_OPTIONS_LISTED).map((option) => ({
+            value: String(option.value).slice(0, MAX_VALUE_CHARS),
+            label: String(option.label || option.textContent || "").trim().slice(0, MAX_NAME_CHARS),
+            selected: option.selected === true,
+          }));
+        }
       }
       if (element.getAttribute("aria-expanded") !== null) {
         entry.expanded = element.getAttribute("aria-expanded") === "true";
@@ -310,8 +508,10 @@ export function runPageAction(kind, args, config) {
   /**
    * Resolve one element reference minted by the current snapshot.
    *
-   * Returns the element or the reason as two nullable fields rather than a tagged union, because
-   * the caller narrows on `element` alone and needs no literal-type tricks to do so.
+   * A reference is refused when its snapshot is stale, when the element left the document, and
+   * when the element is no longer visible: acting on a control the user cannot see is acting on a
+   * page the model has not been shown. Returns the element or the reason as two nullable fields
+   * rather than a tagged union, because the caller narrows on `element` alone.
    * @param {unknown} ref The reference.
    * @returns {{element: HTMLElement|null, error: {code: string, message: string}|null}} The element, or why not.
    */
@@ -327,11 +527,19 @@ export function runPageAction(kind, args, config) {
     if (!element.isConnected) {
       return stale(`${value} no longer exists on the page; take a fresh browser_snapshot`);
     }
+    if (!isVisible(element)) {
+      return stale(`${value} is no longer visible on the page; take a fresh browser_snapshot`);
+    }
     return { element, error: null };
   }
 
   /**
-   * Visible text, bounded.
+   * Visible text, bounded, from a walk that applies the visibility policy to every text node.
+   *
+   * Not `innerText`: it reports text under an `opacity: 0` or `content-visibility: hidden`
+   * ancestor and inside a closed `<details>`, all of which the user cannot see. A line break is
+   * emitted when the text moves to a different parent element, which keeps headings, paragraphs,
+   * and list items apart without a layout query per node.
    * @param {number} requested The caller's cap, if any.
    * @returns {{text: string, truncated: boolean}} The bounded text.
    */
@@ -340,12 +548,30 @@ export function runPageAction(kind, args, config) {
       HARD_TEXT_CHARS,
       Number.isFinite(requested) && requested > 0 ? Math.floor(requested) : DEFAULT_TEXT_CHARS,
     );
-    const source = document.body ?? document.documentElement;
-    const raw = source ? String(source.innerText ?? source.textContent ?? "") : "";
-    const collapsed = raw.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-    return collapsed.length > cap
-      ? { text: collapsed.slice(0, cap), truncated: true }
-      : { text: collapsed, truncated: false };
+    const root = document.body ?? document.documentElement;
+    if (!root) return { text: "", truncated: false };
+
+    const parts = [];
+    let length = 0;
+    let previousParent = null;
+    let capped = false;
+    const exhausted = walkVisibleText(root, (text, parent) => {
+      const piece = text.replace(/\s+/g, " ").trim();
+      if (piece === "") return true;
+      parts.push(previousParent !== null && parent !== previousParent ? `\n${piece}` : ` ${piece}`);
+      previousParent = parent;
+      length += piece.length + 1;
+      if (length >= cap) { capped = true; return false; }
+      return true;
+    }, MAX_TEXT_NODES);
+
+    const text = parts.join("")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    return text.length > cap
+      ? { text: text.slice(0, cap), truncated: true }
+      : { text, truncated: capped || exhausted };
   }
 
   /** @returns {{url: string, title: string}} The page's identity, already scrubbed. */
@@ -354,6 +580,79 @@ export function runPageAction(kind, args, config) {
       url: scrubUrl(location.href),
       title: String(document.title ?? "").slice(0, MAX_NAME_CHARS),
     };
+  }
+
+  // ---- interaction helpers ---------------------------------------------------
+
+  /**
+   * Dispatch a pointer-and-mouse sequence on one element.
+   * @param {Element} element The target.
+   * @param {string[]} types Event types in order; pointer types become PointerEvents.
+   * @returns {boolean} Whether every event ran to completion without being cancelled.
+   */
+  function pointerSequence(element, types) {
+    let uncancelled = true;
+    for (const type of types) {
+      const Constructor = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+      uncancelled = element.dispatchEvent(new Constructor(type, {
+        bubbles: true, cancelable: true, composed: true, view: window,
+      })) && uncancelled;
+    }
+    return uncancelled;
+  }
+
+  /**
+   * Submit the form an element belongs to, the way the browser would on Enter.
+   *
+   * `requestSubmit` runs validation and the submit handlers; a synthetic Enter alone submits
+   * nothing, so without this a "submit" that reports success would have done nothing.
+   * @param {HTMLElement} element The control.
+   * @returns {boolean} Whether a form was submitted.
+   */
+  function submitFormOf(element) {
+    const form = /** @type {HTMLInputElement} */ (element).form;
+    if (!form) return false;
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.submit();
+    return true;
+  }
+
+  /** Keys accepted by `key`, with the `code` and legacy `keyCode` listeners still check. */
+  const NAMED_KEYS = {
+    Enter: ["Enter", 13], Tab: ["Tab", 9], Escape: ["Escape", 27], Backspace: ["Backspace", 8],
+    Delete: ["Delete", 46], ArrowUp: ["ArrowUp", 38], ArrowDown: ["ArrowDown", 40],
+    ArrowLeft: ["ArrowLeft", 37], ArrowRight: ["ArrowRight", 39], Home: ["Home", 36], End: ["End", 35],
+    PageUp: ["PageUp", 33], PageDown: ["PageDown", 34], " ": ["Space", 32], Space: ["Space", 32],
+  };
+
+  /**
+   * Wait until the page has loaded and its DOM has been quiet for a moment, or until the deadline.
+   * @param {number} deadlineMs Longest wait.
+   * @returns {Promise<{settled: boolean, waitedMs: number}>} Whether it settled in time.
+   */
+  function waitForSettle(deadlineMs) {
+    return new Promise((resolveWait) => {
+      const started = Date.now();
+      let lastMutation = Date.now();
+      const observer = new MutationObserver(() => { lastMutation = Date.now(); });
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+      const tick = () => {
+        const now = Date.now();
+        const loaded = document.readyState === "complete";
+        if (loaded && now - lastMutation >= SETTLE_QUIET_MS) {
+          observer.disconnect();
+          resolveWait({ settled: true, waitedMs: now - started });
+          return;
+        }
+        if (now - started >= deadlineMs) {
+          observer.disconnect();
+          resolveWait({ settled: false, waitedMs: now - started });
+          return;
+        }
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
   }
 
   // ---- actions ------------------------------------------------------------
@@ -384,11 +683,7 @@ export function runPageAction(kind, args, config) {
       const name = accessibleName(element);
       // A pointer sequence rather than a bare `click()`: many controls listen for pointerdown or
       // mousedown and never see a synthetic click alone.
-      for (const type of ["pointerover", "pointerdown", "mousedown", "pointerup", "mouseup"]) {
-        element.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, {
-          bubbles: true, cancelable: true, composed: true,
-        }));
-      }
+      pointerSequence(element, ["pointerover", "pointerdown", "mousedown", "pointerup", "mouseup"]);
       if (typeof element.click === "function") element.click();
       else element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
       return done({ clicked: name, ...identity() });
@@ -427,19 +722,182 @@ export function runPageAction(kind, args, config) {
       element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
       element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 
+      let submitted = false;
       if (args.submit === true) {
+        let uncancelled = true;
         for (const type of ["keydown", "keypress", "keyup"]) {
-          element.dispatchEvent(new KeyboardEvent(type, {
+          uncancelled = element.dispatchEvent(new KeyboardEvent(type, {
             key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true, composed: true,
-          }));
+          })) && uncancelled;
         }
+        // Implicit submission, as the browser does for Enter in a form field — unless a handler
+        // prevented the keydown, in which case the page has taken over and submitting would be a
+        // second, unrequested action.
+        if (uncancelled && !editable && !(element instanceof HTMLTextAreaElement)) submitted = submitFormOf(element);
       }
       // The typed text is never echoed back: it may be exactly the value a caller should not have
       // sent, and repeating it would put it in the session log a second time.
-      return done({ typed: accessibleName(element), ...identity() });
+      return done({ typed: accessibleName(element), submitted, ...identity() });
     }
 
-    return fail("UNSUPPORTED_ACTION", `the extension does not implement ${String(kind)}`);
+    if (kind === "key") {
+      const raw = String(args.key ?? "").trim();
+      if (raw === "") return fail("ACTION_FAILED", "key is required, for example Enter, Escape, Tab, ArrowDown, or Control+a");
+      const parts = raw.split("+");
+      const keyName = parts.pop();
+      const modifiers = new Set(parts.map((part) => part.toLowerCase()));
+      const named = NAMED_KEYS[keyName];
+      const single = keyName.length === 1;
+      if (!named && !single) {
+        return fail("ACTION_FAILED", `${keyName} is not a supported key; use a single character or one of ${Object.keys(NAMED_KEYS).filter((name) => name !== " ").join(", ")}`);
+      }
+      let target = document.activeElement;
+      if (args.ref !== undefined) {
+        const { element, error } = resolve(args.ref);
+        if (!element) return fail(error.code, error.message);
+        element.scrollIntoView({ block: "center", inline: "nearest" });
+        if (typeof element.focus === "function") element.focus();
+        target = element;
+      }
+      if (!target || target === document.body) target = document.body ?? document.documentElement;
+      const init = {
+        key: named ? keyName : keyName, code: named ? named[0] : `Key${keyName.toUpperCase()}`,
+        keyCode: named ? named[1] : keyName.toUpperCase().charCodeAt(0),
+        ctrlKey: modifiers.has("control") || modifiers.has("ctrl"),
+        shiftKey: modifiers.has("shift"), altKey: modifiers.has("alt"),
+        metaKey: modifiers.has("meta") || modifiers.has("command") || modifiers.has("cmd"),
+        bubbles: true, cancelable: true, composed: true,
+      };
+      let uncancelled = true;
+      for (const type of ["keydown", "keypress", "keyup"]) {
+        uncancelled = target.dispatchEvent(new KeyboardEvent(type, init)) && uncancelled;
+      }
+      let submitted = false;
+      if (keyName === "Enter" && modifiers.size === 0 && uncancelled
+        && target instanceof HTMLInputElement) submitted = submitFormOf(target);
+      return done({ key: raw, target: accessibleName(target), submitted, ...identity() });
+    }
+
+    if (kind === "scroll") {
+      if (args.ref !== undefined) {
+        const { element, error } = resolve(args.ref);
+        if (!element) return fail(error.code, error.message);
+        element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+      } else if (args.to === "top") {
+        window.scrollTo({ top: 0, behavior: "instant" });
+      } else if (args.to === "bottom") {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+      } else {
+        const dy = Number(args.dy);
+        if (!Number.isFinite(dy)) return fail("ACTION_FAILED", "scroll needs a ref, to: top|bottom, or a numeric dy");
+        window.scrollBy({ top: Math.max(-MAX_SCROLL_PX, Math.min(MAX_SCROLL_PX, dy)), behavior: "instant" });
+      }
+      return done({
+        scrollY: Math.round(window.scrollY),
+        scrollHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        ...identity(),
+      });
+    }
+
+    if (kind === "hover") {
+      const { element, error } = resolve(args.ref);
+      if (!element) return fail(error.code, error.message);
+      element.scrollIntoView({ block: "center", inline: "nearest" });
+      pointerSequence(element, ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"]);
+      return done({ hovered: accessibleName(element), ...identity() });
+    }
+
+    if (kind === "select_option") {
+      const { element, error } = resolve(args.ref);
+      if (!element) return fail(error.code, error.message);
+      if (!(element instanceof HTMLSelectElement)) {
+        return fail("ACTION_FAILED", `${accessibleName(element)} is not a select control`);
+      }
+      if (element.disabled) return fail("ACTION_FAILED", `${accessibleName(element)} is disabled`);
+      const wantValue = args.value === undefined ? null : String(args.value);
+      const wantLabel = args.label === undefined ? null : String(args.label).trim();
+      const options = [...element.options];
+      const match = options.find((option) => wantValue !== null && option.value === wantValue)
+        ?? options.find((option) => wantLabel !== null && (option.label || option.textContent || "").trim() === wantLabel)
+        ?? options.find((option) => wantLabel !== null && (option.label || option.textContent || "").trim().toLowerCase() === wantLabel.toLowerCase());
+      if (!match) {
+        const available = options.slice(0, MAX_OPTIONS_LISTED)
+          .map((option) => `${(option.label || option.textContent || "").trim()} (${option.value})`).join(", ");
+        return fail("ACTION_FAILED", `no option matches ${wantValue ?? wantLabel ?? "(nothing given)"}; available: ${available}`);
+      }
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+      if (setter) setter.call(element, match.value); else element.value = match.value;
+      match.selected = true;
+      element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      return done({
+        selected: { value: match.value, label: (match.label || match.textContent || "").trim() },
+        control: accessibleName(element),
+        ...identity(),
+      });
+    }
+
+    if (kind === "drag") {
+      const source = resolve(args.from);
+      if (!source.element) return fail(source.error.code, source.error.message);
+      const target = resolve(args.to);
+      if (!target.element) return fail(target.error.code, target.error.message);
+      const from = source.element;
+      const to = target.element;
+      from.scrollIntoView({ block: "center", inline: "nearest" });
+      // Both models of dragging are driven, because a page implements one or the other: pointer
+      // events for libraries that track the pointer, and the HTML5 drag-and-drop sequence with one
+      // shared DataTransfer for pages that use dragstart/drop.
+      pointerSequence(from, ["pointerover", "pointerdown", "mousedown"]);
+      pointerSequence(to, ["pointermove", "mousemove", "pointerover", "mouseover"]);
+      const transfer = new DataTransfer();
+      const dragEvent = (type, element) => element.dispatchEvent(new DragEvent(type, {
+        bubbles: true, cancelable: true, composed: true, dataTransfer: transfer,
+      }));
+      dragEvent("dragstart", from);
+      dragEvent("dragenter", to);
+      dragEvent("dragover", to);
+      dragEvent("drop", to);
+      dragEvent("dragend", from);
+      pointerSequence(to, ["pointerup", "mouseup"]);
+      return done({ dragged: accessibleName(from), droppedOn: accessibleName(to), ...identity() });
+    }
+
+    if (kind === "find") {
+      const needle = String(args.text ?? "").trim();
+      if (needle === "") return fail("ACTION_FAILED", "text to find is required");
+      const lowered = needle.toLowerCase();
+      const root = document.body ?? document.documentElement;
+      let count = 0;
+      /** @type {{text: string, parent: Element}|null} */
+      let first = null;
+      // The same visible-text walk as the snapshot, so `find` can never locate — and scroll the
+      // user to — text the snapshot would not have shown.
+      if (root) {
+        walkVisibleText(root, (text, parent) => {
+          if (!text.toLowerCase().includes(lowered)) return true;
+          count += 1;
+          if (!first) first = { text, parent };
+          return true;
+        }, MAX_TEXT_NODES);
+      }
+      if (!first) return done({ found: false, count: 0, ...identity() });
+      first.parent.scrollIntoView({ block: "center", inline: "nearest" });
+      const content = first.text;
+      const at = content.toLowerCase().indexOf(lowered);
+      const snippet = content.slice(Math.max(0, at - 60), Math.min(content.length, at + needle.length + 60)).replace(/\s+/g, " ").trim();
+      return done({ found: true, count, snippet, ...identity() });
+    }
+
+    if (kind === "wait") {
+      const requested = Number(args.ms);
+      const deadline = Number.isFinite(requested) && requested > 0 ? Math.min(MAX_WAIT_MS, requested) : DEFAULT_WAIT_MS;
+      const outcome = await waitForSettle(deadline);
+      return done({ readyState: document.readyState, ...outcome, ...identity() });
+    }
+
+    return fail("UNSUPPORTED_ACTION", `the extension does not implement ${String(kind)} in the page`);
   } catch (cause) {
     // A throw here would reach the service worker as an injection failure indistinguishable from a
     // page that refused the action, so it is reported as a typed failure instead.

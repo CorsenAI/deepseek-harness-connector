@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Connector fixture hidden</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .cv-hidden { content-visibility: hidden; }
+  .sr-only { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+  <!--
+    Every string containing LEAK_ME is content the user cannot see. None of them looks like a
+    secret on purpose: a credential heuristic masking the value would hide a visibility bug, and
+    this fixture exists to catch visibility bugs. Every string ending in _OK is visible and must
+    survive, so an over-eager policy that hides real content fails here too.
+  -->
+  <h1>Fixture hidden</h1>
+  <p id="outcome">untouched</p>
+  <p>VISIBLE_TEXT_OK</p>
+  <button id="visible-button" type="button" onclick="document.getElementById('outcome').textContent = 'visible clicked';">Visible button OK</button>
+  <input id="visible-field" aria-label="Visible field" value="VISIBLE_VALUE_OK">
+
+  <!-- A visible control whose label wraps a hidden child: the name must not include the child. -->
+  <button type="button">Visible label<span style="display:none">LEAK_ME_CHILD</span></button>
+
+  <!-- opacity: 0 on an ancestor. The child's own opacity is 1, which is the trap. -->
+  <div style="opacity:0">
+    <p>LEAK_ME_OPACITY_TEXT</p>
+    <button type="button">LEAK_ME_OPACITY_BUTTON</button>
+    <input aria-label="Opacity field" value="LEAK_ME_OPACITY_VALUE">
+  </div>
+
+  <!-- display: none on an ancestor. -->
+  <div style="display:none">
+    <p>LEAK_ME_DISPLAY_TEXT</p>
+    <button type="button">LEAK_ME_DISPLAY_BUTTON</button>
+    <input aria-label="Display field" value="LEAK_ME_DISPLAY_VALUE">
+  </div>
+
+  <!-- visibility: hidden on an ancestor, with one descendant that re-shows itself. -->
+  <div style="visibility:hidden">
+    <p>LEAK_ME_VISIBILITY_TEXT</p>
+    <button type="button">LEAK_ME_VISIBILITY_BUTTON</button>
+    <input aria-label="Visibility field" value="LEAK_ME_VISIBILITY_VALUE">
+    <p style="visibility:visible">VISIBLE_AGAIN_OK <button type="button" style="visibility:visible">Reshown button OK</button></p>
+  </div>
+
+  <!-- content-visibility: hidden on an ancestor. -->
+  <div class="cv-hidden">
+    <p>LEAK_ME_CV_TEXT</p>
+    <button type="button">LEAK_ME_CV_BUTTON</button>
+    <input aria-label="Content-visibility field" value="LEAK_ME_CV_VALUE">
+  </div>
+
+  <!-- A closed details: the summary is visible, the body is not. -->
+  <details>
+    <summary>VISIBLE_SUMMARY_OK</summary>
+    <p>LEAK_ME_DETAILS_TEXT</p>
+    <button type="button">LEAK_ME_DETAILS_BUTTON</button>
+    <input aria-label="Details field" value="LEAK_ME_DETAILS_VALUE">
+  </details>
+
+  <!-- An open details: everything in it is visible. -->
+  <details open>
+    <summary>Open summary OK</summary>
+    <p>OPEN_DETAILS_OK</p>
+    <button type="button">Open details button OK</button>
+  </details>
+
+  <!-- Hidden form controls, three ways. -->
+  <input type="hidden" name="hidden-type" value="LEAK_ME_HIDDEN_TYPE">
+  <input hidden aria-label="Hidden attribute field" value="LEAK_ME_HIDDEN_ATTRIBUTE">
+  <input style="display:none" aria-label="Inline hidden field" value="LEAK_ME_HIDDEN_INLINE">
+
+  <!-- aria-hidden: not part of the accessibility tree, so not part of the snapshot. -->
+  <div aria-hidden="true">
+    <p>LEAK_ME_ARIA_TEXT</p>
+    <button type="button">LEAK_ME_ARIA_BUTTON</button>
+  </div>
+
+  <!-- Inert templates and script-off content are never page content. -->
+  <template><p>LEAK_ME_TEMPLATE</p></template>
+  <noscript><p>LEAK_ME_NOSCRIPT</p></noscript>
+
+  <!-- Off-screen but rendered: the screen-reader-only pattern is real content, not hidden. -->
+  <p class="sr-only">SR_ONLY_OK</p>
+</body>
+</html>
