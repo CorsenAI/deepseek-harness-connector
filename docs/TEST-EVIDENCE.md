@@ -570,3 +570,126 @@ AK, AL, AM, AN, AO (new); AD re-established on the new bytes; AJ re-run.
 A live model turn (needs an API key). Recovery after a worker, broker, DSH, or Chrome restart (gate
 AA/AB). Bounded behaviour on giant or deeply nested hostile DOMs (the rest of AI). Anything on
 macOS. CI has still never run.
+
+## 2026-09-05 — recovery gate, and the stale tarball the packager had been recording (gates AA, AB, AP; AD and AE re-established)
+
+Environment: Windows 11 Pro for Workstations, Node v24.12.0, Playwright Chromium headed, one broker
+per harness on `127.0.0.1` with an ephemeral port, a persisted Chrome profile and broker state file
+for the recovery cases. Code under test: commit `798d648`, whose `extension/` and `companion/`
+trees are byte-identical to `1bc71c6` (`git diff --stat 1bc71c6 798d648 -- extension companion`
+prints nothing); the commits between touch scripts, CI, and documents only.
+
+### Recovery, in a real browser — run at `1bc71c6`
+
+```
+node --test --test-concurrency=1 --experimental-strip-types "tests/e2e/*.test.ts"   # 47/47
+node --test --experimental-strip-types tests/e2e/recovery.test.ts                     # 6/6
+```
+
+Each case takes one real component away in the middle of a request and asserts what the page and
+the registry say afterwards, never what the extension reports about itself.
+
+| Case | Taken away, mid-flight | Asserted |
+|---|---|---|
+| Broker restart | the broker process; ownership exists only in its state file | after the restart, the same session reaches the same tab, restored from the state file |
+| Broker restart, destructive action in flight | the broker, during a 1.5 s form submission the page counts | the request settles `INTERRUPTED`; after reconnect the page's submission counter is still **1** — nothing was replayed |
+| Worker killed | the extension service worker, stopped through CDP `ServiceWorker.stopWorker` during the same submission | `INTERRUPTED`; counter **1**; an ordinary panel message wakes the worker, which reconnects and restores its bindings from storage; the next request succeeds |
+| Plugin instance restart | the agent connection, with a result still to come | the successor never receives the predecessor's result — the broker drops it as unsolicited — and the successor's own request succeeds |
+| Tab closed | the bound tab, during an action | `TAB_GONE` or `BINDING_CHANGED`, and the binding is gone from the registry |
+| Chrome relaunch | the whole browser, same profile, same user data directory | identity and pairing survive; every binding is dropped; a new tab that reuses the old tab id is refused, not acted on |
+
+The first run of this suite failed 4 of 6 for two reasons that were fixed in the implementation and
+the test method, not the assertions: `forgetPreviousBrowserSession()` crashed on a missing import,
+which cascaded into `NO_BINDING` everywhere, and the in-flight request's rejection was unhandled
+once its component had been torn down. The second run passed 6/6, and the complete suite 47/47.
+
+### Unit, protocol, security, parity, tools, tab actions — run at `798d648`
+
+```
+npm run test:unit
+# 224 tests, 223 pass, 1 skipped (the POSIX mode check, on Windows), 0 fail
+```
+
+### Type checking — run at `798d648`
+
+```
+node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.json --noEmit   # clean
+node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit   # clean
+```
+
+### The tarball the packager had been recording was stale
+
+Found while rebuilding the artifacts for this gate. `dist/corsen-ai-dsh-browser-connector-0.1.0.tgz`
+contained no `INTERRUPTED`, which `companion/src/protocol.ts` has carried since `1bc71c6`:
+
+```
+tar -xOzf dist/corsen-ai-dsh-browser-connector-0.1.0.tgz package/lib/protocol.js | grep -c INTERRUPTED
+0
+```
+
+`scripts/package.mjs` never built the tarball. It hashed whatever already sat in `dist/`, and the
+verifier only checked the tarball's entry names. The tarball rows in the two earlier "Release
+artifacts" tables in this file (`bcc6ca6c…`) therefore record a file whose freshness was never
+proven. They are superseded and must not be cited.
+
+Fixed in `221b04f`. The packager now removes `lib/`, compiles it, and packs it with `npm-cli.js`
+under the running Node, with no shell in between. The verifier parses the tarball's contents and
+requires every `lib/` file inside it to be byte-identical to the fresh build, names each file that
+is not, and also requires `cordis.patch.yml` byte-identical to the source and the release version in
+the packed `package.json`. The verifier's own first version compared keys with mismatched prefixes
+and reported all 30 files missing; that was a verifier bug, fixed before anything was committed.
+
+The tarball is deterministic: two consecutive packs produced identical bytes.
+
+```
+sha256 corsen-ai-dsh-browser-connector-0.1.0.tgz   # pack 1: 935a4988f4c89ab2…   pack 2: 935a4988f4c89ab2…
+```
+
+### Release artifacts, from clean commit `798d648`
+
+```
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist
+```
+
+```
+wrote dsh-browser-connector-extension-0.1.0.zip (45497 bytes, 14 files)
+wrote corsen-ai-dsh-browser-connector-0.1.0.tgz (55252 bytes, built from source)
+all checks passed                                   # 187 checks
+"commit": "798d6484bb60706dabfd4159403e21e1f5146310", "cleanTree": true, "builtAt": "2026-09-05T18:17:04.959Z"
+```
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `343a7effc6ebbad92fa7af7de21bdd4c94811386d5b0dab249afb065c32d4c55` | 45497 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `935a4988f4c89ab2ceb0fcc1bf7acdda9a10984c30ee916d40cb3adbb23b6034` | 55252 |
+
+The extension ZIP is unchanged since the `1bc71c6` build, as it should be: no extension file changed.
+The packaged E2E ran against the exact bytes in `dist/`:
+
+```
+in-process build  : 343a7effc6ebbad92fa7af7de21bdd4c94811386d5b0dab249afb065c32d4c55
+dist ZIP on disk  : 343a7effc6ebbad92fa7af7de21bdd4c94811386d5b0dab249afb065c32d4c55
+IDENTICAL
+tests/e2e/packaged.test.ts: 4/4
+```
+
+### Provenance audit, re-run at `798d648`
+
+```
+node scripts/provenance-audit.mjs   # exit 0
+== dsh-browser (third-party: boilerplate only) ==
+longest exact shared run: 26 tokens (CSS)
+exact runs >= 16 tokens: 47, covering 862 subject tokens (0.98%)
+```
+
+### Gates this run closes
+
+AA, AB, AP (new). AD re-established on the new bytes. AE re-established, now including the proof
+that the tarball is fresh. AJ re-run.
+
+### What this does not prove
+
+A live model turn (needs an API key). Bounded behaviour on giant or deeply nested hostile DOMs
+(the rest of AI). Anything on macOS. CI has still never run. The complete real-browser suite was
+not re-run at `798d648` itself; that claim rests on the byte-identical `extension/` and
+`companion/` trees, plus the packaged cases that did run on the new artifacts.
