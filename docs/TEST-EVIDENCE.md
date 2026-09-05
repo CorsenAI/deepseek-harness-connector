@@ -323,6 +323,67 @@ because GitHub runner paths contain no spaces.
 
 AC on Windows and Linux; AF by real-filesystem verification. AC on macOS stays open.
 
+---
+
+## 2026-09-05 — the packaged ZIP in a real browser (gate AD)
+
+```
+node --test --test-concurrency=1 --experimental-strip-types tests/e2e/packaged.test.ts
+```
+
+The test calls `buildExtensionZip()` from `scripts/package.mjs`, so it exercises the exact encoder
+the release uses, then unpacks the archive's own bytes with the matching `readZip()` into a fresh
+temporary directory and points the E2E harness at that directory instead of `extension/`.
+
+```
+packaged zip: 35464 bytes, sha256 889c3bd433c272079387a0e0e113adda46a01e270f0298161125b5b082ef5e25
+✔ unpacks to exactly the allowlisted files and nothing else
+✔ loads, pairs, and reaches an attached tab from the packaged bytes
+✔ masks secrets from the packaged page interface
+✔ clicks, and the page confirms it, from the packaged bytes
+ℹ pass 4  fail 0
+```
+
+The SHA-256 is identical to the `dist/` artifact verified by `verify-package.mjs` (152/152 after
+`readZip` moved into the packager), so the bytes tested here are the bytes that would ship.
+
+### Gate this run closes
+
+AD.
+
+---
+
+## 2026-09-05 — provenance audit (gate AJ)
+
+```
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2 --json provenance-audit.json
+```
+
+References at the baselines in `docs/PROVENANCE.md`: `dsh-browser` `e60e6e3f` (157 files,
+202 258 tokens) and `hermes-connector` `bfd9bc29` (48 files, 98 836 tokens). Subject: 49 files,
+65 665 tokens. Runtime about one second.
+
+```
+== dsh-browser (third-party: boilerplate only) ==
+longest exact shared run: 26 tokens — ours extension/src/sidepanel.css:139, theirs …/panel/styles.css:1160
+exact runs >= 16 tokens: 30, covering 549 subject tokens (0.84%)
+shape runs >= 40 tokens: 19, covering 905 subject tokens (1.38%)
+== hermes-connector (Corsen-owned: overlap expected) ==
+longest exact shared run: 48 tokens — ours extension/src/background.js:142, theirs …/tests/background-session.test.mjs:32
+exact runs >= 16 tokens: 40, covering 860 subject tokens (1.31%)
+shape runs >= 40 tokens: 25, covering 1308 subject tokens (1.99%)
+audit gate passed: no third-party exact run >= 32 tokens, coverage <= 2%
+```
+
+Every run is classified in `docs/PROVENANCE-AUDIT.md`; the two most notable were inspected by hand
+and their source excerpts compared. The gate was also shown to reject an invalid case: with
+`--max-run 20` (below the measured 26) and separately with `--max-coverage 0.5` (below the
+measured 0.84 %) it printed `AUDIT FAILED` and exited 2.
+
+### Gate this run closes
+
+AJ.
+
 ## Findings this evidence run produced
 
 Three defects were found by these tests and fixed in the implementation, not worked around in the

@@ -117,6 +117,29 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File tests\installer\windows-installer.ps1 -Tarball $tgz -DshBin "$env:RUNNER_TEMP\dsh-int\node_modules\.bin"
           exit $LASTEXITCODE
 
+  provenance:
+    name: provenance audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # The references are fetched at the exact SHAs recorded in docs/PROVENANCE.md, so the audit
+      # in CI compares against the same baselines the document describes.
+      - name: fetch the reference repositories at their pinned baselines
+        run: |
+          fetch() { mkdir -p ".refs/$1" && cd ".refs/$1" && git init -q && git remote add origin "$2" && git fetch -q --depth 1 origin "$3" && git checkout -q FETCH_HEAD && cd - >/dev/null; }
+          fetch dsh-browser https://github.com/Lum1104/dsh-browser.git e60e6e3f589205a5755b35f234155d3ec17d030b
+          fetch hermes-connector https://github.com/CorsenAI/hermes-connector.git bfd9bc29718c4647a1438962aae28ed4d1220df6
+      # Ceilings: a copied function exceeds 32 exact tokens at once; a rewritten module raises
+      # coverage well past 2%. Both are far above what the recorded audit measured.
+      - run: node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2 --json provenance-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provenance-audit
+          path: provenance-audit.json
+
   dsh-integration:
     name: real DeepSeek Harness (${{ matrix.lane }})
     runs-on: ubuntu-latest
