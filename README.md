@@ -99,7 +99,9 @@ connector unreachable, versions mismatched. You should never have to guess what 
 - **Never uses the debugger.** No `chrome.debugger`, so no debugging banner on your tabs and no
   scary install warning. See [ADR 0006](docs/adr/0006-permissions-and-no-debugger.md).
 - **Never sends anything to Corsen AI.** No analytics, no telemetry, no relay, no crash reporting.
-- **Never touches a tab you did not attach.** Explicitly, per session.
+- **Never reads page content from, or acts in, a tab you did not attach.** Explicitly, per
+  session. The one thing it learns about other tabs is their title and URL, read locally when you
+  open the tab chooser so you can pick one, and never sent to DeepSeek Harness.
 
 Page content does travel from the tab you attached, through the local connector, to your DeepSeek
 Harness — and from there to whichever model provider your DeepSeek Harness is configured to use. If

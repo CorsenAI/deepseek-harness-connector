@@ -51,7 +51,10 @@ used to compute a proof for the local connector and is never itself transmitted.
   statistics, or any other transmission. There is no Corsen server in the loop.
 - **Does not read cookies.** The `cookies` permission is not requested.
 - **Does not read history, bookmarks, passwords, or other extensions' data.**
-- **Does not access tabs the user did not attach.**
+- **Does not read page content from, or perform any action in, a tab the user has not attached.**
+  When the user opens the tab chooser in the panel, the extension reads the titles and URLs of the
+  open tabs locally, so the user can decide which tab to attach; that list stays in the panel and
+  is not sent to DeepSeek Harness.
 - **Does not act without a DeepSeek Harness request.** The extension is passive until a session the
   user attached asks for something.
 - **Does not sell, share, or transfer data to third parties.** It has no third parties.
@@ -75,4 +78,5 @@ used to compute a proof for the local connector and is never itself transmitted.
 > explicitly choose. Page content from those tabs goes to your DeepSeek Harness on your computer,
 > and from there to whatever model provider you configured it to use. Passwords, one-time codes,
 > and payment fields are masked before anything leaves the page. The extension never reads your
-> cookies, never touches tabs you did not attach, and never sends anything to Corsen AI.
+> cookies, never reads or acts in a tab you did not attach (it lists open tabs' titles and URLs only
+> when you open the tab chooser, so you can pick one), and never sends anything to Corsen AI.

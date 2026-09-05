@@ -22,7 +22,9 @@ can then read those tabs as structured text and click or type in them. Nothing e
   and not part of connecting tabs to sessions.
 - **Reading cookies, history, bookmarks, or passwords.** Logins are preserved by operating the page
   the user already has open, not by taking their credentials.
-- **Acting in tabs the user did not attach.** Ever.
+- **Reading page content from, or acting in, tabs the user did not attach.** Ever. The only thing
+  the extension learns about an unattached tab is its title and URL, read locally when the user
+  opens the tab chooser so they can pick one, and never sent to DeepSeek Harness.
 - **Any communication with Corsen AI's servers.** There are none. The extension talks only to the
   connector on `127.0.0.1`.
 - **Automation of the browser without a DeepSeek Harness session.** The extension does nothing on

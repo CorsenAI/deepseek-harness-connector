@@ -60,7 +60,9 @@ This announces a session called "Review session" to the connector. In the side p
 
 ## What to check
 
-- **Nothing happens in a tab you did not attach.** Open a second tab; the stand-in cannot reach it.
+- **Nothing is read from, and nothing happens in, a tab you did not attach.** Open a second tab; the
+  stand-in cannot reach it. (The panel's tab chooser does list open tabs' titles and URLs so you can
+  pick one to attach; that list is local to the panel.)
 - **Passwords are masked.** Navigate the attached tab to any login page and take a snapshot: the
   password field is listed but its value is `••••••••`.
 - **No external traffic.** DevTools network tab on the service worker shows only
