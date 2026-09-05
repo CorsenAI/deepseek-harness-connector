@@ -86,6 +86,23 @@ export async function runPageAction(kind, args, config) {
   const MAX_TYPE_CHARS = 10000;
   const MAX_SCROLL_PX = 20000;
   const MAX_OPTIONS_LISTED = 50;
+  // A role is an ARIA token, never prose. Without this cap a single element carrying a two-megabyte
+  // `role` attribute produced a two-megabyte result that still reported `truncated: false`.
+  const MAX_ROLE_CHARS = 40;
+  // How much of one attribute is read when classifying a control as secret. Long enough for any
+  // real name, id, placeholder, or label; short enough that a padded attribute cannot make
+  // classification expensive.
+  const MAX_ATTR_SCAN_CHARS = 4096;
+  const MAX_URL_CHARS = 2048;
+  // How long one action may spend walking the document before it stops and says it was cut short.
+  // Node counts alone cannot bound this: a visibility query costs whatever the browser's layout
+  // costs, which on a pathological document is not a function of how many nodes were visited.
+  const MAX_WALK_MS = 5000;
+  // How often the clock is consulted, in nodes. Reading it per node would itself be a cost.
+  const CLOCK_EVERY_NODES = 256;
+  // The last line of defence on payload size: whatever the per-field caps allow, one action never
+  // returns more than this. Reported honestly as `truncated`, never silently.
+  const MAX_RESULT_BYTES = 512 * 1024;
   const DEFAULT_WAIT_MS = 5000;
   const MAX_WAIT_MS = 15000;
   // The quiet window after the last DOM mutation before the page counts as settled. Half a second
@@ -94,6 +111,21 @@ export async function runPageAction(kind, args, config) {
   const SETTLE_QUIET_MS = 500;
 
   const MASK = config.mask;
+
+  /** When this action must stop walking the document, whatever it has found by then. */
+  const walkDeadline = (typeof performance === "object" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now()) + MAX_WALK_MS;
+
+  /**
+   * @returns {boolean} Whether this action has run out of wall-clock time to walk the document.
+   */
+  function outOfTime() {
+    const now = typeof performance === "object" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+    return now > walkDeadline;
+  }
 
   /** Elements whose contents are never page content: code, styling, metadata, inert templates. */
   const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD", "TITLE", "META", "LINK"]);
@@ -122,10 +154,48 @@ export async function runPageAction(kind, args, config) {
   const fail = (code, message) => ({ ok: false, error: { code, message } });
 
   /**
+   * Shrink a payload that exceeds {@link MAX_RESULT_BYTES}, in a fixed order, and say so.
+   *
+   * Per-field caps bound each value, but their product is not bounded: four hundred controls each
+   * listing fifty options is megabytes of legitimate-looking output. Options go first because they
+   * are the largest and least essential part, then the page text, then the tail of the inventory.
+   * @param {Record<string, unknown>} data The payload.
+   * @returns {Record<string, unknown>} The payload, within the cap.
+   */
+  function boundPayload(data) {
+    const size = (value) => JSON.stringify(value)?.length ?? 0;
+    if (size(data) <= MAX_RESULT_BYTES) return data;
+    const out = /** @type {Record<string, unknown>} */ ({ ...data, truncated: true });
+
+    /** @returns {Record<string, unknown>[]|null} The inventory, when the payload carries one. */
+    const entries = () => (Array.isArray(out["elements"])
+      ? /** @type {Record<string, unknown>[]} */ (out["elements"])
+      : null);
+
+    const listed = entries();
+    if (listed) {
+      out["elements"] = listed.map((entry) => {
+        const copy = { ...entry };
+        delete copy["options"];
+        return copy;
+      });
+    }
+    const text = out["text"];
+    if (size(out) > MAX_RESULT_BYTES && typeof text === "string") {
+      const excess = size(out) - MAX_RESULT_BYTES;
+      out["text"] = text.slice(0, Math.max(0, text.length - excess));
+    }
+    for (let remaining = entries(); size(out) > MAX_RESULT_BYTES && remaining && remaining.length > 0; remaining = entries()) {
+      out["elements"] = remaining.slice(0, Math.floor(remaining.length / 2));
+    }
+    return out;
+  }
+
+  /**
    * @param {object} data The payload.
    * @returns {{ok: true, data: object}} The success.
    */
-  const done = (data) => ({ ok: true, data });
+  const done = (data) => ({ ok: true, data: boundPayload(/** @type {Record<string, unknown>} */ (data)) });
 
   /**
    * @param {string} name A query-parameter name.
@@ -253,16 +323,32 @@ export async function runPageAction(kind, args, config) {
    * @param {number} budget The most nodes to consider.
    * @returns {boolean} Whether the budget ran out before the walk finished.
    */
-  function walkVisibleText(root, onText, budget) {
+  function walkVisibleText(root, onText, budget, exclude = null) {
+    // A control classified as secret holds its data as text too: a textarea's content is a text
+    // node, and a select's option labels are text nodes. Masking the control's `value` while the
+    // walk collects the same characters would move the secret from one field of the result to
+    // another, which is what the snapshot text and read_text were doing.
+    if (root instanceof Element) {
+      const holder = root.closest("textarea, select");
+      if (holder && isSecret(holder)) return false;
+    }
     let remaining = budget;
     let exhausted = false;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         remaining -= 1;
-        if (remaining < 0) { exhausted = true; return NodeFilter.FILTER_REJECT; }
+        // Accepting on exhaustion, rather than rejecting, is what makes the budget real: a
+        // rejection leaves nextNode() scanning every remaining sibling before it returns null, so
+        // a thirty-thousand-node page cost thirty thousand filter calls against a budget of
+        // twenty-four thousand. An acceptance returns at once and the loop below stops.
+        if (remaining < 0) { exhausted = true; return NodeFilter.FILTER_ACCEPT; }
+        if ((remaining % CLOCK_EVERY_NODES) === 0 && outOfTime()) { exhausted = true; return NodeFilter.FILTER_ACCEPT; }
         if (node.nodeType === Node.ELEMENT_NODE) {
+          const element = /** @type {Element} */ (node);
+          if (exclude !== null && element === exclude) return NodeFilter.FILTER_REJECT;
+          if (isSecretValueHolder(element)) return NodeFilter.FILTER_REJECT;
           // An element carries no text of its own: descend into it, or refuse its whole subtree.
-          return subtreeMayBeVisible(/** @type {Element} */ (node))
+          return subtreeMayBeVisible(element)
             ? NodeFilter.FILTER_SKIP
             : NodeFilter.FILTER_REJECT;
         }
@@ -275,6 +361,7 @@ export async function runPageAction(kind, args, config) {
     });
     let node;
     while ((node = walker.nextNode())) {
+      if (exhausted) break;
       const parent = /** @type {Element} */ (node.parentElement);
       if (!onText(/** @type {string} */ (node.nodeValue), parent)) break;
     }
@@ -290,7 +377,7 @@ export async function runPageAction(kind, args, config) {
    * @param {number} maxChars The cap.
    * @returns {string} The visible text, whitespace-collapsed.
    */
-  function visibleTextOf(element, maxChars) {
+  function visibleTextOf(element, maxChars, exclude = null) {
     const parts = [];
     let length = 0;
     walkVisibleText(element, (text) => {
@@ -299,7 +386,7 @@ export async function runPageAction(kind, args, config) {
       parts.push(piece);
       length += piece.length + 1;
       return length < maxChars;
-    }, MAX_TEXT_NODES);
+    }, MAX_TEXT_NODES, exclude);
     return parts.join(" ").slice(0, maxChars);
   }
 
@@ -314,10 +401,10 @@ export async function runPageAction(kind, args, config) {
     const id = element.getAttribute("id");
     if (id) {
       const explicit = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-      if (explicit) return visibleTextOf(explicit, MAX_NAME_CHARS);
+      if (explicit) return visibleTextOf(explicit, MAX_NAME_CHARS, element);
     }
     const wrapping = element.closest("label");
-    return wrapping ? visibleTextOf(wrapping, MAX_NAME_CHARS) : "";
+    return wrapping ? visibleTextOf(wrapping, MAX_NAME_CHARS, element) : "";
   }
 
   /**
@@ -328,7 +415,28 @@ export async function runPageAction(kind, args, config) {
    * @param {Element} element The control.
    * @returns {boolean} Whether the value must never be reported.
    */
-  function isSecret(element) {
+  /** One verdict per element per action, so a control is classified once however often it is seen. */
+  const secretVerdicts = new WeakMap();
+  /** Elements whose classification is running, to break the label/control cycle described below. */
+  const secretPending = new Set();
+
+  /**
+   * @param {string|null} value An attribute value.
+   * @returns {string} It, normalised and bounded, ready for fragment matching.
+   */
+  function fragmentKey(value) {
+    return String(value ?? "").slice(0, MAX_ATTR_SCAN_CHARS).toLowerCase().replace(/\s+/g, "-");
+  }
+
+  /**
+   * Whether a control declares itself secret through its own attributes.
+   *
+   * Kept apart from the label lookup so that classification never needs the page's text, which is
+   * what makes {@link isSecret} safe to call from inside the text walk.
+   * @param {Element} element The control.
+   * @returns {boolean} Whether its attributes say the value is secret.
+   */
+  function secretByAttributes(element) {
     const type = String(element.getAttribute("type") ?? "").toLowerCase();
     if (config.secretInputTypes.includes(type)) return true;
 
@@ -340,13 +448,51 @@ export async function runPageAction(kind, args, config) {
       element.getAttribute("id"),
       element.getAttribute("placeholder"),
       element.getAttribute("aria-label"),
-      labelFor(element),
-    ].map((value) => String(value ?? "").toLowerCase().replace(/\s+/g, "-")).join(" ");
+    ].map(fragmentKey).join(" ");
     if (config.secretFieldFragments.some((fragment) => haystack.includes(fragment))) return true;
 
     const pattern = String(element.getAttribute("pattern") ?? "");
     const inputMode = String(element.getAttribute("inputmode") ?? "").toLowerCase();
     return /^\s*(\\d|\[0-9\])\{[1-8]\}\s*$/.test(pattern) && inputMode === "numeric";
+  }
+
+  /**
+   * Whether a control's value must be masked.
+   *
+   * The same order as the tested rules: input type, then the browser's own `autocomplete`
+   * declaration, then name-like attributes, then the visible label.
+   *
+   * Reading the label means reading page text, and reading page text asks whether the text sits
+   * inside a secret control, which asks this question again. The pending set answers a re-entrant
+   * question with the attribute-only verdict, so the pair terminates on any document.
+   * @param {Element} element The control.
+   * @returns {boolean} Whether the value must never be reported.
+   */
+  function isSecret(element) {
+    const cached = secretVerdicts.get(element);
+    if (cached !== undefined) return cached;
+    if (secretPending.has(element)) return secretByAttributes(element);
+
+    secretPending.add(element);
+    try {
+      const verdict = secretByAttributes(element)
+        || config.secretFieldFragments.some((fragment) => fragmentKey(labelFor(element)).includes(fragment));
+      secretVerdicts.set(element, verdict);
+      return verdict;
+    } finally {
+      secretPending.delete(element);
+    }
+  }
+
+  /**
+   * Whether an element holds a secret value as text as well as in its `value` property.
+   * @param {Element} element The element.
+   * @returns {boolean} Whether its subtree must never be read.
+   */
+  function isSecretValueHolder(element) {
+    const tag = element.tagName;
+    if (tag !== "TEXTAREA" && tag !== "SELECT") return false;
+    return isSecret(element);
   }
 
   /**
@@ -417,7 +563,7 @@ export async function runPageAction(kind, args, config) {
    */
   function roleOf(element) {
     const explicit = element.getAttribute("role");
-    if (explicit && explicit.trim() !== "") return explicit.trim().toLowerCase();
+    if (explicit && explicit.trim() !== "") return explicit.trim().toLowerCase().slice(0, MAX_ROLE_CHARS);
     const tag = element.tagName.toLowerCase();
     if (tag === "a") return "link";
     if (tag === "input") {
@@ -450,13 +596,19 @@ export async function runPageAction(kind, args, config) {
     const elements = [];
     let visited = 0;
     let truncated = false;
+    let budgetSpent = false;
     const root = document.body ?? document.documentElement;
     if (!root) return { elements, truncated };
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
       acceptNode(node) {
         visited += 1;
-        if (visited > MAX_VISITED_NODES) { truncated = true; return NodeFilter.FILTER_REJECT; }
+        // Accept, do not reject, once the budget is spent: see the note in walkVisibleText. The
+        // loop below stops on the flag, so the walk costs the budget and not the document.
+        if (visited > MAX_VISITED_NODES) { truncated = true; budgetSpent = true; return NodeFilter.FILTER_ACCEPT; }
+        if ((visited % CLOCK_EVERY_NODES) === 0 && outOfTime()) {
+          truncated = true; budgetSpent = true; return NodeFilter.FILTER_ACCEPT;
+        }
         return subtreeMayBeVisible(/** @type {Element} */ (node))
           ? NodeFilter.FILTER_ACCEPT
           : NodeFilter.FILTER_REJECT;
@@ -464,6 +616,7 @@ export async function runPageAction(kind, args, config) {
     });
 
     while (walker.nextNode()) {
+      if (budgetSpent) break;
       // A SHOW_ELEMENT walker yields only elements; the cast records what the filter guarantees.
       const element = /** @type {Element} */ (walker.currentNode);
       if (!isInteractive(element) || !isVisible(element)) continue;
@@ -490,11 +643,15 @@ export async function runPageAction(kind, args, config) {
         }
         if (tag === "select") {
           const select = /** @type {HTMLSelectElement} */ (element);
-          entry.options = [...select.options].slice(0, MAX_OPTIONS_LISTED).map((option) => ({
-            value: String(option.value).slice(0, MAX_VALUE_CHARS),
-            label: String(option.label || option.textContent || "").trim().slice(0, MAX_NAME_CHARS),
-            selected: option.selected === true,
-          }));
+          // A masked select would otherwise report its card numbers here in full: the option list
+          // is the same data as the value, in another shape.
+          entry.options = [...select.options].slice(0, MAX_OPTIONS_LISTED).map((option) => (secret
+            ? { value: MASK, label: MASK, selected: option.selected === true }
+            : {
+              value: String(option.value).slice(0, MAX_VALUE_CHARS),
+              label: String(option.label || option.textContent || "").trim().slice(0, MAX_NAME_CHARS),
+              selected: option.selected === true,
+            }));
         }
       }
       if (element.getAttribute("aria-expanded") !== null) {
@@ -577,7 +734,7 @@ export async function runPageAction(kind, args, config) {
   /** @returns {{url: string, title: string}} The page's identity, already scrubbed. */
   function identity() {
     return {
-      url: scrubUrl(location.href),
+      url: scrubUrl(location.href).slice(0, MAX_URL_CHARS),
       title: String(document.title ?? "").slice(0, MAX_NAME_CHARS),
     };
   }
@@ -606,15 +763,36 @@ export async function runPageAction(kind, args, config) {
    *
    * `requestSubmit` runs validation and the submit handlers; a synthetic Enter alone submits
    * nothing, so without this a "submit" that reports success would have done nothing.
+   *
+   * It also runs constraint validation, and a form with an empty required field is refused: no
+   * submit event is dispatched and nothing is sent. Returning `true` regardless, as this did,
+   * told the model a form had been submitted while the page had received nothing. The submit event
+   * is therefore observed rather than assumed. Note what the observation means: the browser
+   * dispatched the form's submit event. It does not mean a server accepted anything.
    * @param {HTMLElement} element The control.
-   * @returns {boolean} Whether a form was submitted.
+   * @returns {{submitted: boolean, reason: string|null}} What actually happened.
    */
   function submitFormOf(element) {
     const form = /** @type {HTMLInputElement} */ (element).form;
-    if (!form) return false;
-    if (typeof form.requestSubmit === "function") form.requestSubmit();
-    else form.submit();
-    return true;
+    if (!form) return { submitted: false, reason: "the control is not inside a form" };
+    let dispatched = false;
+    const record = () => { dispatched = true; };
+    form.addEventListener("submit", record, { capture: true });
+    try {
+      if (typeof form.requestSubmit === "function") form.requestSubmit();
+      // The legacy path skips validation and dispatches no event, but it does submit.
+      else { form.submit(); return { submitted: true, reason: null }; }
+    } finally {
+      form.removeEventListener("submit", record, { capture: true });
+    }
+    if (dispatched) return { submitted: true, reason: null };
+    const invalid = typeof form.checkValidity === "function" && !form.checkValidity();
+    return {
+      submitted: false,
+      reason: invalid
+        ? "the browser refused the submission because the form is not valid"
+        : "the page cancelled the submission",
+    };
   }
 
   /** Keys accepted by `key`, with the `code` and legacy `keyCode` listeners still check. */
@@ -723,6 +901,8 @@ export async function runPageAction(kind, args, config) {
       element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 
       let submitted = false;
+      /** @type {string|null} */
+      let submitFailed = null;
       if (args.submit === true) {
         let uncancelled = true;
         for (const type of ["keydown", "keypress", "keyup"]) {
@@ -733,11 +913,24 @@ export async function runPageAction(kind, args, config) {
         // Implicit submission, as the browser does for Enter in a form field — unless a handler
         // prevented the keydown, in which case the page has taken over and submitting would be a
         // second, unrequested action.
-        if (uncancelled && !editable && !(element instanceof HTMLTextAreaElement)) submitted = submitFormOf(element);
+        if (uncancelled && !editable && !(element instanceof HTMLTextAreaElement)) {
+          const outcome = submitFormOf(element);
+          submitted = outcome.submitted;
+          submitFailed = outcome.reason;
+        } else if (!uncancelled) {
+          submitFailed = "the page handled the Enter key itself, so no form submission was attempted";
+        } else {
+          submitFailed = "this control does not submit its form on Enter";
+        }
       }
       // The typed text is never echoed back: it may be exactly the value a caller should not have
-      // sent, and repeating it would put it in the session log a second time.
-      return done({ typed: accessibleName(element), submitted, ...identity() });
+      // sent, and repeating it would put it in the session log a second time. The typing and the
+      // submission are reported separately: the text really was entered even when the browser then
+      // refused to submit the form, and calling the whole action a failure would be as wrong as
+      // calling it a success.
+      const typedResult = /** @type {Record<string, unknown>} */ ({ typed: accessibleName(element), submitted, ...identity() });
+      if (submitFailed !== null) typedResult["submitFailed"] = submitFailed;
+      return done(typedResult);
     }
 
     if (kind === "key") {
@@ -773,9 +966,16 @@ export async function runPageAction(kind, args, config) {
         uncancelled = target.dispatchEvent(new KeyboardEvent(type, init)) && uncancelled;
       }
       let submitted = false;
-      if (keyName === "Enter" && modifiers.size === 0 && uncancelled
-        && target instanceof HTMLInputElement) submitted = submitFormOf(target);
-      return done({ key: raw, target: accessibleName(target), submitted, ...identity() });
+      /** @type {string|null} */
+      let keySubmitFailed = null;
+      if (keyName === "Enter" && modifiers.size === 0 && uncancelled && target instanceof HTMLInputElement) {
+        const outcome = submitFormOf(target);
+        submitted = outcome.submitted;
+        keySubmitFailed = outcome.reason;
+      }
+      const keyResult = /** @type {Record<string, unknown>} */ ({ key: raw, target: accessibleName(target), submitted, ...identity() });
+      if (keySubmitFailed !== null) keyResult["submitFailed"] = keySubmitFailed;
+      return done(keyResult);
     }
 
     if (kind === "scroll") {
@@ -822,8 +1022,12 @@ export async function runPageAction(kind, args, config) {
         ?? options.find((option) => wantLabel !== null && (option.label || option.textContent || "").trim() === wantLabel)
         ?? options.find((option) => wantLabel !== null && (option.label || option.textContent || "").trim().toLowerCase() === wantLabel.toLowerCase());
       if (!match) {
-        const available = options.slice(0, MAX_OPTIONS_LISTED)
-          .map((option) => `${(option.label || option.textContent || "").trim()} (${option.value})`).join(", ");
+        // The failure message is a result like any other: listing a masked select's options here
+        // would hand over exactly what the inventory refused to report.
+        const available = isSecret(element)
+          ? `${options.length} masked option(s)`
+          : options.slice(0, MAX_OPTIONS_LISTED)
+            .map((option) => `${(option.label || option.textContent || "").trim()} (${option.value})`).join(", ");
         return fail("ACTION_FAILED", `no option matches ${wantValue ?? wantLabel ?? "(nothing given)"}; available: ${available}`);
       }
       const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;

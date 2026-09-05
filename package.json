@@ -10,8 +10,9 @@
     "node": "^22.19 || >=24"
   },
   "scripts": {
-    "test": "npm run test:unit && npm run test:e2e",
+    "test": "npm run test:unit && npm run test:page && npm run test:e2e",
     "test:unit": "node --test --experimental-strip-types \"companion/tests/*.test.ts\"",
+    "test:page": "node --test --test-concurrency=1 --experimental-strip-types \"tests/page/*.test.ts\"",
     "test:e2e": "node --test --test-concurrency=1 --experimental-strip-types \"tests/e2e/*.test.ts\"",
     "typecheck": "node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.json --noEmit",
     "build": "node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.build.json",
