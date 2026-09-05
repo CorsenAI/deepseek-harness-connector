@@ -18,19 +18,40 @@ import { readFileSync } from 'node:fs'
  * range requires a passing lane in that table, not a hopeful edit here.
  */
 export const SUPPORTED_DSH = {
-  /** Lowest tested `@deepseek-ai/dsh-tools` version, inclusive. */
+  /** Lowest tested `@deepseek-ai/dsh-tools` version, inclusive. Below this the connector refuses. */
   minimum: '0.1.2-rc.1',
-  /** Highest tested version, inclusive. `null` means no tested upper bound yet. */
-  maximum: null as string | null,
+  /** Highest version with a passing row in `docs/COMPATIBILITY.md`, inclusive. */
+  maximumTested: '0.1.2-rc.1',
+  /**
+   * The first version this connector refuses outright.
+   *
+   * DeepSeek Harness states its APIs are pre-stable, so a new minor line may change them. Between
+   * {@link maximumTested} and this bound a runtime is *untested*: it loads, and says so, because
+   * refusing every release the day it ships would break users for no observed reason. At or above
+   * it, nothing is known and the connector fails closed rather than guessing.
+   */
+  refuseFrom: '0.2.0',
 } as const
+
+/**
+ * How a runtime relates to what has actually been tested.
+ *
+ * `tested` — a passing row exists in `docs/COMPATIBILITY.md`.
+ * `untested` — newer than anything tested, but not known to break: it loads and says so.
+ * `incompatible` — older than the minimum, at or above {@link SUPPORTED_DSH.refuseFrom}, or not a
+ * version at all. The connector fails closed.
+ */
+export type DshVersionStatus = 'tested' | 'untested' | 'incompatible'
 
 /** What the connector could determine about the DeepSeek Harness runtime it is loaded into. */
 export interface DshRuntimeVersion {
   /** The resolved `@deepseek-ai/dsh-tools` version, or `null` when it could not be read. */
   readonly toolsVersion: string | null
-  /** Whether the resolved version is inside {@link SUPPORTED_DSH}. */
+  /** How it relates to what has been tested. */
+  readonly status: DshVersionStatus
+  /** Whether the connector may load into it at all. False only for {@link DshVersionStatus} `incompatible`. */
   readonly supported: boolean
-  /** Why an unsupported or unknown version was classified that way. */
+  /** Why it was classified that way; `null` for a tested runtime. */
   readonly reason: string | null
 }
 
@@ -88,22 +109,39 @@ function compare(left: Parsed, right: Parsed): number {
 }
 
 /**
- * Whether a version falls inside the supported range.
- * @param value - the version to test.
- * @returns whether it is supported, and why not when it is not.
+ * Classify a version against what has been tested.
+ * @param value - the version to classify.
+ * @returns its status, and why, when it is not simply tested.
  */
-export function withinSupportedRange(value: string): { supported: boolean, reason: string | null } {
+export function classifyDshVersion(value: string): { status: DshVersionStatus, reason: string | null } {
   const parsed = parse(value)
-  if (!parsed) return { supported: false, reason: `${value} is not a semantic version` }
+  if (!parsed) return { status: 'incompatible', reason: `${value} is not a semantic version` }
+
   const minimum = parse(SUPPORTED_DSH.minimum)
   if (minimum && compare(parsed, minimum) < 0) {
-    return { supported: false, reason: `DeepSeek Harness ${value} is older than the supported ${SUPPORTED_DSH.minimum}` }
+    return {
+      status: 'incompatible',
+      reason: `DeepSeek Harness ${value} is older than the supported ${SUPPORTED_DSH.minimum}`,
+    }
   }
-  const maximum = SUPPORTED_DSH.maximum === null ? null : parse(SUPPORTED_DSH.maximum)
-  if (maximum && compare(parsed, maximum) > 0) {
-    return { supported: false, reason: `DeepSeek Harness ${value} is newer than the supported ${SUPPORTED_DSH.maximum}` }
+
+  const refuseFrom = parse(SUPPORTED_DSH.refuseFrom)
+  if (refuseFrom && compare(parsed, refuseFrom) >= 0) {
+    return {
+      status: 'incompatible',
+      reason: `DeepSeek Harness ${value} is at or beyond ${SUPPORTED_DSH.refuseFrom}, which this connector has not been tested against`,
+    }
   }
-  return { supported: true, reason: null }
+
+  const maximumTested = parse(SUPPORTED_DSH.maximumTested)
+  if (maximumTested && compare(parsed, maximumTested) > 0) {
+    return {
+      status: 'untested',
+      reason: `DeepSeek Harness ${value} is newer than the tested ${SUPPORTED_DSH.maximumTested}; nothing is known to be broken, but nothing has been verified either`,
+    }
+  }
+
+  return { status: 'tested', reason: null }
 }
 
 /**
@@ -126,10 +164,20 @@ export function detectDshVersion(resolveFrom: string = import.meta.url): DshRunt
     // decides what an unknown version means, and nothing else can reach this branch.
   }
   if (toolsVersion === null) {
-    return { toolsVersion: null, supported: false, reason: 'the DeepSeek Harness tool registry version could not be read' }
+    return {
+      toolsVersion: null,
+      status: 'incompatible',
+      supported: false,
+      reason: 'the DeepSeek Harness tool registry version could not be read',
+    }
   }
-  const verdict = withinSupportedRange(toolsVersion)
-  return { toolsVersion, supported: verdict.supported, reason: verdict.reason }
+  const verdict = classifyDshVersion(toolsVersion)
+  return {
+    toolsVersion,
+    status: verdict.status,
+    supported: verdict.status !== 'incompatible',
+    reason: verdict.reason,
+  }
 }
 
 /**
@@ -137,7 +185,6 @@ export function detectDshVersion(resolveFrom: string = import.meta.url): DshRunt
  * @returns the description.
  */
 export function supportedRangeText(): string {
-  return SUPPORTED_DSH.maximum === null
-    ? `DeepSeek Harness ${SUPPORTED_DSH.minimum} or newer`
-    : `DeepSeek Harness ${SUPPORTED_DSH.minimum} to ${SUPPORTED_DSH.maximum}`
+  return `DeepSeek Harness ${SUPPORTED_DSH.minimum} to ${SUPPORTED_DSH.maximumTested} (tested), `
+    + `up to but not including ${SUPPORTED_DSH.refuseFrom} (untested but accepted)`
 }

@@ -63,13 +63,18 @@ export const Config: z<Config> = z.object({
  */
 export function apply(ctx: Context, config: Config): void {
   const runtime = detectDshVersion()
-  if (!runtime.supported) {
+  if (runtime.status === 'incompatible') {
     const detail = `${runtime.reason ?? 'unknown DeepSeek Harness version'}; this connector supports ${supportedRangeText()}`
     if (config.requireSupportedHarness) {
       throw new Error(`corsen-browser-connector: ${detail}. `
         + 'Update the connector, or set requireSupportedHarness: false in cordis.yml to run it anyway.')
     }
     ctx.logger?.warn?.(`corsen-browser-connector: ${detail}. Running anyway because requireSupportedHarness is false.`)
+  } else if (runtime.status === 'untested') {
+    // Loading is the right default here — refusing every DeepSeek Harness release on the day it
+    // ships would break users for no observed reason — but the difference between "tested" and
+    // "nothing has gone wrong yet" belongs in the log, not in silence.
+    ctx.logger?.warn?.(`corsen-browser-connector: ${runtime.reason}. Report anything that misbehaves.`)
   }
 
   const identity = resolveProfileIdentity({ configuredName: config.profileName || undefined })

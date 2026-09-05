@@ -19,12 +19,26 @@ by runs, not assumptions.
 `companion/src/dsh/version.ts`:
 
 ```
-minimum: 0.1.2-rc.1   (inclusive)
-maximum: none yet     (no tested upper bound)
+minimum:       0.1.2-rc.1   (inclusive; below this the connector refuses to load)
+maximumTested: 0.1.2-rc.1   (inclusive; the highest version with a passing row above)
+refuseFrom:    0.2.0        (at or above this the connector refuses to load)
 ```
 
-A runtime below the minimum is refused at plugin load with a message naming this range. A runtime
-above it is **accepted**, because no incompatibility has been observed yet — but it is not *tested*,
+Three states, not two:
+
+| Runtime | State | What happens |
+|---|---|---|
+| Below the minimum | incompatible | Refused at plugin load, with a message naming this range |
+| Between the minimum and `maximumTested` | **tested** | Loads; a passing row above says so |
+| Above `maximumTested`, below `refuseFrom` | untested | **Loads, and logs that nothing has been verified** |
+| At or above `refuseFrom` | incompatible | Refused at plugin load |
+
+The upper bound exists because it was missing: an external review of 2026-09-05 ran the adapter and
+found `999.0.0` reported as supported. Claiming to support a release nobody has seen is claiming
+something the project cannot know. `companion/tests/version.test.ts` now covers each state.
+
+A runtime in the untested band is **accepted**, because no incompatibility has been observed yet —
+but it is not *tested*,
 and the upstream lane below exists to find out before a user does.
 
 ## Not supported
@@ -33,6 +47,7 @@ and the upstream lane below exists to find out before a user does.
 |---|---|
 | `@deepseek-ai/dsh-tools` 0.0.1-rc.x (npm `latest` at baseline) | Older tool-registry API; untested. Refused at load. |
 | Anything before 0.1.2-rc.1 | Untested. Refused at load. |
+| Anything at or above 0.2.0 | A new pre-stable minor line may change the APIs this connector depends on. Refused at load until a row above says otherwise. |
 
 ## Known upstream limitations
 
