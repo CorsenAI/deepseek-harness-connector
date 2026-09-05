@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Upstream compatibility lane: DeepSeek Harness's APIs are pre-stable, so this discovers a
+    # breaking change before a user reports it. Advisory; it does not block a release.
+    - cron: "17 5 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: unit, protocol, security (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm ci --prefix companion
+      - run: npm run typecheck
+      - run: node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit
+      - run: npm run build
+      # The POSIX permission case is skipped on Windows; this is where it actually runs.
+      - run: npm run test:unit
+
+  e2e:
+    name: real browser (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm ci --prefix companion
+      - run: npx playwright install --with-deps chromium
+      # MV3 service workers do not start under the headless shell, so the extension tests run headed
+      # under a virtual display on Linux.
+      - if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum -- npm run test:e2e
+      - if: runner.os != 'Linux'
+        run: npm run test:e2e
+
+  package:
+    name: package and verify
+    runs-on: ubuntu-latest
+    needs: [unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix companion
+      - run: npm run build
+      - run: mkdir -p dist && cd companion && npm pack --pack-destination ../dist
+      - run: node scripts/package.mjs --out dist
+      - run: node scripts/verify-package.mjs --dist dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/*.zip
+            dist/*.tgz
+            dist/SHA256SUMS
+            dist/release-manifest.json
+
+  installer:
+    name: installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [unit]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix companion
+      - run: npm run build
+      - run: mkdir -p dist && cd companion && npm pack --pack-destination ../dist
+      - name: install a real dsh into a scratch directory
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/dsh-int" && cd "$RUNNER_TEMP/dsh-int" && npm init -y >/dev/null
+          npm install "@deepseek-ai/dsh@latest" --no-audit --no-fund
+      # Runner paths contain no spaces, so the Windows 8.3 short-path workaround in install.ps1 is
+      # exercised locally (docs/TEST-EVIDENCE.md) rather than here. The other expectations — fresh
+      # install, bundle registration, broker liveness, upgrade with a stable pairing code, and a
+      # clean uninstall — are what these jobs prove per platform.
+      - name: fresh install, upgrade, uninstall (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x tests/installer/linux-installer.sh
+          tests/installer/linux-installer.sh "$PWD"/dist/corsen-ai-dsh-browser-connector-*.tgz "$RUNNER_TEMP/dsh-int/node_modules/.bin"
+      - name: fresh install, upgrade, uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tgz = (Get-ChildItem dist\corsen-ai-dsh-browser-connector-*.tgz | Select-Object -First 1).FullName
+          powershell -NoProfile -ExecutionPolicy Bypass -File tests\installer\windows-installer.ps1 -Tarball $tgz -DshBin "$env:RUNNER_TEMP\dsh-int\node_modules\.bin"
+          exit $LASTEXITCODE
+
+  dsh-integration:
+    name: real DeepSeek Harness (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    needs: [unit]
+    # The upstream lane may break at any time by design; only the released lanes gate a release.
+    continue-on-error: ${{ matrix.lane == 'upstream' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: released
+            spec: "@deepseek-ai/dsh@latest"
+          - lane: next
+            spec: "@deepseek-ai/dsh@next"
+          - lane: upstream
+            spec: "github:deepseek-ai/deepseek-harness"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix companion
+      - run: npm run build
+      - run: mkdir -p dist && cd companion && npm pack --pack-destination ../dist
+      - name: install dsh and the packaged connector
+        run: |
+          mkdir -p /tmp/dsh-int && cd /tmp/dsh-int && npm init -y >/dev/null
+          npm install "${{ matrix.spec }}" --no-audit --no-fund
+          export DSH_HOME=/tmp/dsh-int/home
+          ./node_modules/.bin/dsh plugin --profile headless add "$GITHUB_WORKSPACE"/dist/corsen-ai-dsh-browser-connector-*.tgz
+          ./node_modules/.bin/dsh --profile headless --dump-config | tee config.yml
+          grep -q "corsen-browser-connector" config.yml
+      - name: the plugin applies without error
+        run: |
+          cd /tmp/dsh-int && export DSH_HOME=/tmp/dsh-int/home
+          set +e
+          ./node_modules/.bin/dsh --profile headless "say hi" > out.txt 2>&1
+          set -e
+          # The only acceptable failure is the missing API key. Anything from the connector is a
+          # real failure.
+          if grep -q "corsen-browser-connector" out.txt; then cat out.txt; exit 1; fi
+          grep -q "MISSING_CREDENTIAL\|API key" out.txt
