@@ -16,12 +16,14 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 ## Status
 
-**Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, and the Chrome
-extension work end to end and are covered by 216 tests including real-browser end-to-end runs. The
-installers, packaging, CI, and Chrome Web Store submission are not finished.
+**Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the Chrome
+extension, the installers, and the release packaging work end to end and are covered by 216 tests
+including real-browser end-to-end runs, plus installer acceptance against a real `dsh` on Windows
+and Linux. CI is written but has not yet run, the extension performs five of its twenty protocol
+actions, and the Chrome Web Store submission is prepared only on paper.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state. Eleven are still open. Do not
-treat this as shippable until they are closed.
+`docs/TEST-MATRIX.md` lists every release gate and its honest state. Eight are still open and one
+is partial. Do not treat this as shippable until they are closed.
 
 ## What it does
 
