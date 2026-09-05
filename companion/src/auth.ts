@@ -140,7 +140,9 @@ export function proofsMatch(left: string, right: string): boolean {
  *
  * Grouping is presentation only; {@link normalizePairingCode} reverses it.
  * @param secret - the pairing secret.
- * @returns a grouped code such as `A3KD-7FMQ-XE94-RTUV-9CTG`.
+ * @returns the secret in five hyphen-separated groups of four characters. No specimen is written
+ * here on purpose: the release scanner refuses any code-shaped literal in a shipped file, and an
+ * example it has to make an exception for is an exception a real secret could hide behind.
  */
 export function pairingCode(secret: string): string {
   const groups: string[] = []

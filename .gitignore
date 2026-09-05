@@ -20,3 +20,6 @@ desktop.ini
 test-results/
 playwright-report/
 .scratch/
+
+# Generated at pack time from the repository LICENSE, so there is one source of truth
+companion/LICENSE

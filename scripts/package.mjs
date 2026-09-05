@@ -13,7 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
@@ -239,6 +239,8 @@ export function buildExtensionZip() {
  */
 export function buildCompanionTarball(outDir) {
   rmSync(join(companionDir, "lib"), { recursive: true, force: true });
+  // One source of truth for the licence text: the repository's own, copied in for the package.
+  copyFileSync(join(root, "LICENSE"), join(companionDir, "LICENSE"));
   execFileSync(process.execPath, [
     join(companionDir, "node_modules", "typescript", "bin", "tsc"),
     "-p", join(companionDir, "tsconfig.build.json"),

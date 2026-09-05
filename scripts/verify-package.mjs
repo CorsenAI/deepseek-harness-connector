@@ -4,11 +4,13 @@
 //
 // Usage: node scripts/verify-package.mjs [--dist dist]
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { buildExtensionZip, EXTENSION_ALLOWLIST, readZip, sha256 } from "./package.mjs";
+import { PROTOCOL_VERSION } from "../extension/src/protocol.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const distIndex = process.argv.indexOf("--dist");
@@ -190,6 +192,36 @@ if (existsSync(tarball)) {
     check(built.includes(rel), `tarball lib/${rel} exists in the fresh build`, "the tarball carries a file the build did not produce");
   }
 
+  // An allowlist, not a deny-list: the review added `package/telemetry.js` to the archive, refreshed
+  // its checksum, and every check still passed, because nothing asked what else was in there.
+  const expected = new Set([
+    "package/package.json",
+    "package/cordis.patch.yml",
+    "package/README.md",
+    "package/LICENSE",
+    ...built.map((rel) => `package/lib/${rel}`),
+  ]);
+  const shipped = entries.filter((entry) => entry.type === "0").map((entry) => entry.name);
+  for (const name of shipped) check(expected.has(name), `tarball ships only expected files: ${name}`, "not in the allowlist");
+  for (const name of expected) check(shipped.includes(name), `tarball carries ${name}`, "missing from the archive");
+
+  for (const entry of entries) {
+    if (entry.type !== "0") continue;
+    if (!/\.(js|ts|json|md|ya?ml|txt)$/.test(entry.name) && entry.name !== "package/LICENSE") continue;
+    const text = entry.data.toString("utf8");
+    for (const { label, pattern } of LEAK_PATTERNS) check(!pattern.test(text), `${entry.name}: no ${label}`);
+    const urls = text.match(/https?:\/\/[^\s"'`)]+/g) ?? [];
+    const foreign = urls.filter((url) => !ALLOWED_HOSTS.test(url));
+    check(foreign.length === 0, `${entry.name}: no remote host other than the project page`, foreign.join(", "));
+  }
+
+  const licence = entries.find((entry) => entry.name === "package/LICENSE");
+  check(
+    licence !== undefined && licence.data.equals(readFileSync(join(root, "LICENSE"))),
+    "tarball LICENSE is the repository's own licence text",
+    "the MIT notice must travel with the package, not only the word MIT in package.json",
+  );
+
   const patch = entries.find((entry) => entry.name === "package/cordis.patch.yml");
   check(
     patch !== undefined && patch.data.equals(readFileSync(join(root, "companion", "cordis.patch.yml"))),
@@ -200,6 +232,50 @@ if (existsSync(tarball)) {
     packedManifest !== undefined && JSON.parse(packedManifest.data.toString("utf8")).version === manifest.version,
     "tarball package.json carries the release version",
   );
+}
+
+// The release manifest is a claim about what was built and from where. Until now nothing checked
+// it, so a manifest naming a false commit, a false hash and an unclean tree passed unremarked.
+const manifestPath = join(dist, "release-manifest.json");
+check(existsSync(manifestPath), "release-manifest.json exists");
+if (existsSync(manifestPath)) {
+  const release = JSON.parse(readFileSync(manifestPath, "utf8"));
+  check(release.version === manifest.version, "manifest version matches the extension manifest");
+  check(release.protocolVersion === PROTOCOL_VERSION, `manifest protocol version is ${PROTOCOL_VERSION}`);
+
+  let head = "";
+  try {
+    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    // Not a git checkout, or git is unavailable. The commit claim cannot be verified, and saying so
+    // is the honest outcome; it is not a pass.
+  }
+  check(head !== "", "the commit the manifest names can be checked against git");
+  check(release.commit === head, "manifest commit is this checkout's HEAD", `manifest ${String(release.commit).slice(0, 12)}, git ${head.slice(0, 12)}`);
+  check(release.cleanTree === true, "the manifest records a clean tree", "a release is built from a clean checkout");
+
+  const listed = Array.isArray(release.artifacts) ? release.artifacts : [];
+  check(listed.length >= 2, "the manifest lists both artifacts");
+  for (const artifact of listed) {
+    const artifactPath = join(dist, String(artifact.name));
+    const present = existsSync(artifactPath);
+    check(present, `manifest artifact ${artifact.name} exists`);
+    if (!present) continue;
+    const bytes = readFileSync(artifactPath);
+    check(sha256(bytes) === artifact.sha256, `manifest hash matches ${artifact.name}`);
+    check(bytes.length === artifact.bytes, `manifest size matches ${artifact.name}`);
+  }
+
+  // SHA256SUMS must cover exactly the artifacts, so removing a line cannot quietly remove a check.
+  const summed = existsSync(sumsPath)
+    ? readFileSync(sumsPath, "utf8").trim().split("\n").map((line) => line.split(/\s+/)[1])
+    : [];
+  for (const artifact of listed) {
+    check(summed.includes(String(artifact.name)), `SHA256SUMS covers ${artifact.name}`, "the line is missing");
+  }
+  for (const name of summed) {
+    check(listed.some((artifact) => artifact.name === name), `SHA256SUMS names only released artifacts: ${name}`);
+  }
 }
 
 process.stdout.write(failures === 0 ? "\nall checks passed\n" : `\n${failures} check(s) failed\n`);
