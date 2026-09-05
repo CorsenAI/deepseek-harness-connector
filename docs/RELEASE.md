@@ -108,3 +108,29 @@ An extension version cannot be un-published from the Store, only superseded. A p
 be deprecated on npm but not removed. Because the protocol version is checked for equality, an
 extension that outruns the package produces a clear "update required" state rather than undefined
 behaviour — that is the rollback safety net, and why the mismatch check must never be softened.
+
+## Code signing on macOS and Windows
+
+Nothing this project ships is a native executable, so no platform code signing is required today.
+
+- The companion is an npm package (`@corsen-ai/dsh-browser-connector`) of plain JavaScript that
+  runs under the user's own Node.js, installed by `dsh plugin ... add`. It is the same trust model
+  as DeepSeek Harness itself, which is also an npm package. macOS Gatekeeper and notarization apply
+  to Mach-O binaries, `.app` bundles, and `.pkg` installers, none of which exist here.
+- The installers are scripts: `install.sh` run by `bash`, `install.ps1` run by PowerShell through
+  the `.cmd` wrapper with an explicit execution policy. A script downloaded by a browser carries a
+  quarantine or Mark-of-the-Web flag, which can make a *double-click* warn; running it from a
+  terminal, as the instructions say, does not involve Gatekeeper or SmartScreen.
+- The Chrome extension is signed by the Chrome Web Store at publication; nothing is signed locally.
+
+If a native artifact is ever introduced — a menu-bar helper, a single-file executable of the
+broker, a `.pkg` or `.msi` — the requirements become:
+
+| Platform | What is needed | Command shape |
+|---|---|---|
+| macOS | Apple Developer Program membership; a *Developer ID Application* certificate (and *Developer ID Installer* for a `.pkg`); hardened runtime; a secure timestamp; notarization with `notarytool`; stapling | `codesign --sign "Developer ID Application: Corsen AI (TEAMID)" --options runtime --timestamp <bundle>` then `xcrun notarytool submit <zip|pkg> --keychain-profile <profile> --wait` then `xcrun stapler staple <bundle>` |
+| Windows | An Authenticode code-signing certificate (OV, or EV to avoid the SmartScreen reputation ramp-up), a timestamp server | `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a <file>` |
+
+Both would run in CI from secrets, never from a developer machine, and the resulting hashes would be
+recorded in `release-manifest.json` like every other artifact. Until such an artifact exists, this
+section is a plan, not a process.
