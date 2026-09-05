@@ -166,26 +166,44 @@ export class AgentClient {
         'the DeepSeek Harness Connector broker is not reachable; check that the connector is installed and Chrome is paired',
       )
     }
-    if (signal?.aborted === true) throw new BrowserActionError(ERROR.TIMEOUT, 'the call was cancelled before it started')
+    if (signal?.aborted === true) {
+      throw new BrowserActionError(ERROR.CANCELLED, 'the call was cancelled before anything was sent to the browser')
+    }
 
     const id = `q${this.#requestCounter++}`
     return new Promise<unknown>((resolve, reject) => {
+      // Whether the frame reached the socket decides what a later cancellation means, so it is
+      // recorded rather than assumed. A cancelled call that was already sent has an unknown
+      // outcome; only one that never left is safe to call cancelled.
+      let dispatched = false
       const onAbort = (): void => {
         this.#inflight.delete(id)
-        reject(new BrowserActionError(ERROR.TIMEOUT, 'the call was cancelled'))
+        reject(dispatched
+          ? new BrowserActionError(
+            ERROR.INTERRUPTED,
+            'the call was cancelled after the action had been sent to the browser; the page may have performed it',
+          )
+          : new BrowserActionError(ERROR.CANCELLED, 'the call was cancelled before anything was sent to the browser'))
       }
       signal?.addEventListener('abort', onAbort, { once: true })
       this.#inflight.set(id, {
         resolve: (value) => { signal?.removeEventListener('abort', onAbort); resolve(value) },
         reject: (cause) => { signal?.removeEventListener('abort', onAbort); reject(cause) },
       })
-      this.#send({
+      dispatched = this.#send({
         type: CLIENT.ACTION_REQUEST,
         id,
         profileId: this.#options.profileId,
         sessionId,
         action: { kind, args },
       })
+      if (!dispatched) {
+        // The socket went away between the authentication check and the write. Nothing was sent,
+        // so this is a refusal and not an unknown outcome.
+        this.#inflight.delete(id)
+        signal?.removeEventListener('abort', onAbort)
+        reject(new BrowserActionError(ERROR.NO_BROWSER, 'the connection to the connector broker was lost before the action was sent'))
+      }
     })
   }
 
@@ -252,7 +270,7 @@ export class AgentClient {
       case SERVER.PAIRED: return this.#onPaired(frame)
       case SERVER.DENIED: return this.#onDenied(frame)
       case SERVER.ACTION_RESPONSE: return this.#onResponse(frame)
-      case SERVER.PING: return this.#send({ type: CLIENT.PONG, id: frame['id'] })
+      case SERVER.PING: { this.#send({ type: CLIENT.PONG, id: frame['id'] }); return }
       default: return
     }
   }
@@ -356,11 +374,14 @@ export class AgentClient {
    * Send one frame, ignoring a closed socket.
    * @param frame - the frame to send.
    */
-  #send(frame: Record<string, unknown>): void {
+  #send(frame: Record<string, unknown>): boolean {
     try {
-      this.#socket?.send(JSON.stringify(frame))
+      if (!this.#socket) return false
+      this.#socket.send(JSON.stringify(frame))
+      return true
     } catch {
       // The socket closed between the check and the write; the `close` listener owns reconnection.
+      return false
     }
   }
 

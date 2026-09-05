@@ -176,6 +176,14 @@ function errorCode(frame: Record<string, unknown>): string {
   return String((frame['error'] as Record<string, unknown> | undefined)?.['code'])
 }
 
+/**
+ * @param frame - a response frame.
+ * @returns the failure message the caller would read.
+ */
+function errorMessage(frame: Record<string, unknown>): string {
+  return String((frame['error'] as Record<string, unknown> | undefined)?.['message'] ?? '')
+}
+
 const WEB_A = { profileId: 'web', sessionId: 'session-a' }
 const WEB_B = { profileId: 'web', sessionId: 'session-b' }
 
@@ -535,7 +543,11 @@ describe('post-action revalidation', () => {
     assert.ok(browser.last(SERVER.ACTION))
 
     await new Promise((resolve) => setTimeout(resolve, 80))
-    assert.equal(errorCode(responseFor(agent, 'req-1')), ERROR.TIMEOUT)
+    const answer = responseFor(agent, 'req-1')
+    assert.equal(errorCode(answer), ERROR.TIMEOUT)
+    // The timer is armed only after the action has gone to the browser, so a timeout is an unknown
+    // outcome. Wording that reads as "nothing happened" invites a caller to retry a submission.
+    assert.match(errorMessage(answer), /may have performed the action/i)
   })
 })
 

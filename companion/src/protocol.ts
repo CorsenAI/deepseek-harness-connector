@@ -175,6 +175,12 @@ export const ERROR = {
    * the code shows the message rather than misreading it.
    */
   INTERRUPTED: 'INTERRUPTED',
+  /**
+   * The call was abandoned before anything was sent to the browser, so the page never saw it.
+   * This is the only cancellation that is safe to describe as "nothing happened": once a frame has
+   * gone out, a cancelled call is {@link INTERRUPTED}, because the browser may already have acted.
+   */
+  CANCELLED: 'CANCELLED',
   /** Protocol generations differ. Carries both versions and which side is older. */
   PROTOCOL_VERSION: 'PROTOCOL_VERSION',
   /** The handshake proof, role, or origin precondition failed. */

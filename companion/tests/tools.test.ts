@@ -347,6 +347,79 @@ describe('explaining a refusal to the model', () => {
     assert.match(message, /fresh snapshot/i)
     assert.doesNotMatch(message, /No browser action was performed/)
   })
+
+  it('says a timed-out action may still have happened, because it had already been sent', async () => {
+    const message = await messageFor(ERROR.TIMEOUT)
+    assert.match(message, /outcome is unknown/i)
+    assert.match(message, /fresh snapshot/i)
+    assert.doesNotMatch(message, /No browser action was performed/)
+  })
+
+  it('reserves "nothing was performed" for a call that never left the connector', async () => {
+    const message = await messageFor(ERROR.CANCELLED)
+    assert.match(message, /nothing was performed/i)
+    assert.match(message, /before anything was sent/i)
+  })
+})
+
+describe('rendering a submission for the model', () => {
+  /**
+   * @param blocks - rendered content blocks.
+   * @returns their text joined.
+   */
+  const textOf = (blocks: unknown): string => (
+    ((blocks ?? []) as { text?: string }[]).map((block) => block.text ?? '').join('')
+  )
+
+  const PAGE = { url: 'https://example.test/', title: 'Example' }
+
+  it('does not claim a form was submitted when the browser refused it', () => {
+    const { tools } = mount()
+    const definition = tools.get('browser_type')
+    assert.ok(definition)
+    const text = textOf(definition.output.render({}, {
+      ...PAGE,
+      typed: 'Search',
+      submitted: false,
+      submitFailed: 'the browser refused the submission because the form is not valid',
+    }))
+    assert.match(text, /Typed into Search/)
+    assert.match(text, /not submitted/i)
+    assert.match(text, /not valid/)
+    assert.doesNotMatch(text, /and submitted the form/)
+  })
+
+  it('describes a submission as an event the browser dispatched, not as a server accepting it', () => {
+    const { tools } = mount()
+    const definition = tools.get('browser_type')
+    assert.ok(definition)
+    const text = textOf(definition.output.render({}, { ...PAGE, typed: 'Search', submitted: true }))
+    assert.match(text, /dispatched/i)
+    assert.match(text, /not proof/i)
+  })
+
+  it('says nothing about submission when none was requested', () => {
+    const { tools } = mount()
+    const definition = tools.get('browser_type')
+    assert.ok(definition)
+    const text = textOf(definition.output.render({}, { ...PAGE, typed: 'Search', submitted: false }))
+    assert.doesNotMatch(text, /submit/i)
+  })
+
+  it('applies the same rule to a key press that submits', () => {
+    const { tools } = mount()
+    const definition = tools.get('browser_key')
+    assert.ok(definition)
+    const text = textOf(definition.output.render({}, {
+      ...PAGE,
+      key: 'Enter',
+      target: 'Search',
+      submitted: false,
+      submitFailed: 'the page cancelled the submission',
+    }))
+    assert.match(text, /not submitted/i)
+    assert.match(text, /cancelled/i)
+  })
 })
 
 describe('rendering for the model', () => {

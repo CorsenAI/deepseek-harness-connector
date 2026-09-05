@@ -673,7 +673,13 @@ export class Broker {
 
     const brokerId = `r${this.#nextRequestId++}`
     const timer = setTimeout(() => {
-      this.#settle(brokerId, { code: ERROR.TIMEOUT, message: 'the browser did not answer in time' })
+      // This timer is armed only after the action has been sent to the browser, so a timeout is
+      // an unknown outcome, not a refusal: the page may have performed the action and lost the
+      // answer. Saying only "did not answer" invited a caller to retry a payment or a submission.
+      this.#settle(brokerId, {
+        code: ERROR.TIMEOUT,
+        message: 'the browser did not answer within the action deadline; it may have performed the action',
+      })
     }, this.#actionTimeoutMs)
     if (typeof timer.unref === 'function') timer.unref()
 

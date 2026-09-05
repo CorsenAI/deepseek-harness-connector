@@ -82,6 +82,23 @@ async function perform(
 }
 
 /**
+ * Describe what became of a requested form submission.
+ *
+ * A submission has three outcomes the model must be able to tell apart: none was asked for, the
+ * browser dispatched one, or the browser refused. The middle case is stated for what it is — the
+ * form's submit event was dispatched — because that is all the page can observe. It is not a claim
+ * that a server received or accepted anything.
+ * @param submitted - whether the browser dispatched the form's submit event.
+ * @param failed - why it did not, when it did not.
+ * @returns a sentence ending in a space, or an empty string when no submission was requested.
+ */
+function describeSubmission(submitted: boolean | undefined, failed: string | undefined): string {
+  if (typeof failed === 'string' && failed !== '') return `The form was not submitted: ${failed}. `
+  if (submitted === true) return 'The browser dispatched the form’s submit event; that is not proof a server accepted it. '
+  return ''
+}
+
+/**
  * Turn a typed transport failure into a model-facing explanation.
  * @param cause - the failure.
  * @returns one sentence naming the cause and what would resolve it.
@@ -106,8 +123,12 @@ function explain(cause: BrowserActionError): string {
         + 'Navigate this tab to an ordinary web page with browser_navigate, or ask the user to attach a different tab.'
     case 'TAB_GONE':
       return 'The attached tab no longer exists. Ask the user to attach a tab to this session again.'
+    case 'CANCELLED':
+      return 'The call was abandoned before anything was sent to the browser. Nothing was performed.'
     case 'TIMEOUT':
-      return 'The browser did not finish the action in time. The page may still be loading.'
+      return 'The browser did not answer before the deadline. The action had already been sent, so its outcome is unknown: '
+        + 'the page may or may not have performed it. Take a fresh snapshot to see the page’s actual state before '
+        + 'retrying anything that changes data.'
     case 'INTERRUPTED':
       return 'The connection to the browser was lost while this action was running, so its outcome is unknown: '
         + 'the page may or may not have performed it. Take a fresh snapshot to see the page’s actual state before '
@@ -288,7 +309,8 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
     name: 'browser_type',
     description:
       'Type text into one input, textarea, or editable element in the browser tab attached to this session, '
-      + 'addressed by a `ref` from the most recent browser_snapshot. With submit: true the containing form is submitted. '
+      + 'addressed by a `ref` from the most recent browser_snapshot. With submit: true the containing form is submitted, '
+      + 'and the result says whether the browser actually dispatched that submission. '
       + 'Never type a password, payment card number, or one-time code: those fields are the user’s to fill.',
     parameters: {
       ref: REF,
@@ -297,8 +319,20 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
       submit: { type: 'boolean', description: 'Press Enter and submit the containing form afterwards. Defaults to false.' },
     },
     output: {
-      schema: { type: 'object', additionalProperties: true, properties: { ...PAGE_IDENTITY, typed: { type: 'string', required: true }, submitted: { type: 'boolean' } } },
-      render: (_args, value) => [{ type: 'text', text: `Typed into ${value.typed}${value.submitted ? ' and submitted the form' : ''}. The tab is now at ${value.url}.` }],
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          ...PAGE_IDENTITY,
+          typed: { type: 'string', required: true },
+          submitted: { type: 'boolean' },
+          submitFailed: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Typed into ${value.typed}. ${describeSubmission(value.submitted, value.submitFailed)}The tab is now at ${value.url}.`,
+      }],
     },
     async execute(args, exec) {
       return await perform(dependencies, exec, ACTION.TYPE, {
@@ -319,8 +353,21 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
       ref: { type: 'string', description: 'An element reference to focus before pressing.' },
     },
     output: {
-      schema: { type: 'object', additionalProperties: true, properties: { ...PAGE_IDENTITY, key: { type: 'string', required: true }, target: { type: 'string', required: true }, submitted: { type: 'boolean' } } },
-      render: (_args, value) => [{ type: 'text', text: `Pressed ${value.key} on ${value.target}${value.submitted ? ' and submitted the form' : ''}. The tab is now at ${value.url}.` }],
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          ...PAGE_IDENTITY,
+          key: { type: 'string', required: true },
+          target: { type: 'string', required: true },
+          submitted: { type: 'boolean' },
+          submitFailed: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `Pressed ${value.key} on ${value.target}. ${describeSubmission(value.submitted, value.submitFailed)}The tab is now at ${value.url}.`,
+      }],
     },
     async execute(args, exec) {
       const payload: Record<string, unknown> = { key: args.key }
