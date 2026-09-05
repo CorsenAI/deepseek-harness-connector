@@ -18,14 +18,16 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the Chrome
 extension with all twenty browser actions, the installers, and the release packaging work end to
-end and are covered by 271 tests: 224 unit and protocol tests, and 47 real-browser end-to-end
-cases including multi-session isolation, a page built to leak hidden content, and recovery from a
-killed service worker, a restarted broker, a restarted plugin, a closed tab, and a relaunched
-Chrome. Installer acceptance runs against a real `dsh` on Windows and Linux. CI is written but has
-not yet run, and the Chrome Web Store submission is prepared only on paper.
+end and are covered by 299 tests: 240 unit and protocol tests, 12 cases running the shipped page
+module in a real browser, and 47 real-browser end-to-end cases including multi-session isolation, a
+page built to leak hidden content, and recovery from a killed service worker, a restarted broker, a
+replaced agent connection, a closed tab, and a relaunched Chrome. Installer acceptance runs against
+a real `dsh` on Windows and Linux. CI is written but has not yet run, and the Chrome Web Store
+submission is prepared only on paper.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state. Two are still open and three
-are partial. Do not treat this as shippable until they are closed.
+`docs/TEST-MATRIX.md` lists every release gate and its honest state, including where a passing gate
+stops short of its name. Four are open and two are partial. Do not treat this as shippable until
+they are closed.
 
 ## What it does
 
@@ -35,7 +37,7 @@ are partial. Do not treat this as shippable until they are closed.
 | **Acts on a page** | Click, type, press keys, scroll, hover, choose options, drag, find text, and navigate in the tab you attached, addressed by references from the latest snapshot. A session can also open, list, switch, and close its own tabs — and only its own. |
 | **Keeps sessions apart** | Each DeepSeek Harness session owns its own set of tabs. Two sessions running at once never see each other's pages. |
 | **Fails closed** | A session with no attached tab gets a clear refusal and nothing happens. There is no fallback to "whatever tab is active". |
-| **Masks secrets** | Passwords, one-time codes, payment fields, and hidden inputs are masked in the page, before anything leaves the browser. Credential-bearing URL parameters are scrubbed too. |
+| **Masks secrets** | Passwords, one-time codes, payment fields, and hidden inputs are masked in the page, before anything leaves the browser. Masking follows the control, not one field: a masked textarea’s content stays out of the page text, and a masked menu’s options are not listed. Credential-bearing URL parameters are scrubbed too. |
 
 ## How it fits together
 
@@ -92,7 +94,9 @@ tabs (`browser_list_tabs`, `browser_open_tab`, `browser_switch_tab`, `browser_cl
 Every tool tells the truth about what happened. A control the user cannot see is never listed and
 never acted on; a tab Chrome refused to close is reported as detached-but-open, not as closed; a
 navigation that did not finish says so; an action cut off by a lost connection is reported as an
-unknown outcome, and nothing is ever replayed on reconnect.
+unknown outcome, and nothing is ever replayed on reconnect. A form the browser refuses as invalid
+is reported as not submitted, with the reason, while the typing that did happen is still reported
+as done.
 
 The panel always shows the truth:
 
@@ -153,8 +157,9 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 224 tests, no browser needed
-npm run test:e2e     # real Chromium with the extension loaded
+npm run test:unit    # 240 tests, no browser needed
+npm run test:page    # 12 tests, the shipped page module in real Chromium
+npm run test:e2e     # 47 tests, real Chromium with the extension loaded
 ```
 
 The end-to-end tests need Playwright's Chromium (`npx playwright install chromium`) and run headed,

@@ -693,3 +693,126 @@ A live model turn (needs an API key). Bounded behaviour on giant or deeply neste
 (the rest of AI). Anything on macOS. CI has still never run. The complete real-browser suite was
 not re-run at `798d648` itself; that claim rests on the byte-identical `extension/` and
 `companion/` trees, plus the packaged cases that did run on the new artifacts.
+
+## 2026-09-05 — an external review's findings, reproduced and closed (gates AK extended, AI, AE, AQ named)
+
+An independent review of commit `306cf98` confirmed the tarball fix of the previous section and then
+reported new defects in confidentiality, in how much work a page can cause, in what a submission
+claims, in what an ambiguous outcome says, and in what the release verifier accepts. Its own
+environment ran Node 22.16.0, below this project's declared minimum, and could not run the
+end-to-end suite. **Every finding below was therefore reproduced here first, against the shipped
+code, before anything was changed** — the measurements are this project's own.
+
+Environment: Windows 11 Pro for Workstations, Node v24.12.0, Playwright Chromium.
+
+### What was reproduced, and what it measures now
+
+The probe ran the shipped `extension/src/page-actions.js` in Chromium with the shipped
+`redact.js` configuration, and counted tree-walker filter calls through the browser's own interface
+rather than trusting the module's numbers.
+
+| What the review reported | Measured before | Measured after |
+|---|---|---|
+| A masked textarea's content in the snapshot text and `read_text` | present in both | absent from both, and `find` no longer locates it |
+| A masked select's option values in the clear | `4111111111111111` in `options[].value` | every option value and label masked; count and selection still reported |
+| A 2 MB `role` attribute | result 2,097,314 bytes, `ok: true`, `truncated: false` | result 202 bytes, role bounded to 40 characters |
+| Node budgets of 6,000 and 24,000 on 30,000 flat siblings | 30,002 and 30,003 filter calls | 6,001 and 24,001 |
+| Typing then submitting an invalid form | connector `submitted: true`, page received **0** submit events | `submitted: false` with the reason, the typing still reported as done, page still shows the typed text |
+
+The two verifier controls were reproduced the same way, on copies, leaving `dist/` untouched:
+
+| Control | Before | After |
+|---|---|---|
+| `package/telemetry.js` added to the tarball with its checksum refreshed | 187 checks passed, exit 0 | refused twice: not in the allowlist, and its `https://evil.test/collect` is a foreign host |
+| A manifest naming commit `000…0`, false hashes and `cleanTree: false`, with the tarball's line deleted from `SHA256SUMS` | 186 checks passed, exit 0 | refused: the commit is not HEAD, the tree is not clean, both hashes disagree, and the missing line is named |
+
+The version adapter was run directly: `0.1.2-rc.1`, `1.0.0` and `999.0.0` all reported
+`supported: true`. It now classifies `tested`, `untested` and `incompatible`, and `999.0.0` is
+refused.
+
+### What was corrected in the review's account
+
+Two claims did not survive measurement here, and are recorded so the record is complete:
+
+- The review reported a masked select's **label** reaching the snapshot text. It did not: an
+  `<option>` inside a closed `<select>` is not visible, so the text walk never reached it. The
+  values in `options[].value` were the real leak, and they were real.
+- Its brief asked for 5,000-deep nesting. On this machine Chromium crashes building a document
+  nested 500 deep, before any connector code runs, and hangs laying one out at 300. The regression
+  case therefore asserts what this project owns — a deep chain costs nodes, not recursion — at a
+  depth the browser handles, and `docs/TEST-MATRIX.md` records the browser's limit rather than
+  claiming a number nobody can reach.
+
+### The fixes, and why they are shaped that way
+
+Masking became a property of the control rather than of one field: a secret control's subtree is
+pruned from every text walk, its options are masked, and a failed `select_option` no longer prints
+them. A label's text no longer includes the value of the control it wraps, which also breaks the
+cycle that classification and text extraction would otherwise form; a re-entrant question is
+answered from attributes alone.
+
+A budget that rejects nodes past its cap does not stop a walk: `nextNode()` keeps scanning to the
+end of the document before returning null. Accepting instead returns at once and lets the loop
+break. Each action also carries a wall-clock deadline, because a visibility query costs whatever
+the browser's layout costs, and no node count bounds that.
+
+`requestSubmit()` runs constraint validation and dispatches nothing when a form is invalid. The
+submit event is now observed rather than assumed, and reported for what it is — the browser
+dispatched the form's submit event — which is not a claim that a server accepted anything.
+
+`CANCELLED` is new and means the one thing that can honestly be called cancelled: the call was
+abandoned before its frame left. A cancellation after dispatch is `INTERRUPTED`, and the broker's
+deadline, which arms only after the action has been sent, now says the browser may have performed
+it.
+
+### Runs
+
+```
+npm run typecheck                                    # companion, clean
+tsc -p extension/tsconfig.json --noEmit              # extension, clean
+npm run test:unit    # 240 tests, 239 pass, 1 skipped (POSIX mode check, on Windows), 0 fail
+npm run test:page    # 12 tests, 12 pass, 0 fail — the shipped module in Chromium
+npm run test:e2e     # 47 tests, 47 pass, 0 fail
+node scripts/provenance-audit.mjs                    # exit 0, longest exact run 26 tokens (CSS), 1.00 %
+```
+
+`tests/page/` is new. It exists because the questions this review raised cannot be asked through the
+extension: a service worker's isolated world is not reachable from a test, so the cost of a walk
+cannot be counted there. The module under test is the shipped file, imported by the page over
+loopback; only the surroundings are simpler.
+
+### Release artifacts, from clean commit `4f1c59b`
+
+```
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist
+```
+
+```
+wrote dsh-browser-connector-extension-0.1.0.zip (48603 bytes, 14 files)
+wrote corsen-ai-dsh-browser-connector-0.1.0.tgz (58791 bytes, built from source)
+all checks passed                                    # 579 checks, up from 187
+"commit": "4f1c59b346cac0f79a2feea5385f0cf3bb7c5678", "cleanTree": true
+```
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `8196873e4147ff0a0a8ebfdea82029cfc4946669e779e57b818a703d82bf6952` | 48603 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `813890bd743be34a7b8803fa2bffefa82ec965998c84e4c25bd49b1c680a37e7` | 58791 |
+
+The tarball now carries `LICENSE` and `README.md`. It had carried neither: `files` named a README
+that did not exist, and `"license": "MIT"` in `package.json` is a label, not the notice the licence
+asks to travel with copies. `tests/e2e/packaged.test.ts` ran 4/4 against these ZIP bytes.
+
+### Gates
+
+AK extends to every representation of a masked control, not only its `value`. AI moves to bounds
+covered, injection fixtures still open. AE now includes the two negative controls. AB and AD have
+their scope stated rather than implied, and **AQ is new and open**: the released pair installed the
+way a user installs it, with the broker as its own process.
+
+### What this does not prove
+
+A live model turn. Injection fixtures through the whole pipeline. The released pair installed
+together. Anything on macOS, including whether a downloaded installer runs from a quarantined file.
+CI has still never run. And the review's own runs were on Node 22.16.0, below the declared minimum,
+so its passing results are corroboration and not a substitute for the supported runtimes.
