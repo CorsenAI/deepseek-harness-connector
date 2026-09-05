@@ -1,7 +1,10 @@
 // Build the release artifacts deterministically.
 //
-// Produces the extension ZIP, records the companion tarball, and writes SHA256SUMS and a release
-// manifest. The ZIP is written by a small in-repo encoder rather than a dependency so that every
+// Produces the extension ZIP and the companion tarball, and writes SHA256SUMS and a release
+// manifest. The tarball is built here from source — `lib/` is removed, compiled, and packed by
+// npm — never picked up from `dist/`: an artifact that survives a source change unchanged is a
+// stale artifact, and the first version of this script recorded exactly that.
+// The ZIP is written by a small in-repo encoder rather than a dependency so that every
 // byte is accounted for: entries are sorted, timestamps are fixed, there are no extra fields, and no
 // build-time value enters the archive. Two builds from one commit produce identical bytes, which is
 // what lets a reviewer verify that the submitted package is the tagged source.
@@ -10,7 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
@@ -225,6 +228,39 @@ export function buildExtensionZip() {
 }
 
 /**
+ * Build the companion's `lib/` from source and pack it with npm, under this process's own Node.
+ *
+ * `lib/` is removed first so nothing from an earlier build can ride along, then compiled with the
+ * companion's own TypeScript, then packed. `npm-cli.js` is run through `process.execPath` rather
+ * than a shell, so a repository path with a space in it, like this one's, needs no quoting and
+ * behaves the same on every platform.
+ * @param {string} outDir Where the tarball is written.
+ * @returns {{name: string, bytes: Buffer}} The tarball as npm produced it.
+ */
+export function buildCompanionTarball(outDir) {
+  rmSync(join(companionDir, "lib"), { recursive: true, force: true });
+  execFileSync(process.execPath, [
+    join(companionDir, "node_modules", "typescript", "bin", "tsc"),
+    "-p", join(companionDir, "tsconfig.build.json"),
+  ], { cwd: companionDir, stdio: "inherit" });
+
+  const candidates = [
+    process.env.npm_execpath,
+    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    join(dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+  ].filter((candidate) => typeof candidate === "string" && candidate !== "" && existsSync(candidate));
+  const npmCli = candidates[0];
+  if (!npmCli) throw new Error("npm-cli.js was not found next to the running Node; the companion cannot be packed");
+
+  const report = execFileSync(process.execPath, [
+    npmCli, "pack", "--pack-destination", outDir, "--json", "--loglevel", "error",
+  ], { cwd: companionDir, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  const [packed] = JSON.parse(report);
+  if (!packed || typeof packed.filename !== "string") throw new Error("npm pack did not report a filename");
+  return { name: packed.filename, bytes: readFileSync(join(outDir, packed.filename)) };
+}
+
+/**
  * Run when executed directly.
  */
 function main() {
@@ -252,10 +288,8 @@ function main() {
   const zipName = `dsh-browser-connector-extension-${version}.zip`;
   writeFileSync(join(outDir, zipName), zip);
 
-  const tarballName = `corsen-ai-dsh-browser-connector-${version}.tgz`;
-  const tarballPath = join(outDir, tarballName);
-  const artifacts = [{ name: zipName, bytes: zip }];
-  if (existsSync(tarballPath)) artifacts.push({ name: tarballName, bytes: readFileSync(tarballPath) });
+  const tarball = buildCompanionTarball(outDir);
+  const artifacts = [{ name: zipName, bytes: zip }, tarball];
 
   const sums = artifacts.map((artifact) => `${sha256(artifact.bytes)}  ${artifact.name}`).join("\n");
   writeFileSync(join(outDir, "SHA256SUMS"), `${sums}\n`);
@@ -278,6 +312,8 @@ function main() {
 
   process.stdout.write(`wrote ${zipName} (${zip.length} bytes, ${files.length} files)\n`);
   process.stdout.write(`sha256 ${sha256(zip)}\n`);
+  process.stdout.write(`wrote ${tarball.name} (${tarball.bytes.length} bytes, built from source)\n`);
+  process.stdout.write(`sha256 ${sha256(tarball.bytes)}\n`);
   if (!clean) process.stdout.write("warning: the working tree is not clean; this is not a release build\n");
 }
 

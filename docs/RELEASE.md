@@ -35,13 +35,18 @@ Every one of these, in order. A skipped step is recorded as skipped, not as done
 
 | Artifact | Built by | Contains |
 |---|---|---|
-| `corsen-ai-dsh-browser-connector-<version>.tgz` | `npm pack` in `companion/` | `lib/`, `cordis.patch.yml`, `package.json`, `README.md` |
+| `corsen-ai-dsh-browser-connector-<version>.tgz` | `scripts/package.mjs` — removes `lib/`, compiles it with the companion's TypeScript, then runs `npm pack` under the same Node | `lib/`, `cordis.patch.yml`, `package.json`, `README.md` |
 | `dsh-browser-connector-extension-<version>.zip` | `scripts/package.mjs` | `manifest.json`, `src/`, `assets/` — nothing else |
 | `SHA256SUMS` | `scripts/package.mjs` | One line per artifact |
 | `release-manifest.json` | `scripts/package.mjs` | Commit SHA, versions, artifact hashes, build timestamp |
 
 The extension ZIP must be **byte-identical** across two builds from the same commit. Entry order
 is sorted, timestamps are fixed, and no build-time value enters the archive.
+
+The tarball is never picked up from `dist/`: `scripts/package.mjs` builds it from source every time,
+and `scripts/verify-package.mjs` proves that every `lib/` file inside it is byte-identical to the
+`lib/` just compiled. An earlier version of the packager recorded whatever tarball already sat in
+`dist/`, which silently shipped stale code; that is why this check exists.
 
 ## Packaging allowlist
 
@@ -79,8 +84,8 @@ npm run build
 npm run typecheck
 npm run test:unit
 npm run test:e2e
-node scripts/package.mjs           # produces artifacts + SHA256SUMS + release-manifest.json
-node scripts/verify-package.mjs    # allowlist, leakage scan, reproducibility check
+node scripts/package.mjs           # builds lib/, packs the tarball, builds the ZIP, writes SHA256SUMS + release-manifest.json
+node scripts/verify-package.mjs    # allowlist, leakage scan, reproducibility, tarball lib/ identical to the fresh build
 
 # 4. Test the PACKAGED bits, not the source tree.
 #    Load the built ZIP in Chromium and re-run the slice (gate AD).

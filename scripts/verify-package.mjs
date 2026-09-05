@@ -4,7 +4,7 @@
 //
 // Usage: node scripts/verify-package.mjs [--dist dist]
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
@@ -104,43 +104,102 @@ if (existsSync(sumsPath)) {
 }
 
 /**
- * List the entries of a gzipped ustar archive.
+ * Read the entries of a gzipped ustar archive.
  *
  * Parsed in-process rather than by shelling out to `tar`: the installed `tar` differs by platform,
  * and the MSYS one on Windows reads a drive-letter path as a remote host. A verifier that depends
- * on which `tar` is on PATH is not a verifier. Headers are 512-byte blocks; the name is at offset 0
- * and the octal size at 124. Two zero blocks end the archive.
+ * on which `tar` is on PATH is not a verifier. Headers are 512-byte blocks; the name is at offset 0,
+ * the octal size at 124, the type flag at 156, and the ustar name prefix at 345. Two zero blocks
+ * end the archive.
  * @param {Buffer} archive The `.tgz` bytes.
- * @returns {string[]} Entry names, in archive order.
+ * @returns {{name: string, type: string, data: Buffer}[]} Entries in archive order, with their bytes.
  */
-function listTarball(archive) {
+function readTarball(archive) {
   const tar = gunzipSync(archive);
-  const names = [];
+  const entries = [];
   let cursor = 0;
+  const field = (header, start, end) => header.subarray(start, end).toString("utf8").replace(/\0.*$/s, "");
   while (cursor + 512 <= tar.length) {
     const header = tar.subarray(cursor, cursor + 512);
     if (header.every((byte) => byte === 0)) break;
-    const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/s, "");
-    const size = parseInt(header.subarray(124, 136).toString("utf8").replace(/\0.*$/s, "").trim() || "0", 8);
+    const prefix = field(header, 345, 500);
+    const name = `${prefix === "" ? "" : `${prefix}/`}${field(header, 0, 100)}`;
+    const size = parseInt(field(header, 124, 136).trim() || "0", 8);
     const typeflag = String.fromCharCode(header[156]);
-    // Regular files and directories are listed; pax extended headers (`x`, `g`) carry metadata for
+    // Regular files and directories are kept; pax extended headers (`x`, `g`) carry metadata for
     // the entry that follows and are skipped over by size like any other block.
-    if (typeflag === "0" || typeflag === "\0" || typeflag === "5") names.push(name);
+    if (typeflag === "0" || typeflag === "\0" || typeflag === "5") {
+      entries.push({ name, type: typeflag === "5" ? "5" : "0", data: tar.subarray(cursor + 512, cursor + 512 + size) });
+    }
     cursor += 512 + Math.ceil(size / 512) * 512;
   }
-  return names;
+  return entries;
 }
 
-// The companion tarball, when present, passes the same name rules and ships only built output.
+/**
+ * Every file under a directory, as forward-slash paths relative to it, sorted.
+ * @param {string} dir The directory.
+ * @returns {string[]} The relative paths.
+ */
+function walk(dir) {
+  const found = [];
+  const visit = (current, prefix) => {
+    for (const name of readdirSync(current).sort()) {
+      const full = join(current, name);
+      const rel = prefix === "" ? name : `${prefix}/${name}`;
+      if (statSync(full).isDirectory()) visit(full, rel);
+      else found.push(rel);
+    }
+  };
+  if (existsSync(dir)) visit(dir, "");
+  return found.sort();
+}
+
+// The companion tarball passes the same name rules, ships only built output, and — the check that
+// would have caught a stale tarball being recorded as fresh — carries a lib/ that is byte-identical
+// to the lib/ just built from source.
 const tarball = join(dist, `corsen-ai-dsh-browser-connector-${manifest.version}.tgz`);
+check(existsSync(tarball), `companion tarball exists at ${tarball}`);
 if (existsSync(tarball)) {
-  const listing = listTarball(readFileSync(tarball));
+  const entries = readTarball(readFileSync(tarball));
+  const listing = entries.map((entry) => entry.name);
   check(listing.length > 0, "tarball lists at least one entry");
   check(!listing.some((name) => FORBIDDEN_NAMES.some((pattern) => pattern.test(name))), "tarball has no forbidden names");
   check(listing.every((name) => name.startsWith("package/")), "tarball entries are rooted at package/");
   check(!listing.some((name) => /\/(src|tests)\//.test(name)), "tarball ships lib/, not src/ or tests/");
   check(listing.includes("package/cordis.patch.yml"), "tarball carries cordis.patch.yml, which dsh plugin requires");
   check(listing.includes("package/lib/broker-main.js"), "tarball carries the broker entry");
+
+  const libDir = join(root, "companion", "lib");
+  const built = walk(libDir).filter((rel) => /\.(js|d\.ts)$/.test(rel));
+  check(built.length > 0, "companion/lib is built from source");
+  // Keys are relative to lib/ on both sides: `dsh/tools.js` on disk is `package/lib/dsh/tools.js` in
+  // the archive.
+  const packedLib = new Map(entries
+    .filter((entry) => entry.type === "0" && entry.name.startsWith("package/lib/"))
+    .map((entry) => [entry.name.slice("package/lib/".length), entry.data]));
+  let identical = 0;
+  for (const rel of built) {
+    const packed = packedLib.get(rel);
+    const same = packed !== undefined && packed.equals(readFileSync(join(libDir, rel)));
+    if (same) identical += 1;
+    else check(false, `tarball lib/${rel} is byte-identical to the fresh build`, packed === undefined ? "missing from the tarball" : "bytes differ");
+  }
+  check(identical === built.length, `tarball lib/ is byte-identical to the fresh build (${identical} of ${built.length} files)`);
+  for (const rel of packedLib.keys()) {
+    check(built.includes(rel), `tarball lib/${rel} exists in the fresh build`, "the tarball carries a file the build did not produce");
+  }
+
+  const patch = entries.find((entry) => entry.name === "package/cordis.patch.yml");
+  check(
+    patch !== undefined && patch.data.equals(readFileSync(join(root, "companion", "cordis.patch.yml"))),
+    "tarball cordis.patch.yml is byte-identical to the source",
+  );
+  const packedManifest = entries.find((entry) => entry.name === "package/package.json");
+  check(
+    packedManifest !== undefined && JSON.parse(packedManifest.data.toString("utf8")).version === manifest.version,
+    "tarball package.json carries the release version",
+  );
 }
 
 process.stdout.write(failures === 0 ? "\nall checks passed\n" : `\n${failures} check(s) failed\n`);

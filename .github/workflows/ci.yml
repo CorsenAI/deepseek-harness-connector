@@ -66,7 +66,6 @@ jobs:
           node-version: 24
       - run: npm ci --prefix companion
       - run: npm run build
-      - run: mkdir -p dist && cd companion && npm pack --pack-destination ../dist
       - run: node scripts/package.mjs --out dist
       - run: node scripts/verify-package.mjs --dist dist
       - uses: actions/upload-artifact@v4
