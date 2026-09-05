@@ -21,7 +21,7 @@ open, not by reading credentials.
 v1 ships:
 
 ```json
-"permissions": ["storage", "sidePanel", "scripting", "tabs", "alarms"],
+"permissions": ["storage", "sidePanel", "scripting", "alarms"],
 "host_permissions": ["<all_urls>"]
 ```
 
@@ -41,8 +41,9 @@ sequences for clicks.
   break (ADR 0004 capability negotiation).
 - **`cookies` would contradict the privacy claim.** Not requesting it is what makes "the extension
   never reads your cookies" a checkable fact rather than a promise.
-- **`tabs` is required, not optional.** Listing a session's own tabs with their titles and URLs, and
-  proving a stored `tabId` still exists after a service-worker restart, both need it.
+- **`tabs` is not requested.** The first draft of this record claimed it was required for listing
+  a session's tabs and re-validating stored tab ids. That was an assumption; the amendment below
+  records the measurement that overturned it.
 
 ## The `<all_urls>` decision
 
@@ -68,3 +69,27 @@ This decision is revisited if Store review or user evidence shows the prompt cos
 - Native dialogs (`alert`, `confirm`, `beforeunload`) cannot be dismissed without `debugger`. The
   snapshot reports a blocking dialog as an explicit state so the model does not retry blindly.
 - `chrome://` and Web Store pages cannot be scripted. Attaching one fails with a clear reason.
+
+## Amendment, 2026-09-05 — `tabs` removed after a permission spike
+
+The original rationale held that `tabs` was required to list a session's tabs with their titles and
+URLs and to re-validate stored tab ids after a restart. That was an assumption, not a measurement.
+
+Chrome's API contract is that most `chrome.tabs` methods need no permission at all, and that `url`,
+`title`, and `favIconUrl` on a `Tab` are exposed whenever the extension holds a host permission
+matching that tab. This extension holds `<all_urls>`, so every page it may act in already exposes
+those fields. `tabs` added only the ability to read them for pages the extension may *not* act in,
+at the price of a "Read your browsing history" install warning the product never earned.
+
+The spike removed `tabs` and ran the complete real-browser suite: tab chooser, attachment of
+ordinary pages, list, switch, open, and close, navigation and history, multi-session isolation A–E,
+the packaged ZIP, and a browser-internal page. 41 of 41 cases passed, identical to the run with the
+permission present (`docs/TEST-EVIDENCE.md`, 2026-09-05).
+
+The one behavioural difference is the interesting one. For a browser-internal page Chrome withholds
+the address entirely. The extension treats a tab with no address as restricted — never as safe —
+lists it as such in the chooser, and refuses to attach it (`tests/e2e/restricted.test.ts`,
+`companion/tests/tab-actions.test.ts`). An unknown address is a reason to refuse, not to guess.
+
+**Decision.** `tabs` is not requested. A future need for it — none is known — is a new decision
+with its own evidence, not a revert of this one.

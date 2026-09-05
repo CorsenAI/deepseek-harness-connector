@@ -23,7 +23,6 @@
     "storage",
     "sidePanel",
     "scripting",
-    "tabs",
     "alarms"
   ],
   "host_permissions": [

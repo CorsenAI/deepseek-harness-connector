@@ -22,14 +22,6 @@ only when that tab's DeepSeek Harness session requests an action. The injected c
 structured text snapshot, or performs one click or one typing action, and returns. It is never
 injected into a tab that is not attached.
 
-## `tabs`
-
-Needed to show the user which tabs are open so they can attach one; to display the title and URL
-of tabs already attached, so the user always sees what a session controls; to detect when an
-attached tab is closed so the session loses it; and to verify after a browser restart that a stored
-tab still exists before acting on it. Tab titles and URLs are shown to the user in the panel and
-reported to the user's own local DeepSeek Harness for the attached tabs only.
-
 ## `alarms`
 
 Chrome terminates the extension's service worker when idle. A periodic alarm lets it wake and
@@ -49,13 +41,16 @@ indistinguishable from a missing grant.
 
 **The effective access is narrower than the grant, and the extension enforces it:** page code runs
 only in a tab the user explicitly attached, only for the session that owns it, only when that
-session requests an action. Unattached tabs are never touched. This is stated here plainly rather
-than hidden.
+session requests an action. No page code runs in, and no page content is read from, a tab the user
+has not attached. The only thing the extension learns about other tabs is their title and URL, read
+locally when the user opens the tab chooser so they can pick one, and never sent to DeepSeek
+Harness. This is stated here plainly rather than hidden.
 
 ## Permissions deliberately not requested
 
 | Permission | Why not |
 |---|---|
+| `tabs` | Not needed. With the host permission above, Chrome already exposes the title and URL of any page the extension may act in; `tabs` would only add them for pages it may not act in, and would add a "Read your browsing history" warning. Verified by removing it and re-running the complete real-browser suite (41/41). A tab whose address Chrome withholds is treated as restricted and cannot be attached. See ADR 0006, amendment. |
 | `cookies` | Not needed. Logins are preserved by operating the signed-in page, not by reading credentials. Not requesting it is what makes that claim checkable. |
 | `debugger` | Not needed for the click, type, and read capabilities this version ships, and it would show a permanent debugging banner on every attached tab plus an alarming install warning. See ADR 0006. |
 | `webRequest`, `declarativeNetRequest` | Network capture is outside the single purpose. |

@@ -131,9 +131,9 @@ not acceptable, so equality is required rather than tolerated.
 
 ## Permissions
 
-`storage`, `sidePanel`, `scripting`, `tabs`, `alarms`, and `<all_urls>`.
+`storage`, `sidePanel`, `scripting`, `alarms`, and `<all_urls>`.
 
-Deliberately absent: `cookies`, `debugger`, `webRequest`, `downloads`, `nativeMessaging`,
+Deliberately absent: `tabs`, `cookies`, `debugger`, `webRequest`, `downloads`, `nativeMessaging`,
 `declarativeNetRequest`.
 
 `<all_urls>` is a broad grant, and the narrowing is enforced by the extension itself: a content
