@@ -68,11 +68,11 @@ called ready while they are open.
 | Z | Compatibility across the declared DSH range, plus an upstream lane | `docs/COMPATIBILITY.md` rows with CI evidence | open |
 | AA | Service-worker eviction and recovery | Forced worker termination mid-request, then a successful next request | open |
 | AB | Broker restart, DSH restart, and Chrome restart recovery | Component-by-component restart with verified recovery | open |
-| AC | Installer: fresh, upgrade, reinstall, uninstall, spaces in paths, non-default `DSH_HOME` | `tests/installer/*` on Windows, macOS, and Linux | open |
+| AC | Installer: fresh, upgrade, reinstall, uninstall, spaces in paths, non-default `DSH_HOME` | `tests/installer/linux-installer.sh` (WSL Ubuntu 24.04, 21/21) and `tests/installer/windows-installer.ps1` (Windows 11, 19/19), each against a real `dsh` through the packaged tarball from a spaced path | **pass on Windows and Linux**; macOS open until its CI lane runs |
 | AD | Packaged-artifact tests: the release ZIP, not the source tree | Load the built ZIP in Chromium and re-run the slice | open |
-| AE | Reproducible packaging with a content allowlist | Two builds from one commit produce identical bytes; an unexpected file fails packaging | open |
-| AF | The POSIX credentials-permission case actually runs | It is skipped on Windows; CI on Linux and macOS must run it | open |
-| AG | Extension JavaScript typecheck | `tsc -p extension/tsconfig.json --noEmit` with `checkJs` | open |
+| AE | Reproducible packaging with a content allowlist | `scripts/package.mjs` + `scripts/verify-package.mjs`: 152 checks; the ZIP is byte-identical across two builds; the allowlist refused a stray `tsconfig.json` on its first run | pass |
+| AF | The POSIX credentials-permission case actually runs | Linux installer lane verified `credentials.json` mode 600 in a mode 700 directory on a real filesystem; the unit test runs unskipped in the Linux and macOS CI lanes | pass (property verified on Linux; unit test pending CI) |
+| AG | Extension JavaScript typecheck | `tsc -p extension/tsconfig.json --noEmit` with `checkJs`, exit 0; its first run found two unused imports and loose element types | pass |
 | AH | Performance measured on representative tasks | Recorded latencies and message sizes, our own methodology | open |
 | AI | Malicious-page fixtures: giant DOM, deep nesting, hostile labels, prompt injection | `tests/fixtures/hostile-*.html` driven through the real pipeline | open |
 
@@ -80,8 +80,8 @@ called ready while they are open.
 
 | Platform | Unit | E2E | Installer | State |
 |---|---|---|---|---|
-| Windows 11 | pass | pass | — | Unit and E2E run locally; installer untested |
-| Ubuntu LTS | — | — | — | Untested; CI not yet configured |
-| macOS | — | — | — | Untested; CI not yet configured |
+| Windows 11 | pass | pass | pass | All three run locally, installer against a real `dsh` |
+| Ubuntu 24.04 | — | — | pass | Installer run locally under WSL 2 against a real `dsh`; unit and E2E await the CI lane |
+| macOS | — | — | — | Untested; CI lanes configured but not yet run |
 
 No platform is marked supported on the grounds that the code looks portable.

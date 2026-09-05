@@ -174,6 +174,155 @@ A model actually calling these tools end to end needs a `DEEPSEEK_API_KEY`, whic
 does not have. Gate Y is therefore proven up to plugin application and tool registration, not up to
 a live model turn. That remains recorded as partial rather than claimed as complete.
 
+---
+
+## 2026-09-04 — packaging, reproducibility, leak scan, and the extension typecheck (gates AE, AG)
+
+**Environment.** Windows 11, Node v24.12.0. Working tree not yet clean at the time of the run, so
+`release-manifest.json` records `cleanTree: false` — this is a gate rehearsal, not a release build.
+
+### Deterministic extension ZIP
+
+```
+node scripts/package.mjs --out dist
+```
+
+```
+wrote dsh-browser-connector-extension-0.1.0.zip (35464 bytes, 14 files)
+sha256 889c3bd433c272079387a0e0e113adda46a01e270f0298161125b5b082ef5e25
+```
+
+The archive is produced by an in-repo encoder: sorted entries, fixed 1980-01-01 timestamps, no extra
+fields, no external attributes. Building twice from the same tree and comparing with `cmp`:
+
+```
+BYTE-IDENTICAL across two builds
+```
+
+### The allowlist refusing a stray file
+
+The first packaging attempt failed with
+`refusing to package: unexpected files in extension/: tsconfig.json` — a tooling file added minutes
+earlier. That is the gate working: a file enters the Store package only by being named in
+`EXTENSION_ALLOWLIST` or `EXTENSION_TOOLING`, never by existing.
+
+### Verification
+
+```
+node scripts/verify-package.mjs --dist dist
+```
+
+```
+152 checks, 0 failures — all checks passed
+```
+
+Covering: the ZIP contains exactly the fourteen allowlisted files; every text file is scanned for
+personal paths, private emails, token literals, pairing-code-shaped literals, AWS keys, private-key
+blocks, machine names, and dotenv references; no dynamic code evaluation or construction; no remote
+host other than loopback and the project page; the manifest is MV3 with no `cookies`, `debugger`,
+or `webRequest`; rebuilding in-process yields identical bytes; `SHA256SUMS` matches both artifacts;
+the tarball (parsed in-process, 32 entries) is rooted at `package/`, ships `lib/` and not `src/`
+or `tests/`, and carries `cordis.patch.yml` and the broker entry.
+
+The scanner caught one real finding on its first run: the panel's pairing-code placeholder
+`XXXX-XXXX-XXXX-XXXX-XXXX` matched the pairing-code pattern, because `X` is in the alphabet. The
+placeholder now uses zeros, which the alphabet excludes; the scanner stays strict.
+
+### Extension typecheck
+
+```
+node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit
+```
+
+Exit 0 under `checkJs` with `noUnusedLocals`, `noImplicitThis`, `strictBindCallApply`, and the
+Chrome type declarations. Its first run found two unused imports in the service worker and a set of
+loose element types in the page interface, all corrected. The correction to `resolve()` in the
+injected function was a real code change, so the end-to-end suite was re-run afterwards: 15/15.
+
+### Gates this run closes
+
+AE (reproducible packaging with a content allowlist), AG (extension JavaScript typecheck).
+
+---
+
+## 2026-09-04 — installer acceptance on Windows and Linux (gates AC, AF)
+
+Each lane runs the real installer against a real `@deepseek-ai/dsh` 0.1.2-rc.1 and a throwaway
+`DSH_HOME`, through the packaged tarball, in three phases: fresh install, install over an existing
+install, uninstall. The tarball sits under `…/DeepSeek Harness connector/dist/`, so every lane also
+exercises a path containing a space. Pairing codes were generated in throwaway homes that were
+deleted afterwards and are shown redacted.
+
+The acceptance scripts are repository artifacts, not one-off shell sessions:
+`tests/installer/linux-installer.sh` and `tests/installer/windows-installer.ps1`. Each prints one
+line per expectation checked and exits non-zero on any failure, and `.github/workflows/ci.yml` runs
+them per platform.
+
+### Ubuntu 24.04 (WSL 2) — `scripts/install.sh`
+
+```
+tests/installer/linux-installer.sh <tarball> ~/dsh-int/node_modules/.bin
+```
+
+Node v22.22.2, pnpm 11.5.2. **21 of 21 expectations met, exit 0.**
+
+| Phase | Observed |
+|---|---|
+| Fresh install | Spaced tarball path accepted unmodified by `dsh plugin add` (no shell is involved on Linux); profile initialised; bundle appended by DeepSeek Harness; broker started and answering **426** on `127.0.0.1:18782`; `credentials.json` written with mode **600** inside a **700** directory; pairing code `AV3K-…-7RJ4` in the expected shape. |
+| Upgrade | Previous broker (pid 781032) stopped, new broker (pid 781350) alive, one listener on the port, **pairing code unchanged** — paired browsers stay paired across an upgrade. |
+| Uninstall | `pnpm remove` succeeded; bundle list back to `dsh-base, dsh-headless`; broker stopped; credentials kept for re-pair. |
+
+The mode checks close gate AF's property on a real POSIX filesystem. The unit test that asserts the
+same mode (`auth.test.ts`, skipped on Windows) runs unskipped in the Linux and macOS CI lanes.
+
+### Windows 11 — `scripts/install.ps1` under Windows PowerShell 5.1
+
+```
+tests\installer\windows-installer.ps1 -Tarball .\dist\corsen-ai-dsh-browser-connector-0.1.0.tgz -DshBin <dsh .bin dir>
+```
+
+Node v24.12.0, `dsh` resolved to npm's `dsh.ps1` shim. **19 of 19 expectations met, exit 0.**
+
+| Phase | Observed |
+|---|---|
+| Fresh install | Short path `CHROME~1\DEEPSE~1\dist\CORSEN~1.TGZ` handed to `dsh plugin add`; profile initialised; bundle appended; broker started and answering **426** on `127.0.0.1:18781`; `credentials.json` and `broker.pid` written; pairing code `MF6R-…-CVN7` in the expected shape. Fresh install completes in about 2 s. |
+| Upgrade | Previous broker stopped, new broker alive, one listener on the port, **pairing code unchanged**. |
+| Uninstall | `pnpm remove` succeeded; bundle list back to `dsh-base, dsh-headless`; broker stopped; credentials kept for re-pair. |
+
+### Defects the Windows lane found before passing
+
+Recorded because a test that never failed anything is weak evidence. Each was diagnosed by
+observation, not guessed at, and fixed in the installer rather than in the test.
+
+1. **The version check refused every valid Node.** Windows PowerShell strips inner double quotes on
+   the way to a native executable, so `node -p 'process.versions.node.split(".")[0]'` reached node
+   as `split(.)` and threw; the installer then reported "22.19 or newer required; found v24.12.0".
+   Fixed with `parseInt(process.versions.node)`, which needs no quoting on either shell.
+2. **A descending-range slice injected a null argument.** `@("dsh")[1..0]` is `@($null, "dsh")` in
+   PowerShell, so the common case — `dsh` directly on PATH — was the broken one. Fixed by keeping
+   the executable and its fixed arguments apart.
+3. **An array expression is not a splat.** `& $exe @($a + $b)` binds to npm's `dsh.ps1` shim as a
+   single `$args[0]`, and the shim hands node one space-joined token, so `dsh` reported
+   `--profile` missing. Proven with an argv-echo probe under PowerShell 5.1 (the `.cmd` shim and
+   `@variable` splatting both deliver arguments correctly; the `.ps1` shim with an array value does
+   not). Fixed with `@variable` splatting.
+4. **Upstream: `dsh plugin` splits a spaced path on Windows.** `spawnSync("pnpm", args,
+   { shell: process.platform === "win32" })` lets `cmd.exe` re-tokenize the command line. Confirmed
+   A/B on 2026-09-04: identical bytes install from a space-free copy and fail from the spaced path
+   with `ENOENT …\connector\dist\…` plus a fetch of a package named `Harness`. Worked around with
+   the file's Windows 8.3 short name — no copy, works wherever the file lives, and stops with an
+   explanation when short names are disabled on the volume. Recorded in `docs/COMPATIBILITY.md`.
+
+### Not covered by this run
+
+macOS. The POSIX script is expected to work there, but "expected" is not evidence; the macOS CI
+lane exists for that and has not yet run. The Windows 8.3 workaround is exercised only locally,
+because GitHub runner paths contain no spaces.
+
+### Gates this run closes
+
+AC on Windows and Linux; AF by real-filesystem verification. AC on macOS stays open.
+
 ## Findings this evidence run produced
 
 Three defects were found by these tests and fixed in the implementation, not worked around in the

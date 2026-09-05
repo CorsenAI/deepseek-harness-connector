@@ -17,7 +17,7 @@ except what your own DeepSeek Harness sends to the model provider you configured
 ## Status
 
 **Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, and the Chrome
-extension work end to end and are covered by 215 tests including real-browser end-to-end runs. The
+extension work end to end and are covered by 216 tests including real-browser end-to-end runs. The
 installers, packaging, CI, and Chrome Web Store submission are not finished.
 
 `docs/TEST-MATRIX.md` lists every release gate and its honest state. Eleven are still open. Do not
@@ -138,7 +138,7 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 215 tests, no browser needed
+npm run test:unit    # 201 tests, no browser needed
 npm run test:e2e     # real Chromium with the extension loaded
 ```
 

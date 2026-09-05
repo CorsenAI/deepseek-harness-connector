@@ -34,6 +34,28 @@ and the upstream lane below exists to find out before a user does.
 | `@deepseek-ai/dsh-tools` 0.0.1-rc.x (npm `latest` at baseline) | Older tool-registry API; untested. Refused at load. |
 | Anything before 0.1.2-rc.1 | Untested. Refused at load. |
 
+## Known upstream limitations
+
+Observed behaviour of the DeepSeek Harness releases above that the connector has to work around.
+Each names the evidence, the workaround, and where it lives.
+
+### `dsh plugin add <path>` splits a path containing a space, on Windows only
+
+**Evidence.** In `@deepseek-ai/dsh` 0.1.2-rc.1, `apps/cli/src/plugin.ts` forwards to pnpm with
+`spawnSync("pnpm", args, { shell: process.platform === "win32" })` (visible in the published
+`lib/plugin-*.js`). With a shell, the arguments are joined into one command line that `cmd.exe`
+re-tokenizes, so `C:\Users\Jane Doe\x.tgz` arrives at pnpm as three tokens. Reproduced on
+2026-09-04: the same tarball installs from `C:\Users\RTX6000\AppData\Local\Temp\dsh-flat\` and
+fails from `…\DeepSeek Harness connector\dist\` with `ENOENT …\connector\dist\…` plus an attempt to
+fetch a package named `Harness`. Linux is unaffected because no shell is involved there.
+
+**Workaround.** `scripts/install.ps1` passes the file's Windows 8.3 short name, which contains no
+spaces and needs no copy, and stops with an explanation when short names are disabled on the
+volume. A user calling `dsh plugin add` by hand on Windows must supply a space-free path.
+
+**Status.** Worth reporting upstream: quoting each argument, or spawning `pnpm.cmd` without a
+shell, would remove the limitation. Until then this row stays.
+
 ## Version detection
 
 The connector reads the version of `@deepseek-ai/dsh-tools` as resolved from its own installation
