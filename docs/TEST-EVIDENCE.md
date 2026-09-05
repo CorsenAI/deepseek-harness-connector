@@ -414,3 +414,159 @@ much.
 - `node:test` runs top-level suites concurrently. The isolation suites share one browser, so they
   are nested under a single suite to run in order; splitting them back out reintroduces
   cross-test interference that looks exactly like a routing leak.
+
+---
+
+## 2026-09-05 — hardening gate: twenty actions, one visibility policy, honest tab results, `tabs` dropped
+
+**Trigger.** An independent review of the working tree found two unit regressions, a visibility
+leak, and a false-success path, and required a clean, evidenced checkpoint before any Store work.
+
+**Commits under test.** `9f92cd0` (feature, visibility, honesty), `522c581` (`tabs` removed),
+`5e935d2` (disclosures). The memory-and-evidence commit that carries this section follows them and
+changes no code.
+
+**Environment.**
+
+| | |
+|---|---|
+| OS | Windows 11 Pro for Workstations, 10.0.26200 |
+| Node | v24.12.0 |
+| Playwright | 1.49.1, its own Chromium, headed |
+| DeepSeek Harness packages | `@deepseek-ai/dsh-tools` 0.1.2-rc.1, `@deepseek-ai/cordis` 4.0.2, `@deepseek-ai/schemastery` 3.18.2 |
+
+### Unit, protocol, security, parity, tools, tab actions
+
+```
+node --test --experimental-strip-types "companion/tests/*.test.ts"
+```
+
+```
+ℹ tests 222
+ℹ suites 43
+ℹ pass 221
+ℹ fail 0
+ℹ skipped 1
+```
+
+The skip is the POSIX `0600` check on Windows, as before. New this session: `tools.test.ts`
+rewritten around the authoritative `BROWSER_TOOL_NAMES` list, a per-tool `MINIMAL_ARGS` table, a
+validity proof (every tool reaches the broker exactly once with a session present; the twenty
+requests cover the twenty protocol actions), and a negative control (`browser_key` with no `key`
+is refused by DeepSeek Harness validation, not by our session rule); `tab-actions.test.ts`, 14
+cases against a stubbed Chrome whose refusals the test controls.
+
+### Type checking
+
+```
+node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.json --noEmit   # exit 0
+node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit   # exit 0 (checkJs)
+```
+
+### Real-browser end-to-end — first full run after the visibility rewrite
+
+```
+ℹ tests 39   pass 34   fail 5
+```
+
+Recorded because a suite that never fails proves little. The three visibility suites passed on the
+first run; the five failures were all in `actions.test.ts`, which had been written but never
+run. Each was diagnosed by measurement, not guesswork:
+
+- **drag**: "Drop here" is a `div` with `ondrop`/`ondragover` and nothing else, so it was never
+  interactive — a drop target that declares itself now is. Then a second failure: the test took two
+  snapshots, so its second ref was stale, which is the security property working; both refs now come
+  from one snapshot.
+- **wait**: the fixture's mutation fired at 400 ms against a 300 ms quiet window, a race by
+  construction. The quiet window is now 500 ms (the `networkidle` heuristic), and the test asserts
+  the wait was actually extended.
+- **scroll**: `rect.bottom` 720.075 against `innerHeight` 720 — sub-pixel layout, the element was in
+  the viewport. One pixel of tolerance, documented.
+- **back with no history**: a Playwright tab keeps its initial `about:blank` entry
+  (`history.length` 2 after the first `goto`), so its history is never empty. The case now uses a tab
+  the session opened itself, which has one entry and whose `back` Chrome refuses.
+- **navigate then back landed on `about:blank`**: reproducible only when `back` followed `navigate`
+  within a few milliseconds in a tab Playwright had just loaded. A probe at 0, 50, and 200 ms
+  passed 4/4 in isolation; inside the suite the difference was that Playwright's `load` resolves
+  slightly before Chrome marks the tab `complete`, and a navigation issued in that gap replaces the
+  loading entry. Two fixes, both kept: every navigation action now waits for a tab Chrome says is
+  complete NOW at a new address, and the fixture waits for Chrome's own `complete` before handing a
+  tab to a case. The three top-level suites also ran concurrently on one browser and are now nested
+  under one suite, the same trap `isolation.test.ts` documented.
+
+### Real-browser end-to-end — the committed code, `tabs` permission present
+
+```
+node --test --test-concurrency=1 --experimental-strip-types "tests/e2e/*.test.ts"
+```
+
+```
+ℹ tests 41   suites 16   pass 41   fail 0   duration_ms 22754
+```
+
+### The same suite with `tabs` removed — the shipped manifest
+
+```
+ℹ tests 41   suites 16   pass 41   fail 0   duration_ms 22712
+```
+
+Suites: browser actions (12), multi-session isolation A–E (6), the packaged extension (4), pages
+Chrome protects (2), the vertical slice (9), hidden content never leaves the page (4), visible
+content still gets through (3), an action on a control the user can no longer see (1).
+
+The restricted-page cases pass in both runs by different routes: with `tabs`, the internal page
+reports a `chrome://` address; without it, Chrome withholds the address and the extension treats a
+tab with no address as restricted. Both are refused on attach, and an attached tab that navigates
+to an internal page fails `RESTRICTED_PAGE` rather than being injected into.
+
+### Release artifacts, from clean commit `5e935d2`
+
+```
+npm run build && node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist
+```
+
+```
+wrote dsh-browser-connector-extension-0.1.0.zip (44999 bytes, 14 files)
+all checks passed
+"commit": "5e935d275a1670d97d227363780bbd0063188953", "cleanTree": true
+```
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `2a76f13800a42a2b1476a213523b619e6027772ad0fa5d766bea44b9b525d2c4` | 44999 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `bcc6ca6c114d08631137b5a3a445b3a9323404ecbdd0701cd9e3f99e0095344d` | 50918 |
+
+The packaged E2E's in-process build was hashed and compared with the dist ZIP before the run:
+
+```
+in-process build  : 2a76f13800a42a2b1476a213523b619e6027772ad0fa5d766bea44b9b525d2c4
+dist ZIP on disk  : 2a76f13800a42a2b1476a213523b619e6027772ad0fa5d766bea44b9b525d2c4
+IDENTICAL
+tests/e2e/packaged.test.ts: 4/4
+```
+
+So the packaged cases ran against the exact bytes in `dist/`, not a re-build that merely ought to
+match. The earlier `dist/` from the five-action tree (`889c3bd4…`) is superseded and must not be
+cited for this code.
+
+### Provenance audit, re-run on the twenty-action tree
+
+```
+node scripts/provenance-audit.mjs   # exit 0
+== dsh-browser (third-party: boilerplate only) ==
+longest exact shared run: 26 tokens (CSS)
+exact runs >= 16 tokens: 46, covering 846 subject tokens (1.01%)
+```
+
+Within the release threshold (32 tokens, 2 %). Every longer match is with `.refs/hermes-connector`,
+which is Corsen's own code and expected.
+
+### Gates this run closes
+
+AK, AL, AM, AN, AO (new); AD re-established on the new bytes; AJ re-run.
+
+### What this does not prove
+
+A live model turn (needs an API key). Recovery after a worker, broker, DSH, or Chrome restart (gate
+AA/AB). Bounded behaviour on giant or deeply nested hostile DOMs (the rest of AI). Anything on
+macOS. CI has still never run.

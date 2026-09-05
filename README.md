@@ -17,20 +17,21 @@ except what your own DeepSeek Harness sends to the model provider you configured
 ## Status
 
 **Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the Chrome
-extension, the installers, and the release packaging work end to end and are covered by 216 tests
-including real-browser end-to-end runs, plus installer acceptance against a real `dsh` on Windows
-and Linux. CI is written but has not yet run, the extension performs five of its twenty protocol
-actions, and the Chrome Web Store submission is prepared only on paper.
+extension with all twenty browser actions, the installers, and the release packaging work end to
+end and are covered by 263 tests: 222 unit and protocol tests, and 41 real-browser end-to-end
+cases including multi-session isolation and a page built to leak hidden content. Installer
+acceptance runs against a real `dsh` on Windows and Linux. CI is written but has not yet run, and
+the Chrome Web Store submission is prepared only on paper.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state. Eight are still open and one
-is partial. Do not treat this as shippable until they are closed.
+`docs/TEST-MATRIX.md` lists every release gate and its honest state. Four are still open and three
+are partial. Do not treat this as shippable until they are closed.
 
 ## What it does
 
 | | |
 |---|---|
 | **Reads a page** | `browser_snapshot` returns the page as structured text: title, URL, visible text, and a numbered inventory of controls the model can address. Text-first — no screenshots, no vision required. |
-| **Acts on a page** | Click and type in the tab you attached, addressed by references from the latest snapshot. |
+| **Acts on a page** | Click, type, press keys, scroll, hover, choose options, drag, find text, and navigate in the tab you attached, addressed by references from the latest snapshot. A session can also open, list, switch, and close its own tabs — and only its own. |
 | **Keeps sessions apart** | Each DeepSeek Harness session owns its own set of tabs. Two sessions running at once never see each other's pages. |
 | **Fails closed** | A session with no attached tab gets a clear refusal and nothing happens. There is no fallback to "whatever tab is active". |
 | **Masks secrets** | Passwords, one-time codes, payment fields, and hidden inputs are masked in the page, before anything leaves the browser. Credential-bearing URL parameters are scrubbed too. |
@@ -80,8 +81,16 @@ now operate that tab and nothing else.
 
 ## Using it
 
-Ask your DeepSeek Harness session to do something in the browser. It has five tools:
-`browser_snapshot`, `browser_read_text`, `browser_current_url`, `browser_click`, `browser_type`.
+Ask your DeepSeek Harness session to do something in the browser. It has twenty tools, one per
+protocol action: reading (`browser_snapshot`, `browser_read_text`, `browser_current_url`,
+`browser_find`, `browser_wait`), acting (`browser_click`, `browser_type`, `browser_key`,
+`browser_scroll`, `browser_hover`, `browser_select_option`, `browser_drag`), navigation
+(`browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`), and the session's own
+tabs (`browser_list_tabs`, `browser_open_tab`, `browser_switch_tab`, `browser_close_tab`).
+
+Every tool tells the truth about what happened. A control the user cannot see is never listed and
+never acted on; a tab Chrome refused to close is reported as detached-but-open, not as closed; a
+navigation that did not finish says so.
 
 The panel always shows the truth:
 
@@ -142,7 +151,7 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 201 tests, no browser needed
+npm run test:unit    # 222 tests, no browser needed
 npm run test:e2e     # real Chromium with the extension loaded
 ```
 

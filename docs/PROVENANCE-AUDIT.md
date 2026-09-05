@@ -130,3 +130,20 @@ is five CSS declarations, 0.84 % of this repository's tokens fall inside any run
 more, every such run is a language idiom, a platform idiom, a DeepSeek Harness contract, generic
 CSS, or a regex literal, and no protocol, algorithm, data structure, function body, test, string,
 markup, or asset is shared.
+
+---
+
+## Re-run, 2026-09-05, after the twenty-action work
+
+```
+node scripts/provenance-audit.mjs   # exit 0
+longest exact shared run with .refs/dsh-browser: 26 tokens (extension/src/sidepanel.css:139, a CSS declaration)
+exact runs >= 16 tokens: 46, covering 846 subject tokens (1.01 %)
+shape runs >= 40 tokens: 21, covering 993 subject tokens (1.19 %)
+subject: 55 files, 83658 tokens
+```
+
+Coverage rose from 0.84 % to 1.01 % because the subject grew by fifteen actions and their tests;
+the longest run is unchanged and still a CSS declaration. Every match at or above 40 tokens is with
+`.refs/hermes-connector`, which is Corsen's own code. The statement at the head of this document
+remains true for the twenty-action tree.
