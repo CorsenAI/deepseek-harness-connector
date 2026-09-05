@@ -799,6 +799,10 @@ all checks passed                                    # 579 checks, up from 187
 | `dsh-browser-connector-extension-0.1.0.zip` | `8196873e4147ff0a0a8ebfdea82029cfc4946669e779e57b818a703d82bf6952` | 48603 |
 | `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `813890bd743be34a7b8803fa2bffefa82ec965998c84e4c25bd49b1c680a37e7` | 58791 |
 
+These artifacts were rebuilt after the documentation commit that followed, at `68188b2`, and came
+out byte-identical: only the commit recorded in `release-manifest.json` differs, since no source
+file changed between the two.
+
 The tarball now carries `LICENSE` and `README.md`. It had carried neither: `files` named a README
 that did not exist, and `"license": "MIT"` in `package.json` is a label, not the notice the licence
 asks to travel with copies. `tests/e2e/packaged.test.ts` ran 4/4 against these ZIP bytes.
