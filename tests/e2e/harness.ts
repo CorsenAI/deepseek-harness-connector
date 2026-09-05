@@ -83,7 +83,10 @@ export async function waitFor(describe: string, check: () => boolean | Promise<b
  * shell, and a test against a worker that never runs proves nothing.
  * @returns the harness.
  */
-export async function startHarness(): Promise<Harness> {
+export async function startHarness(options: { extensionDir?: string } = {}): Promise<Harness> {
+  // The packaged-ZIP test points this at an unpacked release archive, so the same suite proves
+  // the shipped bytes and not only the source tree (gate AD).
+  const extensionDir = options.extensionDir ?? EXTENSION_DIR
   const secret = createSecret()
   const broker = await startBroker({ secret, version: '0.1.0', port: 0, store: store() })
 
@@ -110,8 +113,8 @@ export async function startHarness(): Promise<Harness> {
   const context = await chromium.launchPersistentContext('', {
     headless: false,
     args: [
-      `--disable-extensions-except=${EXTENSION_DIR}`,
-      `--load-extension=${EXTENSION_DIR}`,
+      `--disable-extensions-except=${extensionDir}`,
+      `--load-extension=${extensionDir}`,
       '--no-first-run',
       '--no-default-browser-check',
     ],

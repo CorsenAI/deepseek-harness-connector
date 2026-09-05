@@ -7,8 +7,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gunzipSync, inflateRawSync } from "node:zlib";
-import { buildExtensionZip, EXTENSION_ALLOWLIST, sha256 } from "./package.mjs";
+import { gunzipSync } from "node:zlib";
+import { buildExtensionZip, EXTENSION_ALLOWLIST, readZip, sha256 } from "./package.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const distIndex = process.argv.indexOf("--dist");
@@ -24,35 +24,6 @@ let failures = 0;
 function check(ok, label, detail = "") {
   process.stdout.write(`${ok ? "ok  " : "FAIL"} ${label}${ok || detail === "" ? "" : ` — ${detail}`}\n`);
   if (!ok) failures += 1;
-}
-
-/**
- * Read a ZIP's central directory and inflate each entry.
- * @param {Buffer} zip The archive.
- * @returns {{ name: string, data: Buffer }[]} The entries.
- */
-function readZip(zip) {
-  const end = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  const count = zip.readUInt16LE(end + 10);
-  let cursor = zip.readUInt32LE(end + 16);
-  const entries = [];
-  for (let index = 0; index < count; index += 1) {
-    if (zip.readUInt32LE(cursor) !== 0x02014b50) throw new Error("bad central directory");
-    const method = zip.readUInt16LE(cursor + 10);
-    const compressed = zip.readUInt32LE(cursor + 20);
-    const nameLength = zip.readUInt16LE(cursor + 28);
-    const extraLength = zip.readUInt16LE(cursor + 30);
-    const commentLength = zip.readUInt16LE(cursor + 32);
-    const localOffset = zip.readUInt32LE(cursor + 42);
-    const name = zip.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
-    const localNameLength = zip.readUInt16LE(localOffset + 26);
-    const localExtraLength = zip.readUInt16LE(localOffset + 28);
-    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
-    const body = zip.subarray(dataStart, dataStart + compressed);
-    entries.push({ name, data: method === 8 ? inflateRawSync(body) : Buffer.from(body) });
-    cursor += 46 + nameLength + extraLength + commentLength;
-  }
-  return entries;
 }
 
 // The two dynamic-code constructs are matched by patterns assembled from fragments, so that a
