@@ -63,15 +63,20 @@ export type PanelView = Pick<LaunchedBrowser, 'panel'>
  *
  * Playwright's own Chromium is required rather than the installed Chrome: current Chrome stable
  * refuses `--load-extension`, so the extension silently never loads and no service worker appears.
- * Headed mode is required too, because an MV3 service worker does not start under the headless
- * shell, and a test against a worker that never runs proves nothing.
+ * The browser is headed by default, because that is how users run it and because an MV3 service
+ * worker does not start under the headless *shell*. With `DSH_E2E_HEADLESS=1` the full Chromium
+ * runs in its new headless mode instead (Playwright's `chromium` channel, which its documentation
+ * names as the way to run extensions headless) — for a machine with no display, such as one
+ * driven over SSH. The evidence records which mode a run used.
  * @param userDataDir - the profile directory.
  * @param extensionDir - the extension to load.
  * @returns the context, its worker, the extension id, and the panel page.
  */
 export async function launchBrowser(userDataDir: string, extensionDir: string): Promise<LaunchedBrowser> {
+  const headless = process.env['DSH_E2E_HEADLESS'] === '1'
   const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
+    headless,
+    ...(headless ? { channel: 'chromium' as const } : {}),
     args: [
       `--disable-extensions-except=${extensionDir}`,
       `--load-extension=${extensionDir}`,
