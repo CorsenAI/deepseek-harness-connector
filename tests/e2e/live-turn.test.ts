@@ -7,9 +7,13 @@
  * and prints the model's final message. The one thing that is not a model is the model: DeepSeek
  * Harness's own `@deepseek-ai/dsh-llm-mock-server` answers the provider protocol over real HTTP
  * with a scripted sequence, first a rate limit (which is how the test gets the seconds it needs to
- * attach the tab to the session the process just announced), then a `browser_snapshot` tool call,
- * then a final sentence. What crosses the wire between DeepSeek Harness and the mock is captured,
- * so the assertions read the tool result exactly as the model would have.
+ * attach the tab to the session the process just announced), then one tool call, then a final
+ * sentence. Three turns are run, each in its own DeepSeek Harness process with its own scripted
+ * provider: `browser_snapshot`; `browser_screenshot` for a model that accepts images; and
+ * `browser_screenshot` for a text-only model. What crosses the wire between DeepSeek Harness and
+ * the mock is captured, so the assertions read the tool result exactly as the model would have —
+ * including whether the screenshot reached it as pixels or as the placeholder DeepSeek Harness
+ * substitutes for a model that cannot see.
  *
  * Needs `dist/`, a real `dsh`, and the mock server installed beside it
  * (`npm install @deepseek-ai/dsh-llm-mock-server@next` in the dsh directory). Without them the
@@ -26,6 +30,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { after, before, describe, it } from 'node:test'
 import { readZip } from '../../scripts/package.mjs'
+import { jpegDimensions } from './jpeg.ts'
 import {
   attachTab, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
   type FixtureServer, type LaunchedBrowser,
@@ -71,14 +76,23 @@ if (skipReason) process.stdout.write(`live turn: SKIPPED — ${skipReason}\n`)
 
 let home: string
 let unpacked: string
+let profile: string
 let installed: string
 let brokerPort: number
 let broker: ReturnType<typeof spawn> | null = null
-let mock: MockLlm
+let startMock: (options: Record<string, unknown>) => Promise<MockLlm>
 let files: FixtureServer
 let browser: LaunchedBrowser
-let transcript: { status: number | null, stdout: string, stderr: string }
-let attachedSession: { profileId: string, sessionId: string } | null = null
+let code: string
+
+/** What one turn produced. */
+interface Turn {
+  readonly mock: MockLlm
+  readonly session: { profileId: string, sessionId: string }
+  readonly status: number | null
+  readonly stdout: string
+  readonly stderr: string
+}
 
 const TASK = 'Read the page in the attached tab and tell me its title.'
 const FINAL = 'The attached tab is titled "Connector fixture A".'
@@ -127,22 +141,57 @@ before(async () => {
   const added = dsh(['plugin', '--profile', 'headless', 'add', join(DIST, tgzName)])
   assert.equal(added.status, 0, `dsh plugin add failed:\n${added.out}`)
 
-  // DeepSeek Harness's own mock provider, scripted: a rate limit first, so the adapter waits
-  // through its retry delay while the tab is attached; then the tool call; then the answer.
-  const { startMockLlmServer } = await import(pathToFileURL(mockEntry as string).href) as {
+  // DeepSeek Harness's own mock provider; each turn scripts its own instance.
+  const loaded = await import(pathToFileURL(mockEntry as string).href) as {
     startMockLlmServer: (options: Record<string, unknown>) => Promise<MockLlm>
   }
-  mock = await startMockLlmServer({
+  startMock = loaded.startMockLlmServer
+
+  const child = spawn(process.execPath, [join(installed, 'lib', 'broker-main.js'), '--home', home, '--port', String(brokerPort)], {
+    env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'ignore', 'inherit'],
+  })
+  broker = child
+  await waitFor('the packaged broker process to listen', async () => await brokerAnswers() === 426, 20000)
+  const printed = spawnSync(process.execPath, [join(installed, 'lib', 'broker-main.js'), '--pairing-code', '--home', home], { encoding: 'utf8' })
+  code = String(printed.stdout).trim().split('\n').pop() ?? ''
+
+  const bytes = readFileSync(join(DIST, zipName))
+  for (const entry of readZip(bytes) as { name: string, data: Buffer }[]) {
+    const target = join(unpacked, entry.name)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, entry.data)
+  }
+  files = await serveFixtures()
+  profile = mkdtempSync(join(tmpdir(), 'dsh-connector-live-profile-'))
+  browser = await launchBrowser(profile, unpacked)
+  await pairWith(browser, `ws://127.0.0.1:${brokerPort}`, code)
+  const page = await browser.context.newPage()
+  await page.goto(files.url('page-a.html'))
+}, { timeout: 180000 })
+
+/**
+ * Run one scripted turn of a real DeepSeek Harness process.
+ *
+ * The mock is scripted `rate_limit` (Retry-After 4 s, the window in which the tab is attached to
+ * the session the process announced), then the tool call, then a sentence. The user patch layer
+ * points the provider at this turn's mock, stops the session-title plugin — it makes a provider
+ * request of its own for a title, which consumed a scripted behaviour on the first run of this
+ * suite — and sets the connector's broker port.
+ * @param toolName - the tool the scripted model calls.
+ * @param finalText - the sentence it answers with afterwards.
+ * @param model - the catalogue model the profile is told to use; the profile's own default when
+ * omitted. What the mock answers does not depend on it, but what DeepSeek Harness sends does: only
+ * a model whose catalogue entry accepts images is sent them.
+ * @returns what the provider saw and what the process printed.
+ */
+async function runTurn(toolName: string, finalText: string, model?: string): Promise<Turn> {
+  const mock = await startMock({
     sequence: ['rate_limit', 'tool_call_success', 'success'],
     retryAfterMs: 4000,
-    toolName: 'browser_snapshot',
+    toolName,
     toolArguments: '{}',
-    successText: FINAL,
+    successText: finalText,
   })
-
-  // The user's own patch layer: the provider's endpoint, the connector's broker port, and the
-  // session-title plugin stopped — it makes a provider request of its own for a title, which would
-  // consume a scripted behaviour meant for the agent (seen in the first run of this suite).
   writeFileSync(join(home, 'profiles', 'headless', 'cordis.patch.yml'), [
     '- id: llm-deepseek',
     '  config:',
@@ -153,108 +202,182 @@ before(async () => {
     '- id: corsen-browser-connector',
     '  config:',
     `    port: ${brokerPort}`,
+    // A patch entry's config replaces the plugin's config rather than merging into it, so the
+    // provider must be restated beside the model.
+    ...model === undefined ? [] : ['- id: agent-default-model', '  config:', '    provider: deepseek-official', `    model: ${model}`],
     '',
   ].join('\n'))
 
-  const child = spawn(process.execPath, [join(installed, 'lib', 'broker-main.js'), '--home', home, '--port', String(brokerPort)], {
-    env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'ignore', 'inherit'],
+  const entry = join(dshBin as string, '..', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  const run = spawn(process.execPath, [entry, '--profile', 'headless', TASK], {
+    env: { ...process.env, DSH_HOME: home, DEEPSEEK_API_KEY: 'mock-key' }, cwd: home, stdio: ['ignore', 'pipe', 'pipe'],
   })
-  broker = child
-  await waitFor('the packaged broker process to listen', async () => await brokerAnswers() === 426, 20000)
-  const printed = spawnSync(process.execPath, [join(installed, 'lib', 'broker-main.js'), '--pairing-code', '--home', home], { encoding: 'utf8' })
-  const code = String(printed.stdout).trim().split('\n').pop() ?? ''
+  let stdout = ''
+  let stderr = ''
+  run.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
+  run.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+  // A turn that does not end is a failure with diagnostics, not a hang: the process is killed
+  // after two minutes and what it printed is reported.
+  let killed = false
+  const leash = setTimeout(() => { killed = true; run.kill('SIGKILL') }, 120000)
+  const exited = new Promise<number | null>((resolveExit) => { run.once('exit', (status) => { clearTimeout(leash); resolveExit(status) }) })
 
-  const bytes = readFileSync(join(DIST, zipName))
-  for (const entry of readZip(bytes) as { name: string, data: Buffer }[]) {
-    const target = join(unpacked, entry.name)
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(target, entry.data)
-  }
-  files = await serveFixtures()
-  browser = await launchBrowser(mkdtempSync(join(tmpdir(), 'dsh-connector-live-profile-')), unpacked)
-  await pairWith(browser, `ws://127.0.0.1:${brokerPort}`, code)
-  const page = await browser.context.newPage()
-  await page.goto(files.url('page-a.html'))
-}, { timeout: 180000 })
-
-after(async () => {
-  if (broker) { broker.kill('SIGKILL'); broker = null }
-  await mock?.close()
-  await browser?.context.close()
-  await files?.close()
-  for (const dir of [home, unpacked]) if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
-})
-
-describe('a live DeepSeek Harness turn through the released pair', () => {
-  it('announces its session, is given a tab, reads it through the tool, and answers', { timeout: 180000, skip: skipReason }, async () => {
-    const entry = join(dshBin as string, '..', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-    const run = spawn(process.execPath, [entry, '--profile', 'headless', TASK], {
-      env: { ...process.env, DSH_HOME: home, DEEPSEEK_API_KEY: 'mock-key' }, cwd: home, stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    let stdout = ''
-    let stderr = ''
-    run.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
-    run.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
-    const exited = new Promise<number | null>((resolveExit) => { run.once('exit', (status) => { resolveExit(status) }) })
-
-    // The process announces its session to the broker as it boots; the panel sees it through the
-    // broker's state, exactly as a user would. Attach the fixture tab to that session — the only
-    // one this DeepSeek Harness process has.
+  // The process announces its session to the broker as it boots; the panel sees it through the
+  // broker's state, exactly as a user would. Attach the fixture tab to that session — the only
+  // one this DeepSeek Harness process has.
+  let session: { profileId: string, sessionId: string } | null = null
+  try {
     await waitFor('the dsh process to announce its session', async () => {
       const state = await panelState()
       const sessions = ((state['brokerState'] as { sessions?: { profileId: string, sessionId: string }[] } | null)?.sessions) ?? []
       if (sessions.length === 0) return false
-      attachedSession = { profileId: sessions[0]!.profileId, sessionId: sessions[0]!.sessionId }
+      session = { profileId: sessions[0]!.profileId, sessionId: sessions[0]!.sessionId }
       return true
     }, 60000)
-    assert.ok(attachedSession)
-    const tabId = await tabIdFor(browser, files.url('page-a.html'))
-    const attached = await attachTab(browser, attachedSession, tabId)
-    assert.equal(attached.ok, true, attached.error ?? 'attach failed')
-    await settle()
+  } catch (cause) {
+    // Say what the process did instead, then stop it and its provider so the suite can go on.
+    run.kill('SIGKILL')
+    await exited
+    await mock.close()
+    throw new Error(`${(cause as Error).message}; dsh exited ${run.exitCode}; provider saw ${JSON.stringify(mock.requests.map((request) => request.behavior))}; stdout:\n${stdout.slice(-2000)}\nstderr:\n${stderr.slice(-4000)}`)
+  }
+  assert.ok(session)
+  const tabId = await tabIdFor(browser, files.url('page-a.html'))
+  const attached = await attachTab(browser, session, tabId)
+  assert.equal(attached.ok, true, attached.error ?? 'attach failed')
+  await settle()
 
-    const status = await exited
-    transcript = { status, stdout, stderr }
-    assert.equal(status, 0, `dsh exited ${status}:\n${stdout}\n${stderr}`)
+  const status = await exited
+  await mock.close()
+  assert.equal(killed, false, `dsh did not finish the turn within two minutes; provider saw ${JSON.stringify(mock.requests.map((request) => request.behavior))}; stderr:\n${stderr.slice(-4000)}`)
+  return { mock, session, status, stdout, stderr }
+}
 
-    // The provider saw the three scripted requests, in order.
-    const behaviors = mock.requests.map((request) => request.behavior)
-    assert.deepEqual(behaviors, ['rate_limit', 'tool_call_success', 'success'], `unexpected provider traffic: ${JSON.stringify(behaviors)}`)
+after(async () => {
+  if (broker) { broker.kill('SIGKILL'); broker = null }
+  await browser?.context.close()
+  await files?.close()
+  for (const dir of [home, unpacked, profile]) if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+})
 
-    // Every agent request offered the twenty browser tools beside DeepSeek Harness's own.
-    for (const [index, request] of mock.requests.entries()) {
+/** A wire message of the chat-completions request, as the adapter serialises it. */
+interface WireMessage {
+  role: string
+  content?: string | { type: string, text?: string, image_url?: { url: string } }[]
+  tool_calls?: { function?: { name?: string } }[]
+}
+
+/**
+ * The final request of a turn is the whole conversation: system prompt, task, the model's tool
+ * call, the tool result, and — for a model that accepts images — the user message the adapter
+ * appends to carry a tool result's images.
+ * @param turn - a finished turn.
+ * @param toolName - the tool the scripted model called.
+ * @returns the conversation, checked to hold that tool call and exactly one tool result.
+ */
+function finalConversation(turn: Turn, toolName: string): { messages: WireMessage[], toolResult: string } {
+  const behaviors = turn.mock.requests.map((request) => request.behavior)
+  assert.deepEqual(behaviors, ['rate_limit', 'tool_call_success', 'success'], `unexpected provider traffic: ${JSON.stringify(behaviors)}`)
+  const messages = (turn.mock.requests[2]!.body as { messages: WireMessage[] }).messages
+  const call = messages.find((message) => message.role === 'assistant' && Array.isArray(message.tool_calls))
+  assert.ok(call, `no assistant tool call in the final request; roles were ${JSON.stringify(messages.map((message) => message.role))}`)
+  assert.equal(call.tool_calls?.[0]?.function?.name, toolName)
+  const toolMessages = messages.filter((message) => message.role === 'tool')
+  assert.equal(toolMessages.length, 1, `expected one tool result in the final request; messages were ${JSON.stringify(messages).slice(0, 6000)}`)
+  const content = toolMessages[0]!.content
+  return { messages, toolResult: typeof content === 'string' ? content : JSON.stringify(content) }
+}
+
+/**
+ * The durable copy DeepSeek Harness's attachment service keeps under the harness home
+ * (`attachments/v1/objects/<xx>/<sha256>`), found by the digest prefix the wire text names.
+ * @param digestPrefix - leading hex of the attachment's sha256.
+ * @returns the stored bytes.
+ */
+function storedAttachment(digestPrefix: string): Buffer {
+  const objects = join(home, 'attachments', 'v1', 'objects')
+  assert.ok(existsSync(objects), `no attachment objects under ${home}`)
+  const matches = readdirSync(objects, { recursive: true }).map(String).filter((entry) => entry.split(/[\\/]/).pop()!.startsWith(digestPrefix))
+  assert.equal(matches.length, 1, `expected one stored object starting ${digestPrefix}; found ${JSON.stringify(matches)}`)
+  return readFileSync(join(objects, matches[0]!))
+}
+
+describe('a live DeepSeek Harness turn through the released pair', () => {
+  it('announces its session, is given a tab, reads it through browser_snapshot, and answers', { timeout: 180000, skip: skipReason }, async () => {
+    const turn = await runTurn('browser_snapshot', FINAL)
+    assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
+
+    // Every agent request offered the browser tools beside DeepSeek Harness's own.
+    for (const [index, request] of turn.mock.requests.entries()) {
       const tools = (request.body as { tools?: { function?: { name?: string } }[] }).tools ?? []
       const browserTools = tools.map((tool) => tool.function?.name ?? '').filter((name) => name.startsWith('browser_'))
-      assert.equal(browserTools.length, 20, `request ${index} offered ${browserTools.length} browser tools`)
+      assert.equal(browserTools.length, 21, `request ${index} offered ${browserTools.length} browser tools`)
     }
 
-    // The third request carries the whole conversation, including the tool result DeepSeek Harness
-    // produced by executing browser_snapshot through the installed plugin: the fixture page, its
-    // controls, and the password masked before it left the page.
-    const last = mock.requests[2]!.body as { messages: { role: string, content?: unknown, tool_calls?: { function?: { name?: string } }[] }[] }
-    const call = last.messages.find((message) => message.role === 'assistant' && Array.isArray(message.tool_calls))
-    assert.ok(call, `no assistant tool call in the final request; messages were ${JSON.stringify(last.messages.map((m) => m.role))}`)
-    assert.equal(call.tool_calls?.[0]?.function?.name, 'browser_snapshot')
-    const toolMessages = last.messages.filter((message) => message.role === 'tool')
-    assert.equal(toolMessages.length, 1, `expected one tool result in the final request; messages were ${JSON.stringify(last.messages).slice(0, 6000)}`)
-    const toolResult = typeof toolMessages[0]!.content === 'string' ? toolMessages[0]!.content : JSON.stringify(toolMessages[0]!.content)
+    // The third request carries the tool result DeepSeek Harness produced by executing
+    // browser_snapshot through the installed plugin: the fixture page, its controls, and the
+    // password masked before it left the page.
+    const { toolResult } = finalConversation(turn, 'browser_snapshot')
     assert.match(toolResult, /Connector fixture A/, 'the tool result must carry the attached page')
     assert.match(toolResult, /button: Click me/, 'the tool result must list the page’s controls')
     assert.match(toolResult, /textbox: Password/, 'the masked field is listed')
     assert.doesNotMatch(toolResult, /hunter2/, 'the password must have been masked before it reached the model')
     assert.doesNotMatch(toolResult, /no attached browser tab/, 'the tool must have reached the attached tab, not refused')
 
-    // And the final message the process printed is the one the provider returned.
-    assert.match(stdout, /Connector fixture A/, `stdout was:\n${stdout}`)
-    process.stdout.write(`dsh stdout: ${stdout.trim().slice(0, 300)}\n`)
+    // The session the panel showed is the one the tool ran for, and the final message the process
+    // printed is the one the provider returned.
+    assert.match(turn.session.sessionId, /^[A-Za-z0-9_.:@-]{1,160}$/)
+    assert.match(turn.stdout, /Connector fixture A/, `stdout was:\n${turn.stdout}`)
+    process.stdout.write(`dsh stdout: ${turn.stdout.trim().slice(0, 300)}\n`)
   })
 
-  it('carried a real session identity into the tool call: the session the panel showed is the one the tool ran for', { skip: skipReason }, () => {
-    assert.ok(attachedSession, 'the previous case must have attached a session')
-    assert.match(attachedSession.sessionId, /^[A-Za-z0-9_.:@-]{1,160}$/)
-    // The second request is the one whose answer was the tool call; the tool ran for the session
-    // the process announced, or the result above could not have carried the page.
-    assert.equal(mock.requests[1]!.behavior, 'tool_call_success')
-    assert.equal(transcript.status, 0)
+  it('sends a browser_screenshot to a model that accepts images as the pixels themselves', { timeout: 180000, skip: skipReason }, async () => {
+    // deepseek-v4-flash-vision-exp is catalogued with image input at every tested DeepSeek
+    // Harness version. The adapter tries the provider's files API first; the mock has none, so
+    // the image travels inline, base64 in a data URL — which is what the assertion decodes.
+    const turn = await runTurn('browser_screenshot', 'I can see the page.', 'deepseek-v4-flash-vision-exp')
+    assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
+    const { messages, toolResult } = finalConversation(turn, 'browser_screenshot')
+    assert.doesNotMatch(toolResult, /no attachment service|No screenshot was taken|could not capture|image omitted/, 'the capture must have been taken, saved and sent')
+    assert.match(toolResult, /Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), 1280×720 pixels/, 'the text beside the image names the page')
+    assert.match(toolResult, /sha256:[0-9a-f]{8}/, 'DeepSeek Harness names the durable attachment in the text it sends')
+
+    // The adapter carries a tool result's images in a user message right after the tool message.
+    const toolIndex = messages.findIndex((message) => message.role === 'tool')
+    const carrier = messages[toolIndex + 1]
+    assert.ok(carrier && carrier.role === 'user' && Array.isArray(carrier.content), `no image carrier after the tool result; messages were ${JSON.stringify(messages.slice(toolIndex)).slice(0, 1500)}`)
+    const images = carrier.content.filter((part) => part.type === 'image_url')
+    assert.equal(images.length, 1, `expected one image part; the carrier was ${JSON.stringify(carrier).slice(0, 1500)}`)
+    const url = images[0]!.image_url?.url ?? ''
+    assert.match(url, /^data:image\/jpeg;base64,/, `the image is inline JPEG; the URL began ${url.slice(0, 40)}`)
+    // DeepSeek Harness fits the request copy to its per-request pixel budget (1280×720 came
+    // through as 1066×600 here) and says so in the handle text; the bytes on the wire must be
+    // exactly the preview it announced, and the same picture.
+    const bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')
+    const preview = /request preview (\d+)x(\d+)px/.exec(toolResult)
+    assert.ok(preview, `no request preview in the handle text: ${toolResult}`)
+    const wireSize = jpegDimensions(bytes)
+    assert.deepEqual(wireSize, { width: Number(preview[1]), height: Number(preview[2]) }, 'the pixels the provider received are the preview the text announced')
+    assert.ok(Math.abs(wireSize.width / wireSize.height - 1280 / 720) < 0.01, `the preview keeps the capture's proportions; got ${wireSize.width}×${wireSize.height}`)
+
+    // And the durable copy under the harness home is that same JPEG.
+    const digest = /sha256:([0-9a-f]{8})/.exec(toolResult)![1]!
+    const stored = storedAttachment(digest)
+    assert.deepEqual(jpegDimensions(stored), { width: 1280, height: 720 })
+    assert.match(turn.stdout, /I can see the page/, `stdout was:\n${turn.stdout}`)
+  })
+
+  it('sends a browser_screenshot to a text-only model as DeepSeek Harness’s placeholder naming the saved image', { timeout: 180000, skip: skipReason }, async () => {
+    // deepseek-v4-flash is catalogued text-only at every tested version. The capture is still
+    // taken and saved; DeepSeek Harness substitutes its placeholder for the pixels and keeps the
+    // connector's caption, so the model learns what was captured and where it is kept.
+    const turn = await runTurn('browser_screenshot', 'I cannot see, but I know a screenshot was taken.', 'deepseek-v4-flash')
+    assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
+    const { messages, toolResult } = finalConversation(turn, 'browser_screenshot')
+    assert.match(toolResult, /^\[image omitted because this model accepts text only; attachment sha256:[0-9a-f]{8}\]Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), 1280×720 pixels\.$/)
+    assert.equal(messages.filter((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url')).length, 0, 'no pixels reach a text-only model')
+    const digest = /sha256:([0-9a-f]{8})/.exec(toolResult)![1]!
+    assert.deepEqual(jpegDimensions(storedAttachment(digest)), { width: 1280, height: 720 }, 'the image was saved even though this model cannot see it')
+    assert.match(turn.stdout, /I cannot see/, `stdout was:\n${turn.stdout}`)
   })
 })
