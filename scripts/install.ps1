@@ -146,10 +146,14 @@ Stop-Broker
 
 # Start the broker detached so it outlives this shell and any one dsh process. Its stderr is kept:
 # a broker that dies before it can write its own log must leave the reason where the message points.
+# Both streams go to files: redirecting one makes Start-Process hand the child the other stream's
+# handle, and a caller capturing this script's output would then wait on the broker for as long as
+# it runs (seen on the Windows lane, 2026-09-11).
 $stderrLog = Join-Path $connectorDir "broker.stderr.log"
+$stdoutLog = Join-Path $connectorDir "broker.stdout.log"
 $proc = Start-Process -FilePath "node" `
   -ArgumentList @("`"$broker`"", "--home", "`"$homeDir`"", "--port", "$brokerPort") `
-  -WindowStyle Hidden -PassThru -RedirectStandardError $stderrLog
+  -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 Set-Content -Path $pidFile -Value $proc.Id
 Start-Sleep -Seconds 1
 if ($proc.HasExited) { Fail "the broker did not stay running; see $(Join-Path $connectorDir 'broker.log') and $stderrLog" }
