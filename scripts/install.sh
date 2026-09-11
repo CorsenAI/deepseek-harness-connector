@@ -103,15 +103,17 @@ if [ -f "$HOME_DIR/connector/broker.pid" ]; then
   rm -f "$HOME_DIR/connector/broker.pid"
 fi
 
-# Its stderr is kept: a broker that dies before it can write its own log — a missing module, a
-# refused port — must leave the reason where the message below points.
+# Prove the broker can load before starting it detached: --pairing-code runs the same entry, its
+# modules and its credentials, in this shell, so a broker that cannot even start says why here.
+CODE="$(node "$BROKER" --pairing-code --home "$HOME_DIR" 2>&1)" || fail "the broker cannot start: $CODE"
+
+# Its stderr is kept too: a broker that dies later, before it can write its own log, must leave
+# the reason where the message below points.
 nohup node "$BROKER" --home "$HOME_DIR" --port "$BROKER_PORT" >/dev/null 2>>"$HOME_DIR/connector/broker.stderr.log" &
 echo $! > "$HOME_DIR/connector/broker.pid"
 sleep 1
 kill -0 "$(cat "$HOME_DIR/connector/broker.pid")" 2>/dev/null \
   || fail "the broker did not stay running; see $HOME_DIR/connector/broker.log and broker.stderr.log"
-
-CODE="$(node "$BROKER" --pairing-code --home "$HOME_DIR")"
 
 say ""
 say "Installed. The connector broker is running on 127.0.0.1:$BROKER_PORT."

@@ -144,21 +144,21 @@ if (-not (Test-Path $broker)) { Fail "the connector was installed but its broker
 New-Item -ItemType Directory -Force -Path $connectorDir | Out-Null
 Stop-Broker
 
-# Start the broker detached so it outlives this shell and any one dsh process. Its stderr is kept:
-# a broker that dies before it can write its own log must leave the reason where the message points.
-# Both streams go to files: redirecting one makes Start-Process hand the child the other stream's
-# handle, and a caller capturing this script's output would then wait on the broker for as long as
-# it runs (seen on the Windows lane, 2026-09-11).
-$stderrLog = Join-Path $connectorDir "broker.stderr.log"
-$stdoutLog = Join-Path $connectorDir "broker.stdout.log"
+# Prove the broker can load before starting it detached: --pairing-code runs the same entry, its
+# modules and its credentials, in this console, so a broker that cannot even start says why here
+# rather than dying silently in a hidden window. (A detached process cannot have its streams
+# captured: Start-Process with a redirect hands the child every inheritable handle, and a caller
+# capturing this script's output then waits on the broker for as long as it runs.)
+$code = node "$broker" --pairing-code --home "$homeDir" 2>&1
+if ($LASTEXITCODE -ne 0) { Fail "the broker cannot start: $code" }
+
+# Start the broker detached so it outlives this shell and any one dsh process.
 $proc = Start-Process -FilePath "node" `
   -ArgumentList @("`"$broker`"", "--home", "`"$homeDir`"", "--port", "$brokerPort") `
-  -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+  -WindowStyle Hidden -PassThru
 Set-Content -Path $pidFile -Value $proc.Id
 Start-Sleep -Seconds 1
-if ($proc.HasExited) { Fail "the broker did not stay running; see $(Join-Path $connectorDir 'broker.log') and $stderrLog" }
-
-$code = node "$broker" --pairing-code --home "$homeDir"
+if ($proc.HasExited) { Fail "the broker did not stay running; see $(Join-Path $connectorDir 'broker.log')" }
 
 Write-Host ""
 Write-Host "Installed. The connector broker is running on 127.0.0.1:$brokerPort."
