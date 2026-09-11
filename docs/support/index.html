@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support — DeepSeek Harness Connector</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0 auto; max-width: 760px; padding: 32px 20px 64px; font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif; color: #1c2330; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #e7ebf3; background: #0e1016; } a { color: #58a6ff; } code { background: #161a23; } th, td { border-color: #242a36; } }
+  h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 19px; margin: 30px 0 8px; }
+  .meta { color: #7a8497; font-size: 14px; margin: 0 0 24px; }
+  code { font: 14px ui-monospace, Menlo, Consolas, monospace; background: #f1f3f8; padding: 1px 5px; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; } th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid #e3e6ee; }
+</style>
+</head>
+<body>
+<h1>Support</h1>
+<p class="meta">DeepSeek Harness Connector — an unofficial community project by Corsen AI</p>
+
+<h2>Where to ask</h2>
+<p>Bugs, questions and feature requests: <a href="https://github.com/CorsenAI/deepseek-harness-connector/issues">the repository's issue tracker</a>. Email: <a href="mailto:hello@corsen.ai">hello@corsen.ai</a>. Please never paste a pairing code, a page's content, or anything from a signed-in site into a report.</p>
+
+<h2>What the panel is telling you</h2>
+<table>
+  <tr><th>Panel says</th><th>What it means</th><th>What to do</th></tr>
+  <tr><td>Welcome</td><td>This Chrome has never been paired</td><td>Run the installer, type the pairing code it prints</td></tr>
+  <tr><td>Connecting… / Not connected</td><td>The companion on <code>127.0.0.1</code> is not reachable</td><td>Start it: <code>npx dsh-connector-broker</code>, or re-run the installer; check the port in Settings</td></tr>
+  <tr><td>No sessions</td><td>No DeepSeek Harness process with the connector installed is running</td><td>Start <code>dsh</code> in a profile where the connector was added</td></tr>
+  <tr><td>No tabs attached</td><td>The session is selected but controls nothing</td><td>Open the tab you want it to work in and press <strong>Attach this tab</strong></td></tr>
+  <tr><td>Update required</td><td>The extension and the companion speak different protocol versions</td><td>Update whichever is older; the two are released together at the same version</td></tr>
+</table>
+
+<h2>Prerequisites</h2>
+<p>DeepSeek Harness (<code>dsh</code>) 0.1.2-rc.1 or newer, Node.js 22.19 or newer, and pnpm on <code>PATH</code> — <code>dsh plugin</code> forwards to pnpm and DeepSeek Harness does not install it (<code>npm install -g pnpm</code>). The installers check for all three before creating anything.</p>
+
+<h2>Known limitations</h2>
+<ul>
+  <li>Pages Chrome protects (<code>chrome://</code>, the Web Store) cannot be attached; the panel marks them as restricted.</li>
+  <li>Sites that require trusted input events may not respond to the connector's synthetic clicks; the failure is reported as a failed action, never as a success.</li>
+  <li>On Windows, <code>dsh plugin add</code> splits a path containing a space (an upstream limitation); the installer works around it with the file's short name.</li>
+  <li>Secret masking is by the signals a page gives; a field with no telling type, attribute, name or label cannot be told from an ordinary one.</li>
+</ul>
+
+<p><a href="../">Home</a> · <a href="../privacy/">Privacy</a> · <a href="https://github.com/CorsenAI/deepseek-harness-connector">Source</a></p>
+</body>
+</html>

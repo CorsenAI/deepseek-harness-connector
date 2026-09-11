@@ -106,7 +106,10 @@ owner authorization**. This repository prepares everything for them and performs
 
 ## After publishing
 
-- The GitHub release carries the ZIP, the tarball, `SHA256SUMS`, and `release-manifest.json`.
+- The GitHub release carries the ZIP, the tarball, `SHA256SUMS`, and `release-manifest.json`; its
+  text is `docs/RELEASE-NOTES-<version>.md`.
+- GitHub Pages serves `docs/` (`index.html`, `privacy/`, `support/`); the privacy page there is
+  byte-identical to `store/privacy.html`, which the verifier checks.
 - `docs/COMPATIBILITY.md` is updated if the supported range changed.
 
 ## Rolling back

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy — DeepSeek Harness Connector by Corsen AI</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0 auto; max-width: 760px; padding: 32px 20px 64px; font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif; color: #1c2330; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #e7ebf3; background: #0e1016; } a { color: #58a6ff; } code { background: #161a23; } th, td { border-color: #242a36; } }
+  h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 19px; margin: 32px 0 8px; } h3 { font-size: 16px; margin: 20px 0 6px; }
+  .meta { color: #7a8497; font-size: 14px; margin: 0 0 24px; }
+  code { font: 14px ui-monospace, Menlo, Consolas, monospace; background: #f1f3f8; padding: 1px 5px; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; } th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid #e3e6ee; }
+  blockquote { margin: 0; padding: 12px 16px; border-left: 3px solid #58a6ff; background: rgba(88, 166, 255, 0.08); }
+</style>
+</head>
+<body>
+<h1>Privacy policy</h1>
+<p class="meta">DeepSeek Harness Connector — an unofficial community project by Corsen AI · Last updated 11 September 2026</p>
+
+<p>This page says what the extension collects, where it goes, and what it does not do — in the terms
+the Chrome Web Store data-use form asks for, and accurately. It is the same text as
+<code>store/DATA-DISCLOSURES.md</code> in the source repository, which is the version of record.</p>
+
+<h2>What the extension handles</h2>
+
+<h3>Page content from attached tabs</h3>
+<p><strong>What.</strong> The visible text, title, URL, and a list of interactive controls of a tab
+<strong>the user explicitly attached</strong> to a DeepSeek Harness session — but only when that
+session requests it.</p>
+<p><strong>Where it goes.</strong> From the tab, to the extension, to the local connector on
+<code>127.0.0.1</code>, to the user's own locally running DeepSeek Harness. From there it goes
+wherever the user's DeepSeek Harness is configured to send it — typically a model provider's API.
+<strong>That is the user's DeepSeek Harness doing that, under the user's configuration.</strong>
+The extension adds no destination of its own.</p>
+<p><strong>Before it leaves the page</strong>, the following are masked and never transmitted:</p>
+<ul>
+  <li>password fields;</li>
+  <li>hidden form fields;</li>
+  <li>one-time codes and fields the page declares as such;</li>
+  <li>payment card numbers, security codes, expiry dates, and cardholder names, as declared by the page;</li>
+  <li>fields whose name or label indicates a password, secret, token, API key, one-time code, card number, IBAN, SSN, or PIN;</li>
+  <li>credential-bearing parameters in URLs, and any username or password embedded in a URL.</li>
+</ul>
+<p><strong>Honest limitation.</strong> Detection is by the signals a page gives. A field with no
+telling type, attribute, name, or label cannot be distinguished from an ordinary one. We do not
+claim complete secret detection.</p>
+
+<h3>Tab titles and URLs</h3>
+<p><strong>What.</strong> The title and URL of open tabs, shown to the user in the panel so they
+can choose what to attach; and of attached tabs, so the user always sees what a session controls.</p>
+<p><strong>Where it goes.</strong> To the panel. For attached tabs only, the current URL (scrubbed
+of credentials) is also reported to the user's own DeepSeek Harness when it asks.</p>
+
+<h3>Settings and identity</h3>
+<p><strong>What.</strong> A random identifier for this installation, the connector's local
+address, the pairing code the user typed, and which session is attached to which tabs.</p>
+<p><strong>Where it goes.</strong> Nowhere. Stored in this browser profile's extension storage. The
+pairing code is used to compute a proof for the local connector and is never itself transmitted.</p>
+
+<h2>What the extension does not do</h2>
+<ul>
+  <li><strong>Does not send anything to Corsen AI.</strong> No analytics, telemetry, crash reports, usage statistics, or any other transmission. There is no Corsen server in the loop.</li>
+  <li><strong>Does not read cookies.</strong> The <code>cookies</code> permission is not requested.</li>
+  <li><strong>Does not read history, bookmarks, passwords, or other extensions' data.</strong></li>
+  <li><strong>Does not read page content from, or perform any action in, a tab the user has not attached.</strong> When the user opens the tab chooser in the panel, the extension reads the titles and URLs of the open tabs locally, so the user can decide which tab to attach; that list stays in the panel and is not sent to DeepSeek Harness.</li>
+  <li><strong>Does not act without a DeepSeek Harness request.</strong> The extension is passive until a session the user attached asks for something.</li>
+  <li><strong>Does not sell, share, or transfer data to third parties.</strong> It has no third parties.</li>
+  <li><strong>Does not use data for advertising, profiling, or creditworthiness.</strong></li>
+  <li><strong>Does not persist page content.</strong> Snapshots are produced on request and forwarded; the extension keeps none.</li>
+</ul>
+
+<h2>Chrome Web Store data-use form answers</h2>
+<table>
+  <tr><th>Question</th><th>Answer</th></tr>
+  <tr><td>Does the extension collect or use personal or sensitive user data?</td><td>Yes: website content and web history (URLs) of tabs the user explicitly attaches, forwarded to the user's own local software.</td></tr>
+  <tr><td>Is it sold to third parties?</td><td>No.</td></tr>
+  <tr><td>Is it used for purposes unrelated to the single purpose?</td><td>No.</td></tr>
+  <tr><td>Is it used to determine creditworthiness or for lending?</td><td>No.</td></tr>
+  <tr><td>Is it transferred to third parties?</td><td>Not by the extension. The user's own DeepSeek Harness may send it to the model provider the user configured.</td></tr>
+</table>
+
+<h2>In one paragraph</h2>
+<blockquote>This extension lets your own locally running DeepSeek Harness read and act in the browser
+tabs you explicitly choose. Page content from those tabs goes to your DeepSeek Harness on your
+computer, and from there to whatever model provider you configured it to use. Passwords, one-time
+codes, and payment fields are masked before anything leaves the page. The extension never reads
+your cookies, never reads or acts in a tab you did not attach (it lists open tabs' titles and URLs
+only when you open the tab chooser, so you can pick one), and never sends anything to Corsen AI.</blockquote>
+
+<h2>Contact and source</h2>
+<p>Source, tests, and evidence: <a href="https://github.com/CorsenAI/deepseek-harness-connector">github.com/CorsenAI/deepseek-harness-connector</a>.
+Questions and reports: the repository's issue tracker, or <a href="mailto:hello@corsen.ai">hello@corsen.ai</a>.</p>
+<p class="meta">Unofficial community project by Corsen AI. Not affiliated with, endorsed by, or certified by DeepSeek.</p>
+</body>
+</html>

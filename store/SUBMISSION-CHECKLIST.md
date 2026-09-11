@@ -23,7 +23,7 @@ explicit owner authorization** — this repository prepares it and does not perf
 | Single purpose statement | done | `store/SINGLE-PURPOSE.md` |
 | Permission justification per permission | done | `store/PERMISSION-JUSTIFICATIONS.md` |
 | Data-use disclosures | done | `store/DATA-DISCLOSURES.md` |
-| Privacy policy page | done, **not yet hosted** | `store/privacy.html` — its content is `DATA-DISCLOSURES.md`; the listing needs it at a public URL (the repository's GitHub Pages, once the remote exists) |
+| Privacy policy page | done, **not yet hosted** | `docs/privacy/index.html` (byte-identical to `store/privacy.html`, checked by the verifier), served at `https://corsenai.github.io/deepseek-harness-connector/privacy/` once the owner enables GitHub Pages from `/docs` on `main`; `docs/index.html` and `docs/support/` come with it |
 | Reviewer instructions | done | `store/REVIEWER-INSTRUCTIONS.md` |
 | Review stand-in script | done | `scripts/review-session.mjs` |
 
@@ -40,8 +40,8 @@ explicit owner authorization** — this repository prepares it and does not perf
 | Small promo tile 440×280 | done | `store/promo-small-440x280.png` |
 | Marquee promo tile 1400×560 (optional) | done | `store/promo-marquee-1400x560.png` |
 | Store icon 128×128 | done | `extension/assets/icon-128.png` |
-| Support URL | GitHub issues | needs the remote |
-| Homepage URL | GitHub repository | needs the remote |
+| Support URL | `https://corsenai.github.io/deepseek-harness-connector/support/` (and GitHub issues) | needs the remote and Pages |
+| Homepage URL | `https://corsenai.github.io/deepseek-harness-connector/` | needs the remote and Pages |
 
 ## Before pressing submit
 

@@ -100,6 +100,14 @@ check(same(shippedManifest.permissions ?? [], FROZEN_PERMISSIONS), "permissions 
 check(same(shippedManifest.host_permissions ?? [], FROZEN_HOSTS), "host permission is exactly <all_urls> (ADR 0009)", JSON.stringify(shippedManifest.host_permissions));
 check(shippedManifest.optional_permissions === undefined && shippedManifest.optional_host_permissions === undefined, "no optional permissions (ADR 0009)");
 
+// The privacy policy the Store links to is the page GitHub Pages serves from docs/; the Store
+// material carries the same file. They must not drift: the listing's URL points at one, the
+// reviewer reads the other.
+check(
+  readFileSync(join(root, "store", "privacy.html")).equals(readFileSync(join(root, "docs", "privacy", "index.html"))),
+  "the hosted privacy page is byte-identical to store/privacy.html",
+);
+
 // Reproducibility: rebuild in-process and compare bytes.
 const rebuilt = buildExtensionZip().zip;
 check(sha256(rebuilt) === sha256(zip), "rebuilding produces identical bytes", `${sha256(rebuilt)} vs ${sha256(zip)}`);

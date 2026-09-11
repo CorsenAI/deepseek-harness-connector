@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek Harness Connector — by Corsen AI</title>
+<meta name="description" content="Let an exact DeepSeek Harness session operate the Chrome tabs you choose, in your own signed-in Chrome. Local, open source, unofficial.">
+<meta name="theme-color" content="#0e1016">
+<link rel="canonical" href="https://corsenai.github.io/deepseek-harness-connector/">
+<style>
+  :root { color-scheme: light dark; --accent: #58a6ff; }
+  body { margin: 0 auto; max-width: 820px; padding: 40px 20px 64px; font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif; color: #1c2330; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #e7ebf3; background: #0e1016; } a { color: var(--accent); } pre, code { background: #161a23; } th, td { border-color: #242a36; } }
+  h1 { font-size: 30px; margin: 0 0 6px; } h2 { font-size: 20px; margin: 36px 0 10px; }
+  .lead { font-size: 18px; color: #5b6578; margin: 0 0 22px; }
+  pre { padding: 12px 14px; border-radius: 10px; background: #f1f3f8; overflow-x: auto; font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  code { font: 14px ui-monospace, Menlo, Consolas, monospace; background: #f1f3f8; padding: 1px 5px; border-radius: 4px; }
+  pre code { padding: 0; background: none; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; } th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid #e3e6ee; }
+  .note { padding: 12px 16px; border-left: 3px solid var(--accent); background: rgba(88, 166, 255, 0.08); }
+  img { max-width: 100%; border-radius: 10px; }
+  nav a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<h1>DeepSeek Harness Connector</h1>
+<p class="lead">Your DeepSeek Harness session, in the Chrome tabs you choose — and in no other.</p>
+<nav><a href="#install">Install</a><a href="#what">What it does</a><a href="privacy/">Privacy</a><a href="support/">Support</a><a href="https://github.com/CorsenAI/deepseek-harness-connector">Source</a></nav>
+
+<p class="note">An unofficial community project by <a href="https://corsen.ai/">Corsen AI</a>. Not affiliated with, endorsed by, or certified by DeepSeek.</p>
+
+<img src="https://raw.githubusercontent.com/CorsenAI/deepseek-harness-connector/main/store/screenshots/03-ready.png" alt="The connector's side panel beside an attached tab: session, Chrome profile, attached tabs" width="1280" height="800">
+
+<h2 id="what">What it does</h2>
+<p>A Chrome extension and a small local companion let one exact <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> session — running on your own computer — read and act in the browser tabs you explicitly attach to it, inside the Chrome profile you are already signed in to. No hidden automation browser, no guessing which tab belongs to which task. The panel always shows the route in plain words: <em>DeepSeek session → Chrome profile → attached tabs</em>.</p>
+<p>It never reads or acts in a tab you did not attach, never reads your cookies, history or saved passwords, masks passwords, one-time codes and payment fields inside the page before anything leaves the browser, and sends nothing to Corsen AI: the extension talks only to the companion on <code>127.0.0.1</code>.</p>
+
+<h2 id="install">Install</h2>
+<p>Requires DeepSeek Harness (<code>dsh</code>), Node.js 22.19 or newer, and pnpm on <code>PATH</code> (<code>dsh plugin</code> forwards to it: <code>npm install -g pnpm</code>).</p>
+<pre><code>dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+npx dsh-connector-broker --pairing-code</code></pre>
+<p>Then install the Chrome extension from the Chrome Web Store, open its side panel, type the pairing code once, pick your session, and press <strong>Attach this tab</strong>. Installers that also start the companion and check the setup are in the repository (<code>scripts/install.sh</code>, <code>scripts/Install Connector.cmd</code>).</p>
+
+<h2>Compatibility</h2>
+<table>
+  <tr><th>Connector</th><th>DeepSeek Harness</th><th>Chrome</th></tr>
+  <tr><td>0.1.0</td><td><code>@deepseek-ai/dsh</code> 0.1.2-rc.1 through 0.1.5-rc.2 (tested); newer releases below 0.2.0 load with a notice; 0.2.0 and above are refused until tested</td><td>120 or newer, on Windows, macOS and Linux</td></tr>
+</table>
+<p>The extension and the companion are released together at the same version; a mismatch is shown as a clear "update required" message, never undefined behaviour.</p>
+
+<h2>Evidence</h2>
+<p>Every claim above is a test in the repository: routing and isolation, transport security, redaction, honest reporting, a page built to give a model instructions, an attached tab that changes site mid-task, recovery from a killed worker, broker or Chrome, the released pair installed into a real <code>dsh</code>, and one live turn of a real <code>dsh</code> process. The <a href="https://github.com/CorsenAI/deepseek-harness-connector/blob/main/docs/TEST-MATRIX.md">test matrix</a> and the <a href="https://github.com/CorsenAI/deepseek-harness-connector/blob/main/docs/TEST-EVIDENCE.md">evidence</a> say what was run, where, and what is not proven.</p>
+
+<p><a href="privacy/">Privacy policy</a> · <a href="support/">Support</a> · <a href="https://github.com/CorsenAI/deepseek-harness-connector">Source (MIT)</a></p>
+</body>
+</html>
