@@ -106,9 +106,10 @@ export interface FixtureServer {
 
 /**
  * Serve `tests/fixtures/` over loopback, because an extension cannot act on `file:` pages.
+ * @param generated - documents built by the caller, served under the given names beside the files.
  * @returns the running server.
  */
-export async function serveFixtures(): Promise<FixtureServer> {
+export async function serveFixtures(generated: Readonly<Record<string, string>> = {}): Promise<FixtureServer> {
   const files: Server = createServer((request, response) => {
     const name = String(request.url ?? '/').replace(/^\/+/, '').split('?')[0] ?? ''
     if (!/^[a-z0-9-]+\.html$/.test(name)) {
@@ -117,7 +118,7 @@ export async function serveFixtures(): Promise<FixtureServer> {
       return
     }
     try {
-      const body = readFileSync(join(FIXTURE_DIR, name), 'utf8')
+      const body = generated[name] ?? readFileSync(join(FIXTURE_DIR, name), 'utf8')
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       response.end(body)
     } catch {

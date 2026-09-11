@@ -106,7 +106,7 @@ async function freePort(): Promise<number> {
  * Run a command to completion.
  * @param command - the executable.
  * @param args - its arguments.
- * @returns exit status and captured output.
+ * @returns exit status and captured output; a status of null means the process could not start.
  */
 function run(command: string, args: string[]): { status: number | null, out: string } {
   const result = spawnSync(command, args, {
@@ -115,7 +115,24 @@ function run(command: string, args: string[]): { status: number | null, out: str
     cwd: home,
     maxBuffer: 16 * 1024 * 1024,
   })
-  return { status: result.status, out: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+  const failure = result.error ? `\n[spawn] ${result.error.message}` : ''
+  return { status: result.status, out: `${result.stdout ?? ''}${result.stderr ?? ''}${failure}` }
+}
+
+/**
+ * Run the real `dsh` CLI.
+ *
+ * The bin directory holds a POSIX shim and a `.cmd` shim; neither is what a user's shell runs on
+ * every platform, and the `.cmd` one needs a shell that would re-split a spaced path (the upstream
+ * limitation recorded in docs/COMPATIBILITY.md). The CLI's own entry file, run by this Node, is the
+ * same program on every platform with no shell in between.
+ * @param args - CLI arguments.
+ * @returns exit status and captured output.
+ */
+function dsh(args: string[]): { status: number | null, out: string } {
+  const entry = join(dshBin as string, '..', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  if (existsSync(entry)) return run(process.execPath, [entry, ...args])
+  return run(join(dshBin as string, process.platform === 'win32' ? 'dsh.cmd' : 'dsh'), args)
 }
 
 /** @returns the HTTP status the broker port answers with, or 0 when nothing answers. */
@@ -208,11 +225,10 @@ after(async () => {
 
 describe('the released pair, installed as a user installs it', () => {
   it('installs the tarball into a real DeepSeek Harness with dsh plugin add, and the profile composes it', { timeout: 180000, skip: skipReason }, () => {
-    const dsh = join(dshBin as string, 'dsh')
-    const version = run(dsh, ['--version'])
+    const version = dsh(['--version'])
     process.stdout.write(`dsh --version: ${version.out.trim()}\n`)
 
-    const added = run(dsh, ['plugin', '--profile', 'headless', 'add', tarball])
+    const added = dsh(['plugin', '--profile', 'headless', 'add', tarball])
     assert.equal(added.status, 0, `dsh plugin add failed:\n${added.out}`)
     const profileManifest = JSON.parse(readFileSync(join(home, 'profiles', 'headless', 'package.json'), 'utf8')) as {
       dsh: { profile: { bundles: string[] } }
@@ -221,17 +237,16 @@ describe('the released pair, installed as a user installs it', () => {
     assert.ok(existsSync(join(installed, 'lib', 'broker-main.js')), 'the installed package must carry the broker')
     assert.ok(existsSync(join(installed, 'lib', 'plugin.js')), 'the installed package must carry the plugin')
 
-    const dumped = run(dsh, ['--profile', 'headless', '--dump-config'])
+    const dumped = dsh(['--profile', 'headless', '--dump-config'])
     assert.equal(dumped.status, 0, `--dump-config failed:\n${dumped.out}`)
     assert.match(dumped.out, /corsen-browser-connector/, 'the composed tree must contain the plugin')
   })
 
   it('applies the installed plugin in a real DeepSeek Harness process; the only failure left is the missing API key', { timeout: 180000, skip: skipReason }, () => {
-    const dsh = join(dshBin as string, 'dsh')
     // A real profile launch: DeepSeek Harness composes the tree, applies every plugin, and stops at
     // the model call because this environment holds no API key. Anything the connector says here
     // is a failure of the connector.
-    const launched = run(dsh, ['--profile', 'headless', 'say hi'])
+    const launched = dsh(['--profile', 'headless', 'say hi'])
     assert.doesNotMatch(launched.out, /corsen-browser-connector/, `the connector complained while applying:\n${launched.out}`)
     assert.match(launched.out, /MISSING_CREDENTIAL|API key/, `expected only the missing credential; got:\n${launched.out}`)
     // The launch is also what makes the installation resolvable: DeepSeek Harness links its own

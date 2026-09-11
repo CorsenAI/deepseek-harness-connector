@@ -40,6 +40,8 @@ export interface HarnessOptions {
   userDataDir?: string
   /** Persist broker ownership in this file, so {@link Harness.restartBroker} restores it from disk. */
   stateFile?: string
+  /** Documents built by the caller, served by the fixture server under the given names. */
+  generatedPages?: Readonly<Record<string, string>>
 }
 
 /** Everything one end-to-end test needs. Fields that a restart replaces are not readonly. */
@@ -95,7 +97,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const store = (): StateStore => (stateFile === null ? sharedMemory : fileStateStore(stateFile))
   let broker = await startBroker({ secret, version: VERSION, port: 0, store: store() })
 
-  const files = await serveFixtures()
+  const files = await serveFixtures(options.generatedPages ?? {})
 
   const launched = await launchBrowser(userDataDir, extensionDir)
   const agents: AgentClient[] = []
