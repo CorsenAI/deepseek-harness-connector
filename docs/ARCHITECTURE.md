@@ -60,6 +60,15 @@ It exists because **DeepSeek Harness runs each profile as its own OS process**, 
 identity, and tab ownership have to outlive it, and only one process can hold a port
 ([ADR 0001](adr/0001-broker-architecture.md)).
 
+It is started by the installers, and by any plugin instance that finds nothing listening
+(`broker-launch.ts`): the same entry, detached, standard error kept in
+`connector/broker.stderr.log`, under a launch lock (`connector/broker.launch.json`, fifteen
+seconds) so several DeepSeek Harness processes starting together start one broker between them.
+The broker records its own process id in `connector/broker.pid` once it listens, which is what the
+installers stop before starting a newer one. The package's `bin`, `dsh-connector-broker`, is the
+same entry; `dsh plugin --profile <name> exec dsh-connector-broker --pairing-code` runs it in the
+profile where DeepSeek Harness installed it.
+
 Routing logic is separated from sockets behind a `PeerSocket` interface, so every ownership and
 authorization rule is unit-testable without a network. `broker-server.ts` owns sockets and nothing
 else.

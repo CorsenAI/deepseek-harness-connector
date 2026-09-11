@@ -62,3 +62,25 @@ dependency, and `dsh plugin ... add` as the whole installation (ADR 0002).
 - Session discovery is push-based: plugins announce their live sessions from `agent/created` and
   `agent/disposed`, so the panel lists sessions without querying any DSH HTTP API and works for
   headless, ACP, and SDK profiles, not only `dsh web`.
+
+## Amendment, 2026-09-12 — the plugin starts a missing broker
+
+The consequence above — "a start/health/stop story and a cross-process launch lock" — was carried
+by the installers alone until now; a user who installed with `dsh plugin add` and started
+DeepSeek Harness reached no browser until they started the broker by hand, and the documented
+command for that (`npx dsh-connector-broker`) did not work outside the profile directory. Hermes
+Connector's plugin starts its broker itself, which is the experience this project set out to
+match.
+
+**Decision.** A plugin instance whose broker connection never opens (the client's `unreachable`
+status, distinct from a connection that opened and closed) starts the broker: the same entry the
+installers run, detached, standard error kept, under a launch lock in the connector directory
+that a concurrent instance respects for fifteen seconds. The broker refuses a held port, so a
+duplicate that slips past the lock exits with a logged reason and nothing else. The broker writes
+its own pid file once it listens; the installers keep reading it. `autoStartBroker: false` in the
+profile configuration turns the start off. The package's `bin` carries the shebang it lacked, so
+`dsh plugin --profile <name> exec dsh-connector-broker --pairing-code` prints the code from
+anywhere. Proven by `companion/tests/broker-launch.test.ts` (the lock, the command line, a real
+detached start) and by `tests/e2e/released-pair.test.ts` (a real `dsh` process starting the
+packaged broker and exiting; the broker still there).
+

@@ -16,10 +16,13 @@ dsh plugin --profile web add @corsen-ai/dsh-browser-connector
 That is the whole installation. The package declares `dsh.bundle.patch`, so DeepSeek Harness adds it
 to the profile's layer stack itself; there is no YAML to edit.
 
-Then start the broker and read the pairing code:
+Then start DeepSeek Harness. The plugin starts the local broker by itself when nothing is
+listening on the port (a detached process that outlives the session; `autoStartBroker: false` in
+the profile's `cordis.yml` turns that off), and the pairing code is printed by the package's own
+command, which `dsh plugin` runs for you in the profile directory:
 
 ```bash
-npx dsh-connector-broker --pairing-code
+dsh plugin --profile web exec dsh-connector-broker --pairing-code
 ```
 
 Install the Chrome extension, type that code into its panel once, and attach a tab to a session.

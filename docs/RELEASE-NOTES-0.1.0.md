@@ -27,12 +27,14 @@ Requires DeepSeek Harness (`dsh`), Node.js 22.19 or newer, and pnpm on `PATH`.
 
 ```bash
 dsh plugin --profile web add @corsen-ai/dsh-browser-connector
-npx dsh-connector-broker --pairing-code
+dsh plugin --profile web exec dsh-connector-broker --pairing-code
 ```
 
-Install the extension from the Chrome Web Store, open its side panel, type the pairing code once,
-pick your session, and press **Attach this tab**. Installers that also start the broker and check
-the setup: `scripts/install.sh` (macOS, Linux) and `scripts/Install Connector.cmd` (Windows).
+Start DeepSeek Harness — the connector starts its local broker by itself when nothing is listening
+— install the extension from the Chrome Web Store, open its side panel, type the pairing code once,
+pick your session, and press **Attach this tab**. The panel's setup card says whether the
+connector is reachable and shows the commands for your system. Installers that do all of this and
+print the code: `scripts/install.sh` (macOS, Linux) and `scripts/Install Connector.cmd` (Windows).
 
 ### Compatibility
 

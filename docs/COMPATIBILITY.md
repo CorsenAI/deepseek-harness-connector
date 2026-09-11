@@ -90,6 +90,14 @@ changed it is the one that can break us, whatever the CLI reports.
 If the version cannot be read at all, the connector refuses to load (with
 `requireSupportedHarness: true`, the default) rather than guessing.
 
+## `dsh plugin` forwarding to pnpm
+
+`dsh plugin --profile <name> <args…>` runs pnpm with those arguments in the profile directory.
+The connector relies on two of pnpm's commands: `add` (the installation, ADR 0002) and `exec`,
+which runs the package's own `dsh-connector-broker` command with the profile's `node_modules/.bin`
+on the path — the documented way to print the pairing code. Both are verified at every tested
+version by `tests/e2e/released-pair.test.ts`. DeepSeek Harness does not install pnpm.
+
 ## The attachment service
 
 `browser_screenshot` hands its image to DeepSeek Harness's attachment service

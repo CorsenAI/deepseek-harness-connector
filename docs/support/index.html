@@ -24,8 +24,8 @@
 <h2>What the panel is telling you</h2>
 <table>
   <tr><th>Panel says</th><th>What it means</th><th>What to do</th></tr>
-  <tr><td>Welcome</td><td>This Chrome has never been paired</td><td>Run the installer, type the pairing code it prints</td></tr>
-  <tr><td>Connecting… / Not connected</td><td>The companion on <code>127.0.0.1</code> is not reachable</td><td>Start it: <code>npx dsh-connector-broker</code>, or re-run the installer; check the port in Settings</td></tr>
+  <tr><td>Welcome</td><td>This Chrome has never been paired</td><td>Follow the setup card: it says whether the companion is reachable and shows the commands; then type the pairing code (<code>dsh plugin --profile web exec dsh-connector-broker --pairing-code</code>, or the installer's output)</td></tr>
+  <tr><td>Connecting… / Not connected</td><td>The companion on <code>127.0.0.1</code> is not reachable</td><td>Start DeepSeek Harness (the connector starts the broker itself), or <code>dsh plugin --profile web exec dsh-connector-broker</code>, or re-run the installer; check the port in Settings</td></tr>
   <tr><td>No sessions</td><td>No DeepSeek Harness process with the connector installed is running</td><td>Start <code>dsh</code> in a profile where the connector was added</td></tr>
   <tr><td>No tabs attached</td><td>The session is selected but controls nothing</td><td>Open the tab you want it to work in and press <strong>Attach this tab</strong></td></tr>
   <tr><td>Update required</td><td>The extension and the companion speak different protocol versions</td><td>Update whichever is older; the two are released together at the same version</td></tr>
