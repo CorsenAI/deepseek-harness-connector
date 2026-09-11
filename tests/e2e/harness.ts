@@ -279,12 +279,14 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
  * The panel's form is exercised separately; driving storage here keeps the routing tests about
  * routing instead of about typing into a form.
  * @param harness - the running harness.
+ * @param brokerUrl - where the extension should connect; defaults to the harness's own broker. A
+ * test that records the wire gives the address of its relay instead.
  * @returns settlement once the extension has authenticated.
  */
-export async function pairExtension(harness: Harness): Promise<void> {
-  await harness.panel.evaluate(async ([brokerUrl, code]: string[]) => {
-    await chrome.runtime.sendMessage({ type: 'connector/settings', settings: { brokerUrl, pairingCode: code } })
-  }, [`ws://127.0.0.1:${harness.broker.port}`, pairingCode(harness.secret)])
+export async function pairExtension(harness: Harness, brokerUrl = `ws://127.0.0.1:${harness.broker.port}`): Promise<void> {
+  await harness.panel.evaluate(async ([url, code]: string[]) => {
+    await chrome.runtime.sendMessage({ type: 'connector/settings', settings: { brokerUrl: url, pairingCode: code } })
+  }, [brokerUrl, pairingCode(harness.secret)])
 
   await waitFor('the extension to authenticate with the broker', () => extensionConnected(harness))
 }
