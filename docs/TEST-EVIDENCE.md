@@ -937,7 +937,7 @@ event, and the broker lets a `TAB_GONE` answer through unless another browser ha
 `companion/tests/broker.test.ts` gained both cases; the recovery suite's mid-action closure now
 expects the one outcome. Five further slice runs on the Mac: 5/5.
 
-### Full runs at the end (Linux, commit `39c3f2c`)
+### Full runs at the end (Linux, commit `cda0ae7`, the code the artifacts are built from)
 
 ```
 npm run typecheck        # companion, extension, and the test tree — clean
@@ -946,12 +946,21 @@ npm run test:page        # 14/14, the shipped module in Chrome for Testing 153, 
 xvfb-run --auto-servernum -- npm run test:e2e   # 62/62 headed
 DSH_E2E_HEADLESS=1 npm run test:e2e             # 62/62 new headless
 node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # gate passed
+npm audit (root and companion)                  # 0 vulnerabilities, after ws moved to ^8.21.3
 ```
 
 Installer acceptance on Linux (`tests/installer/linux-installer.sh`): 19/19 against each of
-`dsh` 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, from `dist/`.
+`dsh` 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, from `dist/`. Gate AQ from `dist/` against
+0.1.5-rc.1 and 0.1.5-rc.2: 5/5 each. (A first attempt handed the installer an out-of-range port;
+the broker refused it in one sentence and the reason was in `broker.stderr.log`, which is what
+that file is for.)
 
-### macOS lane (commit `39c3f2c`)
+Earlier the same day, at `39c3f2c` and at `a756bbd`, the same commands gave the same counts; the
+commits between changed the Windows installer's launch, the `ws` range, CI, the reviewer path,
+one test helper, and — last — the guard that reads a refused injection as a navigation only when
+Chrome's message says the document went away.
+
+### macOS lane (commit `cda0ae7`)
 
 ```
 typecheck, build: clean          unit: 246/246, 0 skipped        page: 14/14
@@ -964,9 +973,22 @@ Arrival rehearsal: `install.sh` carrying the quarantine attribute Chrome writes
 installing and starting the broker; the attribute was unchanged afterwards. Package on macOS:
 hashes identical to Linux (below).
 
-### Windows lane (commit `5d67c8d`)
+### Windows lane (commit `cda0ae7`)
 
-WINDOWS_LANE_RESULTS
+```
+typecheck, build: clean          unit: 246 tests, 245 pass, 1 skipped (the POSIX permission case)
+page: 14/14                      e2e new headless: 62/62 (released pair against dsh 0.1.5-rc.1)
+installer: 17/17 from a spaced path, against dsh 0.1.5-rc.1, with pnpm installed lane-locally
+```
+
+The machine had never seen the project and had no pnpm. With `dsh` on PATH and no pnpm,
+`install.ps1` stopped with the pnpm sentence and created nothing under `DSH_HOME` (0 entries).
+Arrival rehearsal with `Zone.Identifier` (ZoneId 3, as a browser download carries it) on both
+installer files, and the lane's own `Bypass` cleared from the environment so the child saw the
+user's real policy, `RemoteSigned`: (a) `powershell -File install.ps1` was refused — "cannot be
+loaded. The file … is not digitally signed" — with 0 entries created; (b) `Install Connector.cmd`
+run from a console installed and left the broker running; (c) after `Unblock-File` on that one
+file, the direct run installed. Package on Windows: hashes identical to Linux and macOS.
 
 ### Performance (gate AH)
 
@@ -982,13 +1004,18 @@ from the real extension on the Linux machine; `store/ASSETS.md` records how and 
 script refused to write screenshot 4 unless the demo page's password was absent from the snapshot
 it shows; it was.
 
-### Release artifacts, from clean commit `FINAL_COMMIT`
+### Release artifacts, from clean commit `cda0ae7`
 
 ```
 node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist
 ```
 
-FINAL_ARTIFACTS
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `f7573fce6cf65ede7707ef2453e9d859edce2f82a10fc1b479876adf46f61a9e` | 51079 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `614e26cc6f3758f38a30c74bdd8c62245ea5ceaa1abed9282df253eb74826fd2` | 59888 |
+
+`release-manifest.json`: `"commit": "cda0ae7b7f8354079ff5f4b80471f1e53bad6bd6"`, `"cleanTree": true`; 582 verifier checks.
 
 Built on Ubuntu, macOS and Windows from the same commit, the ZIP and the tarball came out
 byte-identical on all three.
