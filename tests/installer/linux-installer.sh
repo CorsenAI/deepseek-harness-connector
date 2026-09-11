@@ -31,6 +31,8 @@ expect() { # expect <label> <actual> <expected>
 bundles() { grep -oE "@(deepseek-ai|corsen-ai)/[a-z-]+" "$MANIFEST" 2>/dev/null | sort -u | tr "\n" " " | sed "s/ $//"; }
 alive() { kill -0 "$1" 2>/dev/null && echo true || echo false; }
 exists() { [ -e "$1" ] && echo true || echo false; }
+# GNU stat and BSD stat spell the octal mode differently; macOS ships the BSD one.
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null; }
 
 echo "node: $(node --version)   dsh: $(command -v dsh || echo MISSING)   home: $DSH_HOME"
 echo "tarball: $TGZ"
@@ -43,8 +45,8 @@ sed "s/^/  | /" "$DSH_HOME/install-1.log" | tail -12
 expect "connector bundle registered" "$(bundles | grep -c corsen-ai)" "1"
 expect "broker.pid written" "$(exists "$DSH_HOME/connector/broker.pid")" "true"
 expect "credentials.json written" "$(exists "$DSH_HOME/connector/credentials.json")" "true"
-expect "credentials mode 600" "$(stat -c %a "$DSH_HOME/connector/credentials.json" 2>/dev/null)" "600"
-expect "connector dir mode 700" "$(stat -c %a "$DSH_HOME/connector" 2>/dev/null)" "700"
+expect "credentials mode 600" "$(mode "$DSH_HOME/connector/credentials.json")" "600"
+expect "connector dir mode 700" "$(mode "$DSH_HOME/connector")" "700"
 PID1="$(cat "$DSH_HOME/connector/broker.pid" 2>/dev/null)"
 expect "broker process alive" "$(alive "$PID1")" "true"
 expect "broker answers 426 on loopback" "$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$DSH_CONNECTOR_PORT/")" "426"

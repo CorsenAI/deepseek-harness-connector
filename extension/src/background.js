@@ -448,13 +448,20 @@ async function onAction(frame) {
   }
 
   let injected;
+  // A tab closed while its script runs does not always fail the injection promptly: Chrome can
+  // leave executeScript pending for seconds on a tab that is being torn down. The removal event
+  // is the authoritative, immediate signal, so the action settles on whichever comes first.
+  const removal = watchTabRemoval(targetTabId);
   try {
-    injected = await chrome.scripting.executeScript({
-      target: { tabId: targetTabId },
-      func: runPageAction,
-      args: [kind, args, redactionConfig()],
-      world: "ISOLATED",
-    });
+    injected = await Promise.race([
+      chrome.scripting.executeScript({
+        target: { tabId: targetTabId },
+        func: runPageAction,
+        args: [kind, args, redactionConfig()],
+        world: "ISOLATED",
+      }),
+      removal.removed,
+    ]);
   } catch (cause) {
     // Injection failure is reported as a failure. Reporting success here would tell the model an
     // action happened that Chrome refused to perform. A tab that vanished while the action ran is
@@ -468,6 +475,8 @@ async function onAction(frame) {
     }
     refuse(ERROR.ACTION_FAILED, `Chrome refused to run the action in that tab: ${String(cause?.message ?? cause)}`);
     return;
+  } finally {
+    removal.dispose();
   }
 
   const outcome = injected?.[0]?.result;
@@ -482,6 +491,28 @@ async function onAction(frame) {
       String(outcome.error?.message ?? "the page could not perform the action"),
     );
   }
+}
+
+/**
+ * Watch one tab for removal while an action is in flight.
+ *
+ * `removed` only ever rejects, so racing it against an injection turns a tab closed mid-action
+ * into an immediate failure that the catch then confirms with `tabs.get`. `dispose` must be
+ * called when the action settles, so a long-lived tab does not accumulate one listener per action.
+ * @param {number} tabId The tab to watch.
+ * @returns {{removed: Promise<never>, dispose: () => void}} The watch.
+ */
+function watchTabRemoval(tabId) {
+  /** @type {(removedId: number) => void} */
+  let onRemoved = () => {};
+  /** @type {Promise<never>} */
+  const removed = new Promise((_resolve, reject) => {
+    onRemoved = (removedId) => {
+      if (removedId === tabId) reject(new Error("the attached tab was closed while the action was running"));
+    };
+    chrome.tabs.onRemoved.addListener(onRemoved);
+  });
+  return { removed, dispose: () => { chrome.tabs.onRemoved.removeListener(onRemoved); } };
 }
 
 /**

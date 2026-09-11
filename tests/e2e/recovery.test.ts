@@ -351,10 +351,11 @@ describe('recovery', () => {
     await settle(300)
     await page.close()
 
-    // Two honest outcomes race: the injection fails and the extension reports TAB_GONE, or Chrome's
-    // tab-removed event releases the binding first and the broker reports the binding as changed.
-    // Either way the model is told the action did not complete as asked.
-    assertFailedWith(await inflight, [ERROR.TAB_GONE, ERROR.BINDING_CHANGED], 'an action whose tab was closed')
+    // One outcome, not two: the extension races the injection against Chrome's tab-removed event
+    // and answers TAB_GONE at once, and the broker lets that answer through even though releasing
+    // the tab has already changed the binding. "The binding changed" was the honest-but-vaguer
+    // answer a slower injection used to produce; the model is now told the actual reason.
+    assertFailedWith(await inflight, [ERROR.TAB_GONE], 'an action whose tab was closed')
     await waitFor('the binding to forget the closed tab', async () => (
       !(await panelState()).bindings.some((binding) => binding.tabIds.includes(tabId))
     ), 10000)

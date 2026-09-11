@@ -465,6 +465,39 @@ describe('post-action revalidation', () => {
     assert.equal(errorCode(responseFor(agent, 'req-1')), ERROR.BINDING_CHANGED)
   })
 
+  it('lets the browser say the tab is gone, even though closing it already changed the binding', () => {
+    // The browser learns the tab was closed, drops it from the binding, and answers TAB_GONE. The
+    // binding change alone would make the answer unauthorized; the answer holds no page content and
+    // the better reason, so it is the one the model gets.
+    const browser = browserWith('browser-1', WEB_A, [11])
+    const agent = agentWith('agent-1', 'web', ['session-a'])
+    request(agent, 'req-1', WEB_A)
+    const dispatched = browser.last(SERVER.ACTION)
+
+    broker.handle(browser, CLIENT.BINDING_REMOVE, { type: CLIENT.BINDING_REMOVE, ...WEB_A })
+    broker.handle(browser, CLIENT.ACTION_RESULT, {
+      type: CLIENT.ACTION_RESULT, id: dispatched?.['id'], ok: false,
+      error: { code: ERROR.TAB_GONE, message: 'the attached tab was closed while the action was running' },
+    })
+
+    assert.equal(errorCode(responseFor(agent, 'req-1')), ERROR.TAB_GONE)
+  })
+
+  it('still drops a TAB_GONE answer from a browser that lost the scope to another browser', () => {
+    const first = browserWith('browser-1', WEB_A, [11])
+    const agent = agentWith('agent-1', 'web', ['session-a'])
+    request(agent, 'req-1', WEB_A)
+    const dispatched = first.last(SERVER.ACTION)
+
+    browserWith('browser-2', WEB_A, [77])
+    broker.handle(first, CLIENT.ACTION_RESULT, {
+      type: CLIENT.ACTION_RESULT, id: dispatched?.['id'], ok: false,
+      error: { code: ERROR.TAB_GONE, message: 'the attached tab no longer exists' },
+    })
+
+    assert.equal(errorCode(responseFor(agent, 'req-1')), ERROR.BINDING_CHANGED)
+  })
+
   it('ignores a result from a browser that never held the request', () => {
     const owner = browserWith('browser-1', WEB_A, [11])
     const other = connect(ROLE.BROWSER, 'browser-2', { capabilities: Object.values(ACTION) })

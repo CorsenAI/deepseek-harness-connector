@@ -553,7 +553,17 @@ export class Broker {
     const mutatesBinding = BINDING_MUTATING_ACTIONS.has(action.kind)
     const authorized = mutatesBinding ? (stillOwned || closedLastTab) : sameTarget
 
-    if (!authorized) {
+    // A browser that reports the target tab gone has, by the time its answer arrives, usually
+    // already dropped that tab from the binding — which is exactly what makes the answer
+    // unauthorized under the rule above. That answer carries no page content, only the reason, and
+    // the reason is the more useful one: "the tab is gone" tells a model what to do, "the binding
+    // changed" does not. It passes through as long as no other browser has taken the scope since;
+    // the browser that was dispatched to is already the only one this method listens to.
+    const reportsTabGone = frame['ok'] !== true
+      && (frame['error'] as Record<string, unknown> | null)?.['code'] === ERROR.TAB_GONE
+      && (owner === undefined || owner === peer.browserId)
+
+    if (!authorized && !reportsTabGone) {
       this.#settle(id, {
         code: ERROR.BINDING_CHANGED,
         message: 'the tab binding changed while the browser action was running',
