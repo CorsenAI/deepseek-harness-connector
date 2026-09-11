@@ -90,6 +90,16 @@ check(!(shippedManifest.permissions ?? []).includes("debugger"), "no debugger pe
 check(!(shippedManifest.permissions ?? []).includes("webRequest"), "no webRequest permission");
 check(shippedManifest.version === manifest.version, "packaged manifest version matches source");
 
+// The permission set is frozen for the Store submission (ADR 0009): every Store document describes
+// exactly this set, so a manifest that differs — anything added, anything made optional — is not
+// the extension those documents describe.
+const FROZEN_PERMISSIONS = ["storage", "sidePanel", "scripting", "alarms"];
+const FROZEN_HOSTS = ["<all_urls>"];
+const same = (left, right) => JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+check(same(shippedManifest.permissions ?? [], FROZEN_PERMISSIONS), "permissions are exactly the frozen set (ADR 0009)", JSON.stringify(shippedManifest.permissions));
+check(same(shippedManifest.host_permissions ?? [], FROZEN_HOSTS), "host permission is exactly <all_urls> (ADR 0009)", JSON.stringify(shippedManifest.host_permissions));
+check(shippedManifest.optional_permissions === undefined && shippedManifest.optional_host_permissions === undefined, "no optional permissions (ADR 0009)");
+
 // Reproducibility: rebuild in-process and compare bytes.
 const rebuilt = buildExtensionZip().zip;
 check(sha256(rebuilt) === sha256(zip), "rebuilding produces identical bytes", `${sha256(rebuilt)} vs ${sha256(zip)}`);
