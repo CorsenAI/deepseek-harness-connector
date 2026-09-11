@@ -12,7 +12,8 @@ sessions, so those sessions can perform requested browser actions in those tabs.
 
 The user runs DeepSeek Harness on their own computer. This extension lets them pick one of its
 sessions and attach one or more of their open tabs to it. That session — and only that session —
-can then read those tabs as structured text and click or type in them. Nothing else is in scope.
+can then read those tabs as structured text or as a screenshot, and click, type, and navigate in
+them. Nothing else is in scope.
 
 ## What is deliberately outside the purpose
 
@@ -35,5 +36,7 @@ can then read those tabs as structured text and click or type in them. Nothing e
 - The extension has no tool a model could call that attaches a tab, changes a setting, or moves
   ownership. Those actions exist only in the panel, driven by the user.
 - A session with no attached tab receives a refusal. There is no fallback to the active tab.
-- The five capabilities the extension implements — snapshot, read text, current URL, click, type —
-  are the complete list, declared in its handshake, and the local connector refuses anything else.
+- The twenty-one capabilities the extension implements — reading a tab as text or as a
+  screenshot, finding text, clicking, typing, pressing keys, scrolling, hovering, choosing options,
+  dragging, navigating, and opening, listing, switching and closing the session's own tabs — are
+  the complete list, declared in its handshake, and the local connector refuses anything else.

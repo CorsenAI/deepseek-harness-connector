@@ -33,14 +33,16 @@ tested release).
 
 ## What it does, and what it never does
 
-The plugin registers twenty browser tools, one per protocol action: reading a page, acting in it,
-navigating, and managing the session's own tabs. Routing is by `(profileId, sessionId)`, so two
-sessions running at once never reach each other's tabs.
+The plugin registers twenty-one browser tools, one per protocol action: reading a page as text or
+as a screenshot, acting in it, navigating, and managing the session's own tabs. Routing is by
+`(profileId, sessionId)`, so two sessions running at once never reach each other's tabs.
 
 It never reads cookies, never uses `chrome.debugger`, and sends nothing to Corsen AI. Passwords,
 one-time codes, payment fields and hidden values are masked inside the page, before anything leaves
-the browser. An action whose outcome is unknown is reported as unknown, and nothing is ever replayed
-on reconnect.
+the browser; a screenshot is pixels and is not masked, which its tool description says. Screenshots
+go through DeepSeek Harness's own attachment service (`@deepseek-ai/dsh-attachment`, an optional
+peer: without it the tool refuses and says to use the text snapshot). An action whose outcome is
+unknown is reported as unknown, and nothing is ever replayed on reconnect.
 
 ## Documentation and source
 

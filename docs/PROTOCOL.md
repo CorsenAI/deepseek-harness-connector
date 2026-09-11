@@ -95,16 +95,34 @@ it.
 
 `snapshot`, `read_text`, `current_url`, `click`, `type`, `key`, `scroll`, `hover`, `select_option`,
 `drag`, `find`, `navigate`, `back`, `forward`, `reload`, `wait`, `open_tab`, `list_tabs`,
-`switch_tab`, `close_tab`.
+`switch_tab`, `close_tab`, `screenshot`.
 
-The protocol defines all twenty. **The extension declares in its handshake only the kinds it
+The protocol defines all twenty-one. **The extension declares in its handshake only the kinds it
 implements**, and the broker refuses the rest with `UNSUPPORTED_ACTION`. At version 0.1.0 the
-implemented set is `snapshot`, `read_text`, `current_url`, `click`, `type`
-(`extension/src/page-actions.js`, `IMPLEMENTED_ACTIONS`). Declaring a kind that is not implemented
-would turn a clear refusal into a silent failure, so the two are one list.
+extension implements all of them (`extension/src/page-actions.js`, `IMPLEMENTED_ACTIONS`, the
+page actions and the tab actions as one list). Declaring a kind that is not implemented would turn
+a clear refusal into a silent failure, so the declaration is derived from that list.
 
 `open_tab`, `switch_tab`, and `close_tab` change which tabs a scope owns and are authorized
 differently when their result returns (see Routing).
+
+### `screenshot`
+
+Takes no arguments and answers with the scope's active tab as pixels:
+
+```
+{ url, title, mediaType: "image/jpeg", dataUrl, width, height, foregrounded: boolean }
+```
+
+`dataUrl` is a `data:image/jpeg;base64,` URL of the visible viewport, JPEG quality 75, at most
+6 MiB; `width` and `height` are read from the bytes, not assumed. Chrome captures only the tab that
+is at the front of its window, so a covered tab is brought to the front first and the answer says
+so with `foregrounded: true` — the user's window changed, and the result does not hide it. The
+capture is of the rendered page: **the masking that applies to text results does not apply to
+pixels** (a value the page shows on screen is in the picture), which is why the companion's tool
+description steers a model to `snapshot` for reading and keeps `screenshot` for layout. `url` is
+scrubbed like every other result's. A page Chrome protects is refused with `RESTRICTED_PAGE`, a
+tab that no longer exists with `TAB_GONE`, and a capture Chrome declines with `ACTION_FAILED`.
 
 ### Element references
 

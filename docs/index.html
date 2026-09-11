@@ -33,7 +33,7 @@
 
 <h2 id="what">What it does</h2>
 <p>A Chrome extension and a small local companion let one exact <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> session — running on your own computer — read and act in the browser tabs you explicitly attach to it, inside the Chrome profile you are already signed in to. No hidden automation browser, no guessing which tab belongs to which task. The panel always shows the route in plain words: <em>DeepSeek session → Chrome profile → attached tabs</em>.</p>
-<p>It never reads or acts in a tab you did not attach, never reads your cookies, history or saved passwords, masks passwords, one-time codes and payment fields inside the page before anything leaves the browser, and sends nothing to Corsen AI: the extension talks only to the companion on <code>127.0.0.1</code>.</p>
+<p>It never reads or acts in a tab you did not attach, never reads your cookies, history or saved passwords, masks passwords, one-time codes and payment fields inside the page before anything leaves the browser (a screenshot, taken only when the session asks for one, shows the page as you see it), and sends nothing to Corsen AI: the extension talks only to the companion on <code>127.0.0.1</code>.</p>
 
 <h2 id="install">Install</h2>
 <p>Requires DeepSeek Harness (<code>dsh</code>), Node.js 22.19 or newer, and pnpm on <code>PATH</code> (<code>dsh plugin</code> forwards to it: <code>npm install -g pnpm</code>).</p>

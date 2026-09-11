@@ -33,12 +33,12 @@ HOW IT WORKS
 The panel always shows the route in plain words: DeepSeek session → Chrome profile → attached tabs. If an action cannot run, the panel says why — not paired, no session selected, no tab attached, connector unreachable, versions mismatched.
 
 WHAT A SESSION CAN DO IN ITS TABS
-Read the visible page as structured text, find text, click, type, press keys, scroll, hover, choose options, drag, navigate, go back and forward, reload, and open, list, switch, and close tabs — only within the tabs you attached to that session.
+Read the visible page as structured text, take a screenshot of it, find text, click, type, press keys, scroll, hover, choose options, drag, navigate, go back and forward, reload, and open, list, switch, and close tabs — only within the tabs you attached to that session.
 
 WHAT IT NEVER DOES
 • Never reads or acts in a tab you did not attach. Attachment is explicit and per session.
 • Never reads your cookies, history, bookmarks, or saved passwords — those permissions are not requested.
-• Passwords, one-time codes, payment fields, and hidden values are masked inside the page, before anything leaves the browser.
+• Passwords, one-time codes, payment fields, and hidden values are masked inside the page, before anything leaves the browser. A screenshot, taken only when the session asks for one, shows the page as you see it: pixels are not masked.
 • Never sends anything to Corsen AI. The extension talks only to the connector on your computer (127.0.0.1); page content goes from there to your own DeepSeek Harness, and onward only to the model provider you configured it with.
 • Never claims an action happened when the browser refused it. A closed tab, an invalid form, a page that navigated away — each is reported for what it was.
 
@@ -85,12 +85,12 @@ COMMENT ÇA MARCHE
 Le panneau montre toujours le chemin en toutes lettres : session DeepSeek → profil Chrome → onglets attachés. Si une action ne peut pas s'exécuter, le panneau dit pourquoi — non appairé, aucune session choisie, aucun onglet attaché, connecteur injoignable, versions incompatibles.
 
 CE QU'UNE SESSION PEUT FAIRE DANS SES ONGLETS
-Lire la page visible sous forme de texte structuré, chercher du texte, cliquer, saisir, appuyer sur des touches, faire défiler, survoler, choisir des options, glisser-déposer, naviguer, revenir en arrière et en avant, recharger, et ouvrir, lister, changer et fermer des onglets — uniquement parmi les onglets que vous avez attachés à cette session.
+Lire la page visible sous forme de texte structuré, en prendre une capture d'écran, chercher du texte, cliquer, saisir, appuyer sur des touches, faire défiler, survoler, choisir des options, glisser-déposer, naviguer, revenir en arrière et en avant, recharger, et ouvrir, lister, changer et fermer des onglets — uniquement parmi les onglets que vous avez attachés à cette session.
 
 CE QU'ELLE NE FAIT JAMAIS
 • Ne lit ni n'agit jamais dans un onglet que vous n'avez pas attaché. L'attachement est explicite et par session.
 • Ne lit jamais vos cookies, votre historique, vos favoris ni vos mots de passe enregistrés — ces permissions ne sont pas demandées.
-• Les mots de passe, codes à usage unique, champs de paiement et valeurs cachées sont masqués dans la page, avant que quoi que ce soit ne quitte le navigateur.
+• Les mots de passe, codes à usage unique, champs de paiement et valeurs cachées sont masqués dans la page, avant que quoi que ce soit ne quitte le navigateur. Une capture d'écran, prise uniquement quand la session la demande, montre la page telle que vous la voyez : les pixels ne sont pas masqués.
 • N'envoie jamais rien à Corsen AI. L'extension ne parle qu'au connecteur sur votre ordinateur (127.0.0.1) ; le contenu des pages va de là à votre propre DeepSeek Harness, puis uniquement au fournisseur de modèle que vous y avez configuré.
 • Ne prétend jamais qu'une action a eu lieu quand le navigateur l'a refusée. Un onglet fermé, un formulaire invalide, une page qui a navigué ailleurs — chaque cas est rapporté pour ce qu'il est.
 

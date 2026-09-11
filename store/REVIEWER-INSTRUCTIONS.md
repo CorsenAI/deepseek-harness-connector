@@ -60,6 +60,9 @@ This announces a session called "Review session" to the connector. In the side p
 5. Type `click e1@1` (or any reference from the snapshot). The click happens in the tab. If the
    click follows a link to another site, the answer says `navigated: true` with the new address
    and the session keeps the tab: attachment is to the tab, not to the site.
+6. Type `screenshot`. The stand-in writes `screenshot.jpg` — the attached tab's viewport, as a
+   model would receive it. If another tab was covering the attached one, the attached tab is
+   brought to the front first and the answer says `foregrounded: true`.
 
 ## What to check
 
@@ -67,16 +70,17 @@ This announces a session called "Review session" to the connector. In the side p
   stand-in cannot reach it. (The panel's tab chooser does list open tabs' titles and URLs so you can
   pick one to attach; that list is local to the panel.)
 - **Passwords are masked.** Navigate the attached tab to any login page and take a snapshot: the
-  password field is listed but its value is `••••••••`.
+  password field is listed but its value is `••••••••`. A screenshot is pixels and is not masked;
+  it shows the page as the user sees it, and is taken only when the session asks.
 - **No external traffic.** DevTools network tab on the service worker shows only
   `ws://127.0.0.1:...`.
 - **No cookies permission.** `chrome://extensions` → Details → Permissions.
 - **Everything the extension runs is in the package.** `src/` is plain, unminified JavaScript.
   There is no remote script, no `eval`, and no interpreter.
 
-## The twenty things the extension can do
+## The twenty-one things the extension can do
 
-Reading: `snapshot`, `read_text`, `current_url`, `find`, `wait`. Acting: `click`, `type`, `key`,
+Reading: `snapshot`, `screenshot`, `read_text`, `current_url`, `find`, `wait`. Acting: `click`, `type`, `key`,
 `scroll`, `hover`, `select_option`, `drag`. Navigation: `navigate`, `back`, `forward`, `reload`.
 The session's own tabs: `list_tabs`, `open_tab`, `switch_tab`, `close_tab`. That is the complete
 list, declared in `extension/src/page-actions.js` (`IMPLEMENTED_ACTIONS`) and mirrored one-to-one

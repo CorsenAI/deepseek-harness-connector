@@ -90,6 +90,21 @@ changed it is the one that can break us, whatever the CLI reports.
 If the version cannot be read at all, the connector refuses to load (with
 `requireSupportedHarness: true`, the default) rather than guessing.
 
+## The attachment service
+
+`browser_screenshot` hands its image to DeepSeek Harness's attachment service
+(`ctx.attachments.saveImage`, package `@deepseek-ai/dsh-attachment`, provided by every tested
+profile through `dsh-attachment-local`) and returns the `ImageAttachmentRef` it gets back inside an
+image content block; the harness stores the durable copy, fits a request copy to the model's pixel
+budget, and sends it only to a model whose catalogue entry accepts images (`inputModalities`), a
+text-only model receiving a placeholder that names the file. The peer is declared optional: the
+service is looked up at call time (`ctx.get('attachments', false)`), and when a profile has none the
+tool refuses before capturing anything and says to use `browser_snapshot`. Verified against all
+three tested versions by `tests/e2e/live-turn.test.ts` (gate AS). Models catalogued with image
+input across the three: `deepseek-v4-flash-vision-exp` (all), `deepseek-flash` (0.1.5-rc.1 and
+0.1.5-rc.2, where it is the headless profile's default); `deepseek-v4-flash`, the default at
+0.1.2-rc.1, is text-only.
+
 ## Source baseline
 
 Development was done against `deepseek-ai/deepseek-harness` at

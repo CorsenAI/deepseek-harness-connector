@@ -108,6 +108,23 @@ re-announces its old bindings.*
 - **Residual risk.** A field with no telling signal is not detectable. Stated in
   `store/DATA-DISCLOSURES.md`.
 
+### T8a — Disclosure through a screenshot
+
+*A value the page displays on screen reaches the model as pixels.*
+
+- **What is true.** `browser_screenshot` captures the rendered viewport of the attached tab, and
+  the text redaction does not apply to pixels: a code the page shows, an account number, a message
+  are in the picture as the user sees them. (A password field's own dots are dots.)
+- **Control.** A screenshot is taken only of an attached tab, only on that session's request; the
+  user chose which tabs the session may see at all. The tool description steers a model to
+  `browser_snapshot` for reading and keeps the screenshot for layout. The extension keeps no copy;
+  DeepSeek Harness keeps one in its own attachment store on the user's machine, as it does for
+  every image a tool gives it, and sends pixels only to a model catalogued as accepting images.
+- **Test.** `tests/e2e/screenshot.test.ts` (an attached tab only, and a protected page refused);
+  `tests/e2e/live-turn.test.ts` (what a vision model and a text-only model each receive).
+- **Residual risk.** Deliberate: pixels cannot be masked by field semantics. Stated in
+  `store/DATA-DISCLOSURES.md`, the privacy page, and the listing.
+
 ### T9 — Credential disclosure through a URL
 
 *An OAuth callback or a signed link carries a token in the query or fragment.*

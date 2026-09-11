@@ -47,6 +47,21 @@ The extension adds no destination of its own.</p>
 telling type, attribute, name, or label cannot be distinguished from an ordinary one. We do not
 claim complete secret detection.</p>
 
+<h3>Screenshots of attached tabs</h3>
+<p><strong>What.</strong> A picture of the visible part of a tab <strong>the user explicitly
+attached</strong>, taken only when that tab's session requests one, as a JPEG of the viewport.
+Chrome can only capture the tab at the front of its window, so a covered attached tab is brought
+to the front first, and the result says that it was.</p>
+<p><strong>Where it goes.</strong> The same path as page content: to the local connector, to the
+user's own DeepSeek Harness, which keeps a copy in its own attachment store on the user's computer
+and sends it to the model provider the user configured — only if that model accepts images; for a
+text-only model DeepSeek Harness substitutes a text placeholder that names the stored file.</p>
+<p><strong>Honest limitation.</strong> The masking above applies to text. <strong>A screenshot is
+pixels, and nothing in it is masked:</strong> whatever the page shows on screen — a displayed
+code, an account number, a message — is in the picture, exactly as the user sees it. The tool's
+description tells the model to read pages with the text snapshot and to use a screenshot for
+layout, and the user decides which tabs a session may see at all.</p>
+
 <h3>Tab titles and URLs</h3>
 <p><strong>What.</strong> The title and URL of open tabs, shown to the user in the panel so they
 can choose what to attach; and of attached tabs, so the user always sees what a session controls.</p>
@@ -68,13 +83,13 @@ pairing code is used to compute a proof for the local connector and is never its
   <li><strong>Does not act without a DeepSeek Harness request.</strong> The extension is passive until a session the user attached asks for something.</li>
   <li><strong>Does not sell, share, or transfer data to third parties.</strong> It has no third parties.</li>
   <li><strong>Does not use data for advertising, profiling, or creditworthiness.</strong></li>
-  <li><strong>Does not persist page content.</strong> Snapshots are produced on request and forwarded; the extension keeps none.</li>
+  <li><strong>Does not persist page content.</strong> Snapshots and screenshots are produced on request and forwarded; the extension keeps none. (The user's own DeepSeek Harness keeps screenshots in its attachment store, on the user's computer, as it keeps every image a tool gives it.)</li>
 </ul>
 
 <h2>Chrome Web Store data-use form answers</h2>
 <table>
   <tr><th>Question</th><th>Answer</th></tr>
-  <tr><td>Does the extension collect or use personal or sensitive user data?</td><td>Yes: website content and web history (URLs) of tabs the user explicitly attaches, forwarded to the user's own local software.</td></tr>
+  <tr><td>Does the extension collect or use personal or sensitive user data?</td><td>Yes: website content (text, and screenshots on request) and web history (URLs) of tabs the user explicitly attaches, forwarded to the user's own local software.</td></tr>
   <tr><td>Is it sold to third parties?</td><td>No.</td></tr>
   <tr><td>Is it used for purposes unrelated to the single purpose?</td><td>No.</td></tr>
   <tr><td>Is it used to determine creditworthiness or for lending?</td><td>No.</td></tr>
@@ -83,11 +98,13 @@ pairing code is used to compute a proof for the local connector and is never its
 
 <h2>In one paragraph</h2>
 <blockquote>This extension lets your own locally running DeepSeek Harness read and act in the browser
-tabs you explicitly choose. Page content from those tabs goes to your DeepSeek Harness on your
-computer, and from there to whatever model provider you configured it to use. Passwords, one-time
-codes, and payment fields are masked before anything leaves the page. The extension never reads
-your cookies, never reads or acts in a tab you did not attach (it lists open tabs' titles and URLs
-only when you open the tab chooser, so you can pick one), and never sends anything to Corsen AI.</blockquote>
+tabs you explicitly choose. Page content from those tabs — text, and a screenshot when the session
+asks for one — goes to your DeepSeek Harness on your computer, and from there to whatever model
+provider you configured it to use. Passwords, one-time codes, and payment fields are masked in the
+text before anything leaves the page; a screenshot shows the page as you see it. The extension
+never reads your cookies, never reads or acts in a tab you did not attach (it lists open tabs'
+titles and URLs only when you open the tab chooser, so you can pick one), and never sends anything
+to Corsen AI.</blockquote>
 
 <h2>Contact and source</h2>
 <p>Source, tests, and evidence: <a href="https://github.com/CorsenAI/deepseek-harness-connector">github.com/CorsenAI/deepseek-harness-connector</a>.

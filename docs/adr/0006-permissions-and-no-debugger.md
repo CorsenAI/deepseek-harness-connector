@@ -93,3 +93,14 @@ lists it as such in the chooser, and refuses to attach it (`tests/e2e/restricted
 
 **Decision.** `tabs` is not requested. A future need for it — none is known — is a new decision
 with its own evidence, not a revert of this one.
+
+## Amendment, 2026-09-11 — a screenshot action, within the same permission set
+
+A `screenshot` action was added. It uses `chrome.tabs.captureVisibleTab`, which Chrome allows to an
+extension holding a host permission for the captured page; `<all_urls>` already covers it, so the
+manifest is unchanged and ADR 0009's frozen set holds. What the API can capture is only the tab at
+the front of its window, so a covered attached tab is brought to the front first and the result
+reports it (`foregrounded: true`). Redaction is text-level and does not apply to pixels; the
+disclosures, the privacy page and the threat model (T8a) say so. `debugger` remains out: it is not
+needed for this either.
+

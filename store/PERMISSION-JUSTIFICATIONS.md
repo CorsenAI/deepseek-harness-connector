@@ -31,7 +31,9 @@ lost simply because the worker had been evicted. The alarm does nothing when alr
 ## Host permission: `<all_urls>`
 
 The core gesture of the product is "attach the tab I am looking at", and the user may be looking at
-any site. The extension must be able to run its page code in whichever tab the user chooses.
+any site. The extension must be able to run its page code in whichever tab the user chooses. The
+same grant is what lets `chrome.tabs.captureVisibleTab` take a screenshot of an attached tab when
+its session asks for one; no further permission is requested for that.
 
 We evaluated optional per-origin host permissions and rejected them for this version: every first
 attachment on a new site would raise a permission prompt, and a session that follows a link to
@@ -41,8 +43,9 @@ indistinguishable from a missing grant.
 
 **The effective access is narrower than the grant, and the extension enforces it:** page code runs
 only in a tab the user explicitly attached, only for the session that owns it, only when that
-session requests an action. No page code runs in, and no page content is read from, a tab the user
-has not attached. The only thing the extension learns about other tabs is their title and URL, read
+session requests an action; a screenshot is taken only of an attached tab, on that session's
+request, after bringing it to the front of its window if it was covered. No page code runs in, no
+page content is read from, and no picture is taken of, a tab the user has not attached. The only thing the extension learns about other tabs is their title and URL, read
 locally when the user opens the tab chooser so they can pick one, and never sent to DeepSeek
 Harness. This is stated here plainly rather than hidden.
 
@@ -52,7 +55,7 @@ Harness. This is stated here plainly rather than hidden.
 |---|---|
 | `tabs` | Not needed. With the host permission above, Chrome already exposes the title and URL of any page the extension may act in; `tabs` would only add them for pages it may not act in, and would add a "Read your browsing history" warning. Verified by removing it and re-running the complete real-browser suite (41/41). A tab whose address Chrome withholds is treated as restricted and cannot be attached. See ADR 0006, amendment. |
 | `cookies` | Not needed. Logins are preserved by operating the signed-in page, not by reading credentials. Not requesting it is what makes that claim checkable. |
-| `debugger` | Not needed for the click, type, and read capabilities this version ships, and it would show a permanent debugging banner on every attached tab plus an alarming install warning. See ADR 0006. |
+| `debugger` | Not needed for the click, type, read, and screenshot capabilities this version ships, and it would show a permanent debugging banner on every attached tab plus an alarming install warning. See ADR 0006. |
 | `webRequest`, `declarativeNetRequest` | Network capture is outside the single purpose. |
 | `nativeMessaging` | The connector is reached over a local WebSocket; no native host is installed by the extension. |
 | `history`, `bookmarks`, `downloads`, `clipboardRead` | Outside the single purpose. |

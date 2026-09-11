@@ -41,6 +41,7 @@
   <li>On Windows, <code>dsh plugin add</code> splits a path containing a space (an upstream limitation); the installer works around it with the file's short name.</li>
   <li>Content inside iframes and inside shadow DOM is not read or acted on in this version: the page code runs in the tab's top document and does not descend into either.</li>
   <li>Secret masking is by the signals a page gives; a field with no telling type, attribute, name or label cannot be told from an ordinary one.</li>
+  <li>A screenshot is pixels and is not masked: it shows the attached tab as you see it. Chrome captures only the tab at the front of its window, so a covered attached tab is brought to the front first, and the result says so.</li>
 </ul>
 
 <p><a href="../">Home</a> · <a href="../privacy/">Privacy</a> · <a href="https://github.com/CorsenAI/deepseek-harness-connector">Source</a></p>

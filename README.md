@@ -17,15 +17,16 @@ except what your own DeepSeek Harness sends to the model provider you configured
 ## Status
 
 **Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
-Chrome extension with all twenty browser actions, the installers, and the release packaging work
-end to end and are covered by 324 tests: 246 unit and protocol tests, 14 cases running the shipped
-page module in a real Chrome, and 64 real-browser end-to-end cases — multi-session isolation, a
+Chrome extension with all twenty-one browser actions, the installers, and the release packaging work
+end to end and are covered by 331 tests: 249 unit and protocol tests, 14 cases running the shipped
+page module in a real Chrome, and 68 real-browser end-to-end cases — multi-session isolation, a
 page built to leak hidden content, a page built to give a model instructions, an attached tab that
 changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
 agent connection, a closed tab and a relaunched Chrome, the released pair installed into a real
-`dsh` with its broker killed and restarted as a process, and one live turn of a real `dsh` process
-whose model — DeepSeek Harness's own scripted mock provider — calls `browser_snapshot` on the
-attached tab. Every suite has run on Linux, macOS and
+`dsh` with its broker killed and restarted as a process, and three live turns of a real `dsh`
+process whose model — DeepSeek Harness's own scripted mock provider — calls `browser_snapshot`
+and `browser_screenshot` on the attached tab (the screenshot reaching a vision model as pixels and
+a text-only model as DeepSeek Harness's placeholder). Every suite has run on Linux, macOS and
 Windows on real machines, against DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, and the
 release artifacts built on the three platforms are byte-identical. The Store listing, screenshots
 and privacy page are in `store/`.
@@ -92,12 +93,19 @@ now operate that tab and nothing else.
 
 ## Using it
 
-Ask your DeepSeek Harness session to do something in the browser. It has twenty tools, one per
-protocol action: reading (`browser_snapshot`, `browser_read_text`, `browser_current_url`,
-`browser_find`, `browser_wait`), acting (`browser_click`, `browser_type`, `browser_key`,
+Ask your DeepSeek Harness session to do something in the browser. It has twenty-one tools, one
+per protocol action: reading (`browser_snapshot`, `browser_screenshot`, `browser_read_text`,
+`browser_current_url`, `browser_find`, `browser_wait`), acting (`browser_click`, `browser_type`, `browser_key`,
 `browser_scroll`, `browser_hover`, `browser_select_option`, `browser_drag`), navigation
 (`browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`), and the session's own
 tabs (`browser_list_tabs`, `browser_open_tab`, `browser_switch_tab`, `browser_close_tab`).
+
+`browser_screenshot` gives the model the attached tab's viewport as a JPEG through DeepSeek
+Harness's own attachment service: a model catalogued as accepting images receives the pixels, a
+text-only model receives DeepSeek Harness's placeholder naming the stored file. Chrome captures
+only the tab at the front of its window, so a covered tab is brought to the front first and the
+result says so. **Pixels are not masked** — the text redaction below does not apply to a picture —
+so the tool's description steers the model to `browser_snapshot` for reading.
 
 Every tool tells the truth about what happened. A control the user cannot see is never listed and
 never acted on; a tab Chrome refused to close is reported as detached-but-open, not as closed; a
@@ -118,9 +126,9 @@ connector unreachable, versions mismatched. You should never have to guess what 
 ## What it does not do yet
 
 Content inside iframes and inside shadow DOM is neither read nor acted on: the page code runs in
-the tab's top document and does not descend into either. There is no screenshot action, and no
-trusted-input mode (`chrome.debugger`) for sites that ignore synthetic events — ADR 0006 keeps
-both out of this version on purpose, and says what adding them would cost.
+the tab's top document and does not descend into either. There is no trusted-input mode
+(`chrome.debugger`) for sites that ignore synthetic events — ADR 0006 keeps it out of this version
+on purpose, and says what adding it would cost.
 
 ## What it never does
 
@@ -172,9 +180,9 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 246 tests, no browser needed
+npm run test:unit    # 249 tests, no browser needed
 npm run test:page    # 14 tests, the shipped page module in a real Chrome for Testing
-npm run test:e2e     # 64 tests, real Chrome with the extension loaded
+npm run test:e2e     # 68 tests, real Chrome with the extension loaded
 ```
 
 The browser suites need Playwright's Chrome for Testing (`npx playwright install chromium`). The

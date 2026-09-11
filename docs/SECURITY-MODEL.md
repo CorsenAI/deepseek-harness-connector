@@ -95,6 +95,11 @@ Masked always:
 The mask is fixed-width, so it does not leak the value's length. The field itself still appears in
 the snapshot, so the model can act on it — it just cannot read it.
 
+A **screenshot** is the one result this does not cover: it is the rendered viewport, and what the
+page shows on screen is in the picture. It is taken only of an attached tab on its session's
+request, the tool description steers the model to the text snapshot for reading, and the
+disclosures say so plainly (`docs/THREAT-MODEL.md`, T8a).
+
 URLs are scrubbed for credential-bearing query and fragment parameters and for userinfo in the
 authority. Schemes whose payload is opaque — `javascript:`, `data:`, `blob:` — are reported as the
 scheme alone, because their payload cannot be scrubbed and may embed anything. (`new URL()` parses

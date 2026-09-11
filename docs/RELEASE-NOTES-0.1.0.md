@@ -47,29 +47,35 @@ companion must be the same version, and a mismatch is shown as "Update required"
 
 ### What a session can do in its tabs
 
-Twenty tools, one per action: read the visible page as structured text, find text, wait, click,
-type, press keys, scroll, hover, choose options, drag, navigate, go back and forward, reload, and
-open, list, switch and close tabs — only within the tabs attached to that session.
+Twenty-one tools, one per action: read the visible page as structured text or as a screenshot,
+find text, wait, click, type, press keys, scroll, hover, choose options, drag, navigate, go back
+and forward, reload, and open, list, switch and close tabs — only within the tabs attached to that
+session. A screenshot travels through DeepSeek Harness's own attachment service: a model that
+accepts images receives the pixels, a text-only model receives DeepSeek Harness's placeholder
+naming the stored file.
 
 ### What it never does
 
 - Reads or acts in a tab you did not attach. Attachment is explicit and per session; two sessions,
   projects or Chrome profiles never reach each other's tabs.
 - Reads cookies, history, bookmarks or saved passwords — those permissions are not requested.
-- Lets a password, one-time code, payment field or hidden value leave the page: they are masked
-  inside the page.
+- Lets a password, one-time code, payment field or hidden value leave the page as text: they are
+  masked inside the page. (A screenshot is pixels and is not masked; it is taken only when the
+  session asks, and only of an attached tab.)
 - Sends anything to Corsen AI. The extension talks only to the broker on `127.0.0.1`.
 - Claims an action happened when the browser refused it, or that a page navigated when it did not.
 
 ### Evidence
 
-324 tests: 246 unit and protocol, 14 on the shipped page module in a real Chrome, 64 real-browser
+331 tests: 249 unit and protocol, 14 on the shipped page module in a real Chrome, 68 real-browser
 end-to-end — multi-session isolation, a page built to leak hidden content, a page built to give a
 model instructions, an attached tab that changes site mid-task, recovery from a killed worker, a
 restarted broker, a replaced agent, a closed tab and a relaunched Chrome, the released pair
-installed into a real `dsh` with its broker killed and restarted as a process, and one live turn
-of a real `dsh` process (its model being DeepSeek Harness's own scripted mock provider). Run on
-Ubuntu 26.04, macOS 26.6 and Windows 11 against the three DeepSeek Harness versions above.
+installed into a real `dsh` with its broker killed and restarted as a process, and three live
+turns of a real `dsh` process (its model being DeepSeek Harness's own scripted mock provider):
+a text snapshot, a screenshot delivered to a vision model as pixels, and a screenshot delivered to
+a text-only model as the placeholder. Run on Ubuntu 26.04, macOS 26.6 and Windows 11 against the
+three DeepSeek Harness versions above.
 `docs/TEST-MATRIX.md` and `docs/TEST-EVIDENCE.md` in the repository say exactly what was run and
 what is not proven.
 
@@ -82,7 +88,9 @@ what is not proven.
 - Content inside iframes and shadow DOM is not read or acted on in this version: the page code
   runs in the tab's top document and does not descend into either.
 - Secret masking is by the signals a page gives; an unlabelled field cannot be told from an
-  ordinary one.
+  ordinary one. It applies to text; a screenshot shows the page as rendered.
+- A screenshot is of the tab at the front of its window, which is all Chrome captures; a covered
+  attached tab is brought to the front first and the result says so.
 
 Unofficial community project by Corsen AI. Not affiliated with, endorsed by, or certified by
 DeepSeek. MIT licence.
