@@ -6,8 +6,9 @@
 //
 // Usage: node scripts/review-session.mjs [--home <dir>] [--port <n>]
 
+import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -52,7 +53,8 @@ client.addSession(sessionId, "Review session");
 process.stdout.write(`Announced "Review session". In the extension panel, select it and attach a tab.\n`);
 process.stdout.write("Commands: snapshot | text | url | find <text> | wait | click <ref> | type <ref> <text>\n"
   + "          navigate <url> | back | forward | reload | tabs | open [url] | switch <tabRef> | close\n"
-  + "          do <action> <json>   (any of the twenty actions, arguments as JSON) | quit\n\n");
+  + "          screenshot [file.jpg]   (writes the capture to a file; screenshot.jpg by default)\n"
+  + "          do <action> <json>   (any of the twenty-one actions, arguments as JSON) | quit\n\n");
 
 const prompt = createInterface({ input: process.stdin, output: process.stdout, prompt: "review> " });
 prompt.prompt();
@@ -75,6 +77,12 @@ prompt.on("line", async (line) => {
     else if (command === "open") print(await client.request(sessionId, "open_tab", rest[0] ? { url: rest[0] } : {}));
     else if (command === "switch" && rest[0]) print(await client.request(sessionId, "switch_tab", { tabRef: rest[0] }));
     else if (command === "close") print(await client.request(sessionId, "close_tab", {}));
+    else if (command === "screenshot") {
+      const capture = await client.request(sessionId, "screenshot", {});
+      const file = resolve(rest[0] ?? "screenshot.jpg");
+      writeFileSync(file, Buffer.from(capture.dataUrl.slice(capture.dataUrl.indexOf(",") + 1), "base64"));
+      print({ ...capture, dataUrl: `(${capture.dataUrl.length} characters, written to ${file})` });
+    }
     else if (command === "do" && rest[0]) print(await client.request(sessionId, rest[0], rest[1] ? JSON.parse(rest.slice(1).join(" ")) : {}));
     else if (command !== "") process.stdout.write("unknown command\n");
   } catch (cause) {

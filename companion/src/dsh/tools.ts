@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { AgentClient } from '../agent-client.ts'
@@ -50,6 +51,7 @@ export const BROWSER_TOOL_NAMES: readonly string[] = Object.freeze([
   'browser_open_tab',
   'browser_switch_tab',
   'browser_close_tab',
+  'browser_screenshot',
 ])
 
 /**
@@ -138,6 +140,39 @@ function explain(cause: BrowserActionError): string {
     default:
       return cause.message
   }
+}
+
+/**
+ * The attachment service of this DeepSeek Harness, when its composition has one.
+ *
+ * Read at call time rather than injected: the shipped profiles all carry `dsh-attachment-local`,
+ * but a composition without it must still load this plugin and get every text tool, with the
+ * screenshot tool refusing honestly. Cordis's non-strict `get` answers undefined for a service
+ * that is not there instead of throwing.
+ * @param ctx - the plugin's context.
+ * @returns the store, or undefined.
+ */
+function attachmentStore(ctx: Context): AttachmentStore | undefined {
+  const reflect = (ctx as unknown as { get?: (name: string, strict?: boolean) => unknown }).get
+  if (typeof reflect !== 'function') return undefined
+  const candidate = reflect.call(ctx, 'attachments', false)
+  return candidate !== undefined && candidate !== null && typeof (candidate as AttachmentStore).saveImage === 'function'
+    ? candidate as AttachmentStore
+    : undefined
+}
+
+/**
+ * The bytes of a base64 data URL.
+ * @param dataUrl - as the extension produced it.
+ * @returns the decoded bytes.
+ * @throws when the string is not a base64 data URL.
+ */
+function decodeDataUrl(dataUrl: string): Uint8Array {
+  const comma = dataUrl.indexOf(',')
+  if (!dataUrl.startsWith('data:') || comma < 0 || !dataUrl.slice(0, comma).endsWith(';base64')) {
+    throw new Error('the browser returned a capture that is not a base64 data URL')
+  }
+  return new Uint8Array(Buffer.from(dataUrl.slice(comma + 1), 'base64'))
 }
 
 /** Fields every page-level result carries. */
@@ -569,6 +604,66 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
     async execute(args, exec) {
       const payload = args.tabRef === undefined ? {} : { tabRef: args.tabRef }
       return await perform(dependencies, exec, ACTION.CLOSE_TAB, payload) as never
+    },
+  }))
+
+  register(defineTool({
+    name: 'browser_screenshot',
+    description:
+      'Capture what the tab attached to this session shows on screen, as an image the model can look at, '
+      + 'with the page address and title. The tab is brought to the front of its window first if it is not '
+      + 'already, and the result says whether that happened. The image shows exactly what the user sees — '
+      + 'masking of passwords and payment fields applies to text snapshots, not to pixels — so prefer '
+      + 'browser_snapshot for reading, and use this for layout, images, charts, or when the text is not enough.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          ...PAGE_IDENTITY,
+          width: { type: 'number', required: true },
+          height: { type: 'number', required: true },
+          foregrounded: { type: 'boolean', required: true },
+          attachment: { type: 'object', required: true, additionalProperties: true, properties: {} },
+        },
+      },
+      // The image is the answer; the text beside it is what a model that cannot see images gets.
+      render: (_args, value) => [
+        { type: 'image', attachment: value.attachment as unknown as ImageAttachmentRef },
+        {
+          type: 'text',
+          text: `Screenshot of ${value.title} (${value.url}), ${value.width}×${value.height} pixels`
+            + `${value.foregrounded ? ', after bringing the tab to the front' : ''}.`,
+        },
+      ],
+    },
+    async execute(_args, exec) {
+      // The attachment service is what makes an image durable and deliverable to the model. It is
+      // asked for before the browser acts: a capture nobody can receive is not worth taking.
+      const store = attachmentStore(ctx)
+      if (store === undefined) {
+        throw new Error('This DeepSeek Harness has no attachment service, so browser_screenshot cannot deliver an image here. '
+          + 'Use browser_snapshot to read the page as text. No screenshot was taken.')
+      }
+      const captured = await perform(dependencies, exec, ACTION.SCREENSHOT, {}) as {
+        url: string, title: string, mediaType: string, dataUrl: string, width: number, height: number, foregrounded: boolean,
+      }
+      const attachment = await store.saveImage({
+        data: decodeDataUrl(captured.dataUrl),
+        mediaType: captured.mediaType as ImageMediaType,
+        name: 'browser-screenshot.jpg',
+      })
+      // The reference is plain JSON by DeepSeek Harness's own contract ("durable, serializable");
+      // it travels in the canonical value so the pure render can hand it back as an image block.
+      return {
+        url: captured.url,
+        title: captured.title,
+        width: attachment.width || captured.width,
+        height: attachment.height || captured.height,
+        foregrounded: captured.foregrounded,
+        attachment: JSON.parse(JSON.stringify(attachment)) as Record<string, never>,
+      } as never
     },
   }))
 

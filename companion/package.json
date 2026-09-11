@@ -63,7 +63,8 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",
     "@deepseek-ai/dsh-tools": ">=0.0.1-0",
-    "@deepseek-ai/schemastery": ">=0.0.1-0"
+    "@deepseek-ai/schemastery": ">=0.0.1-0",
+    "@deepseek-ai/dsh-attachment": ">=0.1.2-rc.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -71,6 +72,9 @@
     },
     "@deepseek-ai/dsh-tools": {
       "optional": false
+    },
+    "@deepseek-ai/dsh-attachment": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -80,7 +84,8 @@
     "@types/chrome": "^0.2.8",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.5.13",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "@deepseek-ai/dsh-attachment": "0.1.2-rc.1"
   },
   "bin": {
     "dsh-connector-broker": "lib/broker-main.js"

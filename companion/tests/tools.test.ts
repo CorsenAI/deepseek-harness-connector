@@ -65,6 +65,7 @@ const MINIMAL_ARGS: Readonly<Record<string, Record<string, unknown>>> = Object.f
   browser_open_tab: {},
   browser_switch_tab: { tabRef: 't1' },
   browser_close_tab: {},
+  browser_screenshot: {},
 })
 
 /**
@@ -81,6 +82,7 @@ const UNIVERSAL_PAYLOAD = Object.freeze({
   settled: true, waitedMs: 0, readyState: 'complete', tabRef: 't1', active: true,
   loaded: 'complete', tabs: [], activeTabRef: 't1', opened: 't1', attachedTabs: 1,
   closed: 't1', remainingTabs: 0, foregrounded: true,
+  mediaType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,/9j/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/', width: 1, height: 1,
 })
 
 /**
@@ -106,6 +108,9 @@ function mount(answer: (request: Recorded) => unknown = () => ({ ...UNIVERSAL_PA
     },
   } as unknown as AgentClient
 
+  // Cordis's non-strict `get` is how the screenshot tool asks for the attachment service; here
+  // it answers with a store that records what it was given and returns a reference shaped as
+  // DeepSeek Harness's own.
   const ctx = {
     tools: {
       register(definition: ToolDefinition) {
@@ -115,6 +120,14 @@ function mount(answer: (request: Recorded) => unknown = () => ({ ...UNIVERSAL_PA
         disposers.push(disposer)
         return disposer
       },
+    },
+    get(name: string) {
+      if (name !== 'attachments') return undefined
+      return {
+        saveImage: async (input: { data: Uint8Array, mediaType: string, name?: string }) => ({
+          attachmentId: 'att-1', mediaType: input.mediaType, bytes: input.data.length, width: 1, height: 1, name: input.name,
+        }),
+      }
     },
   } as unknown as Context
 
@@ -216,7 +229,7 @@ describe('the minimal arguments pass the real schemas', () => {
     assert.deepEqual(
       [...new Set(requests.map((entry) => entry.kind))].sort(),
       [...ALL_ACTIONS].sort(),
-      'the twenty tools must reach the twenty protocol actions, each exactly once',
+      'every tool must reach its protocol action, each exactly once',
     )
   })
 
@@ -481,5 +494,49 @@ describe('rendering for the model', () => {
     const base = { url: 'u', title: 't', tabRef: 't2', active: true, activeTabRef: 't2' }
     assert.match(textOf(render({ tabRef: 't2' } as never, { ...base, foregrounded: false } as never)), /did not bring it to the front/)
     assert.doesNotMatch(textOf(render({ tabRef: 't2' } as never, { ...base, foregrounded: true } as never)), /did not bring/)
+  })
+})
+
+describe('browser_screenshot', () => {
+  it('refuses before the browser acts when this DeepSeek Harness has no attachment service', async () => {
+    // A context whose `get` knows no attachment store: the shipped profiles carry one, a custom
+    // composition may not, and a capture nobody can receive must not be taken.
+    const tools = new Map<string, ToolDefinition>()
+    const requests: Recorded[] = []
+    const client = {
+      connected: true,
+      async request(sessionId: string, kind: string, args: Record<string, unknown>) { requests.push({ sessionId, kind, args }); return { ...UNIVERSAL_PAYLOAD } },
+    } as unknown as AgentClient
+    const ctx = { tools: { register(definition: ToolDefinition) { tools.set(definition.name, definition); return () => {} } }, get: () => undefined } as unknown as Context
+    registerBrowserTools(ctx, { client })
+    await assert.rejects(
+      tools.get('browser_screenshot')!.execute({}, execution('session-present')),
+      (cause: unknown) => cause instanceof Error && /no attachment service/.test(cause.message) && /No screenshot was taken/.test(cause.message),
+    )
+    assert.equal(requests.length, 0, 'no capture may be requested when it cannot be delivered')
+  })
+
+  it('saves the capture through the attachment service and renders it as an image block first', async () => {
+    const { tools, requests } = mount()
+    const definition = tools.get('browser_screenshot')
+    assert.ok(definition)
+    const value = await definition.execute({}, execution('session-present')) as Record<string, unknown>
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0]?.kind, ACTION.SCREENSHOT)
+    const attachment = value['attachment'] as Record<string, unknown>
+    assert.equal(attachment['attachmentId'], 'att-1')
+    assert.equal(attachment['mediaType'], 'image/jpeg')
+    assert.ok((attachment['bytes'] as number) > 0, 'the decoded bytes were handed to the store')
+    const blocks = definition.output.render({}, value as never) as { type: string, attachment?: unknown, text?: string }[]
+    assert.equal(blocks[0]?.type, 'image')
+    assert.deepEqual(blocks[0]?.attachment, attachment)
+    assert.equal(blocks[1]?.type, 'text')
+    assert.match(String(blocks[1]?.text), /Screenshot of Example/)
+  })
+
+  it('tells the model that pixels are not masked, so it reaches for the text snapshot to read', () => {
+    const { tools } = mount()
+    assert.match(String(tools.get('browser_screenshot')?.description), /not to pixels/)
+    assert.match(String(tools.get('browser_screenshot')?.description), /browser_snapshot/)
   })
 })

@@ -45,6 +45,7 @@ export const PAGE_ACTIONS = Object.freeze([
  * page a scope is looking at, or which tabs it owns.
  */
 export const TAB_ACTIONS = Object.freeze([
+  ACTION.SCREENSHOT,
   ACTION.NAVIGATE,
   ACTION.BACK,
   ACTION.FORWARD,

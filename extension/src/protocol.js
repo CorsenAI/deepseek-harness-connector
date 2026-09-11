@@ -70,6 +70,7 @@ export const ACTION = {
   LIST_TABS: "list_tabs",
   SWITCH_TAB: "switch_tab",
   CLOSE_TAB: "close_tab",
+  SCREENSHOT: "screenshot",
 };
 
 /** Every action kind, in a stable order. */

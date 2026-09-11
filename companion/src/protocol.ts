@@ -125,6 +125,12 @@ export const ACTION = {
   SWITCH_TAB: 'switch_tab',
   /** Close one of the calling scope's tabs. `{ tabRef? }`. */
   CLOSE_TAB: 'close_tab',
+  /**
+   * Capture what the scoped active tab shows on screen, as a JPEG data URL. The tab is brought to
+   * the front of its window first when it is not already, which Chrome requires and the result
+   * reports. What the user can see is what is captured: no masking applies to pixels.
+   */
+  SCREENSHOT: 'screenshot',
 } as const
 
 export type ActionKind = (typeof ACTION)[keyof typeof ACTION]

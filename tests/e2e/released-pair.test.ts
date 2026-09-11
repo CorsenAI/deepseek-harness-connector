@@ -62,6 +62,7 @@ interface RegisteredTool {
 
 let home: string
 let unpacked: string
+let profile: string
 let installed: string
 let brokerPort: number
 let broker: ChildProcess | null = null
@@ -218,7 +219,7 @@ after(async () => {
   if (broker) { broker.kill('SIGKILL'); broker = null }
   await browser?.context.close()
   await files?.close()
-  for (const dir of [home, unpacked]) {
+  for (const dir of [home, unpacked, profile]) {
     if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
 })
@@ -272,7 +273,8 @@ describe('the released pair, installed as a user installs it', () => {
     assert.equal(version, manifest.version, 'the ZIP and the manifest must agree on the version')
 
     files = await serveFixtures()
-    browser = await launchBrowser(mkdtempSync(join(tmpdir(), 'dsh-connector-pair-profile-')), unpacked)
+    profile = mkdtempSync(join(tmpdir(), 'dsh-connector-pair-profile-'))
+    browser = await launchBrowser(profile, unpacked)
     await pairWith(browser, `ws://127.0.0.1:${brokerPort}`, code)
     assert.equal(await extensionConnected(browser), true)
   })
@@ -304,7 +306,11 @@ describe('the released pair, installed as a user installs it', () => {
     await settle()
 
     lib.registerBrowserTools({ tools: { register(tool: RegisteredTool) { tools.set(tool.name, tool); return () => {} } } }, { client: agent })
-    assert.equal(tools.size, 20, 'the installed tool layer must register every tool')
+    // One tool per protocol action, counted against the installed protocol module rather than a
+    // number kept by hand.
+    const protocol = await import(new URL('protocol.js', libUrl).href) as { ALL_ACTIONS: readonly string[] }
+    assert.equal(tools.size, protocol.ALL_ACTIONS.length, 'the installed tool layer must register every tool')
+    assert.equal(tools.size, 21)
 
     const page = await browser.context.newPage()
     await page.goto(files.url('page-a.html'))

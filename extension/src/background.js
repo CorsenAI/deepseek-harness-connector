@@ -637,6 +637,15 @@ const TAB_LOAD_GRACE_MS = 1500;
 /** Bound on tab titles reported to the model. */
 const MAX_TAB_TITLE_CHARS = 160;
 
+/** JPEG quality for a capture: readable text at a fraction of a PNG's size. */
+const SCREENSHOT_JPEG_QUALITY = 75;
+
+/**
+ * Longest capture carried, in data-URL characters: well inside the protocol's frame limit, and
+ * larger than any ordinary window produces (a 4K capture at this quality is under two million).
+ */
+const MAX_SCREENSHOT_CHARS = 6 * 1024 * 1024;
+
 /**
  * The opaque reference a model uses for one of its scope's tabs.
  * @param {number} tabId The Chrome tab id.
@@ -799,6 +808,70 @@ export async function performTabAction(kind, args, scope, binding, targetTabId) 
   const ok = (data) => ({ ok: true, data });
   const failed = (message) => ({ ok: false, error: { code: ERROR.ACTION_FAILED, message } });
   const gone = (message) => ({ ok: false, error: { code: ERROR.TAB_GONE, message } });
+
+  if (kind === "screenshot") {
+    // Chrome captures the active tab of a window, nothing else, so the scope's tab is brought to
+    // the front first when it is not already there. That is a visible change for the user and is
+    // reported. A page Chrome protects, a minimized window, or a capture Chrome refuses for any
+    // other reason is a failure with Chrome's reason, never an image of some other tab.
+    let tab;
+    try {
+      tab = await chrome.tabs.get(targetTabId);
+    } catch {
+      await releaseClosedTab(targetTabId);
+      return gone("the attached tab no longer exists");
+    }
+    const restricted = restrictionReason(tab);
+    if (restricted !== null) return { ok: false, error: { code: ERROR.RESTRICTED_PAGE, message: restricted } };
+    let foregrounded = false;
+    if (tab.active !== true) {
+      try {
+        await chrome.tabs.update(targetTabId, { active: true });
+        foregrounded = true;
+      } catch (cause) {
+        return failed(`the tab must be at the front of its window to be captured, and Chrome could not bring it there: ${String(cause?.message ?? cause)}`);
+      }
+    }
+    let dataUrl;
+    try {
+      dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: SCREENSHOT_JPEG_QUALITY });
+    } catch (cause) {
+      return failed(`Chrome could not capture the tab: ${String(cause?.message ?? cause)}`);
+    }
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/jpeg;base64,")) {
+      return failed("Chrome returned no image");
+    }
+    if (dataUrl.length > MAX_SCREENSHOT_CHARS) {
+      return failed(`the capture is ${dataUrl.length} characters, beyond the ${MAX_SCREENSHOT_CHARS} this connector carries; make the window smaller`);
+    }
+    // The dimensions come from the bytes, not from the window: what the model is told is what
+    // it will be given.
+    // Decoded from the bytes directly: the extension's own policy does not let the worker fetch a
+    // data: URL, and the bytes are already here.
+    let width = 0;
+    let height = 0;
+    try {
+      const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
+      width = bitmap.width;
+      height = bitmap.height;
+      bitmap.close();
+    } catch (cause) {
+      return failed(`Chrome returned an image this connector could not decode: ${String(cause?.message ?? cause)}`);
+    }
+    const after = await chrome.tabs.get(targetTabId).catch(() => tab);
+    return ok({
+      url: scrubUrl(String(after.url ?? tab.url ?? "")),
+      title: String(after.title ?? tab.title ?? "").slice(0, MAX_TAB_TITLE_CHARS),
+      mediaType: "image/jpeg",
+      dataUrl,
+      width,
+      height,
+      foregrounded,
+    });
+  }
 
   if (kind === "navigate" || kind === "back" || kind === "forward" || kind === "reload") {
     let how;
