@@ -48,8 +48,12 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix companion
       - run: npx playwright install --with-deps chromium
-      # MV3 service workers do not start under the headless shell, so the extension tests run headed
-      # under a virtual display on Linux.
+      # The shipped page module in the full browser's new headless mode.
+      - run: npm run test:page
+      # The extension tests run headed, as users run it: under a virtual display on Linux, on the
+      # runner's desktop session on Windows. (DSH_E2E_HEADLESS=1 would run them in the full browser's
+      # new headless mode instead.) The released-pair suite skips here, saying so; the released-pair
+      # job runs it against the packaged artifacts and a real dsh.
       - if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum -- npm run test:e2e
       - if: runner.os != 'Linux'
