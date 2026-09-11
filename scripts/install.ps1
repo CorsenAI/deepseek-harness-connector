@@ -54,6 +54,13 @@ if (Get-Command dsh -ErrorAction SilentlyContinue) { $dshExe = "dsh" }
 elseif (Get-Command npx -ErrorAction SilentlyContinue) { $dshExe = "npx"; $dshArgs = @("--yes", "@deepseek-ai/dsh") }
 else { Fail "DeepSeek Harness (dsh) was not found on PATH. Install it first: npm install -g @deepseek-ai/dsh" }
 
+# `dsh plugin` forwards to pnpm, which DeepSeek Harness itself does not install: a machine with a
+# working `dsh` and no pnpm fails inside dsh after the profile has been created. Checked here, before
+# anything is created, with the command that fixes it.
+if (-not $Uninstall -and -not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+  Fail "pnpm is required by DeepSeek Harness's plugin command and was not found on PATH. Install it with: npm install -g pnpm"
+}
+
 function Invoke-Dsh([string[]]$arguments) {
   # Splat a variable (`@all`), never an expression. `& cmd @($x + $y)` is an array *literal*, which
   # PowerShell binds to a `.ps1` shim as a single `$args[0]`; npm's `dsh.ps1` then hands node one

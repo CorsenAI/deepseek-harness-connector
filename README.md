@@ -56,7 +56,9 @@ task must not take pairing and tab ownership with it when it exits. See
 
 ## Installing
 
-Requires DeepSeek Harness and Node `^22.19 || >=24`.
+Requires DeepSeek Harness, Node `^22.19 || >=24`, and pnpm on `PATH` — DeepSeek Harness's
+`dsh plugin` command forwards to pnpm and does not install it (`npm install -g pnpm` does). The
+installers check for all three before creating anything.
 
 **1. Install the connector into a DeepSeek Harness profile.**
 

@@ -48,6 +48,13 @@ else
   fail "DeepSeek Harness (dsh) was not found on PATH. Install it first: npm install -g @deepseek-ai/dsh"
 fi
 
+# `dsh plugin` forwards to pnpm, which DeepSeek Harness itself does not install: a machine with a
+# working `dsh` and no pnpm fails inside dsh after the profile has been created. Checked here, before
+# anything is created, with the command that fixes it.
+if [ "$UNINSTALL" -eq 0 ] && ! command -v pnpm >/dev/null 2>&1; then
+  fail "pnpm is required by DeepSeek Harness's plugin command and was not found on PATH. Install it with: npm install -g pnpm"
+fi
+
 # Resolve the Harness home the same way the connector does, so the pairing secret lands where the
 # plugin will look for it. A DSH_HOME that points at a profile directory means its grandparent.
 if [ -n "${DSH_HOME:-}" ]; then
