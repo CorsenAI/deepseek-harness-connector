@@ -650,11 +650,13 @@ const MAX_SCREENSHOT_CHARS = 6 * 1024 * 1024;
  * Chrome copies the tab's compositor surface; right after a tab is shown, or before a headless
  * renderer has produced its first frame, there is nothing to copy yet and Chrome answers "image
  * readback failed" (an empty bitmap) or "view is invisible" (no view yet). Both clear once a frame
- * exists, so a capture is retried a few times over well under a second before it is reported.
+ * exists. Chrome also allows the call twice per second (`MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND`)
+ * and refuses a third with a quota message, which a model calling twice in a row can hit. The three
+ * are retried, spaced so that the retries themselves stay inside the quota, then reported.
  */
-const CAPTURE_ATTEMPTS = 5;
-const CAPTURE_RETRY_MS = 150;
-const TRANSIENT_CAPTURE_FAILURE = /image readback failed|view is invisible/i;
+const CAPTURE_ATTEMPTS = 4;
+const CAPTURE_RETRY_MS = 600;
+const TRANSIENT_CAPTURE_FAILURE = /image readback failed|view is invisible|MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND/i;
 
 /**
  * The opaque reference a model uses for one of its scope's tabs.

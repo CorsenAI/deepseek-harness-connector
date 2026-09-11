@@ -119,9 +119,10 @@ Takes no arguments and answers with the scope's active tab as pixels:
 is at the front of its window, so a covered tab is brought to the front first and the answer says
 so with `foregrounded: true` — the user's window changed, and the result does not hide it. Chrome
 copies the tab's compositor surface, and right after a tab is shown (or before a headless renderer
-has painted) there is nothing to copy yet — "image readback failed" or "view is invisible"; the
-extension retries those up to five times, 150 ms apart, then reports Chrome's reason. Any other
-refusal is reported at once. After the capture the extension checks that the attached tab is still
+has painted) there is nothing to copy yet — "image readback failed" or "view is invisible"; and
+Chrome allows the call twice per second, refusing a third with its quota message. The extension
+retries those three answers up to four attempts, 600 ms apart so that the retries stay inside the
+quota, then reports Chrome's reason. Any other refusal is reported at once. After the capture the extension checks that the attached tab is still
 the one at the front of the same window; if the user switched or moved tabs meanwhile, the picture
 may be of another page and is discarded (`ACTION_FAILED`), never reported as the attached tab. The
 capture is of the rendered page: **the masking that applies to text results does not apply to

@@ -369,18 +369,22 @@ describe('screenshot', () => {
     assert.equal(stub.tabs.get(11)?.active, true)
   })
 
-  it('retries while Chrome has no frame to read back yet, and reports the capture that then succeeds', async () => {
-    // The two answers Chrome gives before a tab's compositor has produced a frame: an empty
-    // bitmap, or no view. Both clear on their own; a capture is not refused for them at once.
+  it('retries while Chrome has no frame to read back yet, spaced inside Chrome\'s two-per-second quota', async () => {
+    // The answers Chrome gives before a tab's compositor has produced a frame — an empty bitmap,
+    // or no view — and the quota refusal a third call within a second gets. All three clear on
+    // their own; a capture is not refused for them at once, and the retries are spaced so that
+    // they do not themselves exceed the quota (the Windows lane saw 150 ms retries do exactly that).
     const binding = own([11])
     stub.tabs.get(11)!.active = true
-    stub.captures = [new Error('Failed to capture tab: image readback failed'), new Error('Failed to capture tab: view is invisible'), JPEG_DATA_URL]
+    stub.captures = [new Error('Failed to capture tab: image readback failed'), new Error('Failed to capture tab: view is invisible'), new Error('This request exceeds the MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota.'), JPEG_DATA_URL]
+    const started = Date.now()
 
     const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
 
     assert.equal(result.ok, true, result.error?.message)
-    assert.equal(stub.captureCalls, 3)
+    assert.equal(stub.captureCalls, 4)
     assert.equal(result.data?.dataUrl, JPEG_DATA_URL)
+    assert.ok(Date.now() - started >= 3 * 550, 'three retries at least 550 ms apart: never three calls within one second')
   })
 
   it('reports the failure, with Chrome\'s own reason, when the readback never succeeds', async () => {
@@ -393,7 +397,7 @@ describe('screenshot', () => {
     assert.equal(result.ok, false, 'a capture that never happened must not be reported as one')
     assert.equal(result.error?.code, ERROR.ACTION_FAILED)
     assert.match(String(result.error?.message), /image readback failed/)
-    assert.equal(stub.captureCalls, 5, 'bounded: five attempts, then the truth')
+    assert.equal(stub.captureCalls, 4, 'bounded: four attempts, then the truth')
   })
 
   it('does not retry a refusal that is not transient', async () => {
