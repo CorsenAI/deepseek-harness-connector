@@ -1023,12 +1023,94 @@ byte-identical on all three.
 ### Gates
 
 AI, AQ, AR and AH pass. AC passes on Linux, macOS and Windows. AF passes. AE now includes the frozen
-permission set. Z and Y stay partial, for the reasons the matrix gives: no GitHub remote for the
-CI lanes, and no API key or reachable local model for a live turn.
+permission set. Z and Y stay partial at this point, for the reasons the matrix gives: no GitHub
+remote for the CI lanes, and no API key or reachable local model for a live turn. (Y is closed by
+the section that follows, later the same day.)
 
 ### What this does not prove
 
-A live model turn. The Explorer double-click of a marked `Install Connector.cmd` (SmartScreen),
+A live turn, at this point (see the next section). The Explorer double-click of a marked `Install Connector.cmd` (SmartScreen),
 which no lane over SSH can perform. Anything on GitHub-hosted runners. The optional-permission
 onboarding path past Chrome's native prompt, which no gate can answer — the reason ADR 0009 keeps
 the required permission.
+
+---
+
+## 2026-09-11, later — gate Y: one live turn of a real DeepSeek Harness process (commit `509e0d1`)
+
+**What was missing.** Every earlier run stopped at the model: the released pair was driven by an
+agent client standing in for the plugin, and a real `dsh` process had only ever been shown to
+apply the plugin and stop at the missing API key. No API key exists in this environment and the
+local model's service was down with a GPU driver mismatch.
+
+**What was run instead, and what it is.** DeepSeek Harness publishes its own scriptable
+OpenAI-compatible provider for exactly this, `@deepseek-ai/dsh-llm-mock-server` (0.1.5-rc.2,
+installed beside each `dsh`). `tests/e2e/live-turn.test.ts` installs the released tarball into a
+scratch home, starts the packaged broker as a process, loads the packaged ZIP into Chrome, points
+the profile's `llm-deepseek` at the mock through the user patch layer, disables the session-title
+plugin (it makes a provider request of its own, which consumed the scripted tool call on the first
+attempt), and runs `dsh --profile headless "Read the page in the attached tab and tell me its
+title."` The mock is scripted: `rate_limit` (Retry-After 4 s, during which the test reads the
+session the process announced from the panel and attaches the fixture tab to it, as a user
+would), then `tool_call_success` naming `browser_snapshot`, then `success` with a sentence.
+
+**What DeepSeek Harness did, read from the wire.** Three requests reached the provider, in that
+order, each offering 45 tools of which the 20 `browser_*`. The third carried the assistant's
+`browser_snapshot` tool call and the tool result DeepSeek Harness produced by executing it through
+the installed plugin, the broker process and the extension: the fixture's title and address, its
+text, and its controls — `[e2@1] textbox: Password` listed without its value, `hunter2` nowhere.
+The process printed the scripted sentence and exited 0.
+
+| dsh | Result |
+|---|---|
+| 0.1.2-rc.1 (Ubuntu) | 2/2 |
+| 0.1.5-rc.1 `latest` (Ubuntu, twice; macOS; Windows) | 2/2 each |
+| 0.1.5-rc.2 `next` (Ubuntu) | 2/2 |
+
+**What this proves and does not.** The process, the profile, the session identity the tool ran
+for, the agent loop, the tool registration, the tool execution and the rendering the model reads
+are real DeepSeek Harness. The model's judgment is scripted. A turn with a real provider key is a
+one-line change of the endpoint and is an optional item on the owner's list.
+
+### Final runs at `509e0d1`
+
+Linux:
+
+```
+npm run typecheck                                # clean
+npm run test:unit                                # 246/246
+npm run test:page                                # 14/14
+xvfb-run --auto-servernum -- npm run test:e2e   # 64/64 headed (released pair and live turn against dsh 0.1.2-rc.1)
+DSH_E2E_HEADLESS=1 npm run test:e2e             # 64/64 new headless
+released-pair + live-turn with DSH_BIN_DIR at latest, at next   # 7/7 each
+tests/installer/linux-installer.sh against 0.1.2-rc.1, latest, next   # 19/19 each
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # gate passed
+npm audit, root and companion                   # 0 vulnerabilities
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist   # 582 checks, clean tree
+```
+
+macOS 26.6.2, same commit, same lane as before: typecheck and build clean; unit 246/246; page
+14/14; the vertical slice headed 9/9; end-to-end new headless **64/64**, the released pair and the
+live turn against `dsh` 0.1.5-rc.1 with the mock provider beside it; installer 19/19 from a spaced
+path; the quarantined `install.sh` ran through `bash` and directly; package hashes identical.
+
+Windows 11, same commit: typecheck and build clean; unit 246 (245 pass, the POSIX case skipped);
+page 14/14; end-to-end new headless **64/64**, the released pair and the live turn against `dsh`
+0.1.5-rc.1; without pnpm the installer created nothing; installer 17/17 from a spaced path; the
+Mark-of-the-Web rehearsal as before (refused under `RemoteSigned` with nothing created, the
+`.cmd` wrapper installed, `Unblock-File` made the direct run work); package hashes identical.
+
+### Release artifacts, from clean commit `509e0d1`
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `f7573fce6cf65ede7707ef2453e9d859edce2f82a10fc1b479876adf46f61a9e` | 51079 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `614e26cc6f3758f38a30c74bdd8c62245ea5ceaa1abed9282df253eb74826fd2` | 59888 |
+
+Unchanged from `cda0ae7`: the commits between changed tests, CI and documentation only.
+`release-manifest.json` at the closing commit records that commit and `"cleanTree": true`.
+
+### Gates after this section
+
+Y passes, with the scope above. Z stays partial (no GitHub remote). Everything else as recorded
+earlier today.
