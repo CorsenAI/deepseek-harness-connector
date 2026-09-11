@@ -22,7 +22,7 @@
     "icons": "node scripts/make-icons.mjs"
   },
   "devDependencies": {
-    "playwright": "1.49.1",
+    "playwright": "1.63.0",
     "ws": "^8.18.0"
   }
 }
