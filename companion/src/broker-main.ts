@@ -9,9 +9,9 @@
  * @module @corsen-ai/dsh-browser-connector/broker-main
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, mkdirSync, realpathSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { loadOrCreateCredentials, pairingCode } from './auth.ts'
 import { startBroker } from './broker-server.ts'
 import { brokerLogPath, brokerStatePath, credentialsPath } from './paths.ts'
@@ -98,16 +98,26 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0
   }
 
-  const credentials = loadOrCreateCredentials(credentialsPath(options.home))
-  if (options.showPairingCode) {
-    process.stdout.write(`${pairingCode(credentials.secret)}\n`)
-    return 0
-  }
-
+  // The log exists before anything that can fail, so a broker that could not even read its
+  // credentials leaves a line where the installer tells the user to look.
   const logFile = brokerLogPath(options.home)
   mkdirSync(dirname(logFile), { recursive: true, mode: 0o700 })
   const log = (line: string): void => {
     appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`, 'utf8')
+  }
+
+  let credentials: ReturnType<typeof loadOrCreateCredentials>
+  try {
+    credentials = loadOrCreateCredentials(credentialsPath(options.home))
+  } catch (cause) {
+    const message = (cause as Error).message
+    log(`failed to start: ${message}`)
+    process.stderr.write(`${message}\n`)
+    return 1
+  }
+  if (options.showPairingCode) {
+    process.stdout.write(`${pairingCode(credentials.secret)}\n`)
+    return 0
   }
 
   let running: Awaited<ReturnType<typeof startBroker>>
@@ -139,12 +149,26 @@ export async function main(argv: readonly string[]): Promise<number> {
 }
 
 /**
- * Run only when this module is the process entry.
+ * Whether this module is the process entry.
  *
- * `pathToFileURL` is what makes the comparison correct on Windows, where the argument is a drive
- * path rather than a URL. Guarding it lets tests import {@link main} and {@link parseOptions}
+ * Both sides are compared as real paths. Node reports a module's URL through every symlink it
+ * resolved, while `process.argv[1]` is the path exactly as typed, so a broker started through a
+ * symlinked directory — every `/var` and `/tmp` path on macOS, where they are links into
+ * `/private` — would otherwise compare unequal and exit 0 having done nothing. Found by the
+ * macOS lane on 2026-09-11. Guarding lets tests import {@link main} and {@link parseOptions}
  * without starting a server.
+ * @returns whether the file Node was told to run is this one.
  */
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function isProcessEntry(): boolean {
+  const entry = process.argv[1]
+  if (entry === undefined) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isProcessEntry()) {
   process.exitCode = await main(process.argv.slice(2))
 }

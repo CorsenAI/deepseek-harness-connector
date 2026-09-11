@@ -129,6 +129,10 @@ export async function startBroker(options: BrokerServerOptions): Promise<Running
     response.end('this endpoint accepts only WebSocket connections\n')
   })
   const sockets = new WebSocketServer({ server: http, maxPayload: LIMITS.MAX_FRAME_BYTES })
+  // `ws` re-emits the HTTP server's errors on itself, and an emitter with no listener turns the
+  // one error this function handles — the port already held — into an uncaught exception with a
+  // stack trace in place of the sentence below. The HTTP server's own handler is the one that acts.
+  sockets.on('error', () => {})
 
   sockets.on('connection', (socket, request) => {
     const origin = request.headers.origin

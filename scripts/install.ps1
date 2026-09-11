@@ -144,13 +144,15 @@ if (-not (Test-Path $broker)) { Fail "the connector was installed but its broker
 New-Item -ItemType Directory -Force -Path $connectorDir | Out-Null
 Stop-Broker
 
-# Start the broker detached so it outlives this shell and any one dsh process.
+# Start the broker detached so it outlives this shell and any one dsh process. Its stderr is kept:
+# a broker that dies before it can write its own log must leave the reason where the message points.
+$stderrLog = Join-Path $connectorDir "broker.stderr.log"
 $proc = Start-Process -FilePath "node" `
   -ArgumentList @("`"$broker`"", "--home", "`"$homeDir`"", "--port", "$brokerPort") `
-  -WindowStyle Hidden -PassThru
+  -WindowStyle Hidden -PassThru -RedirectStandardError $stderrLog
 Set-Content -Path $pidFile -Value $proc.Id
 Start-Sleep -Seconds 1
-if ($proc.HasExited) { Fail "the broker did not stay running; see $(Join-Path $connectorDir 'broker.log')" }
+if ($proc.HasExited) { Fail "the broker did not stay running; see $(Join-Path $connectorDir 'broker.log') and $stderrLog" }
 
 $code = node "$broker" --pairing-code --home "$homeDir"
 
