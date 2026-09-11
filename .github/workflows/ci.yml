@@ -146,14 +146,16 @@ jobs:
         with:
           name: release-artifacts
           path: dist
-      - name: install a real dsh into a scratch directory
+      - name: install a real dsh into a scratch directory, with DeepSeek Harness's own mock provider beside it
         run: |
           mkdir -p "$RUNNER_TEMP/dsh-pair" && cd "$RUNNER_TEMP/dsh-pair" && npm init -y >/dev/null
-          npm install "${{ matrix.spec }}" --no-audit --no-fund
+          npm install "${{ matrix.spec }}" "@deepseek-ai/dsh-llm-mock-server@next" --no-audit --no-fund
           ./node_modules/.bin/dsh --version
       # Gate AQ: the packaged tarball into that dsh, the packaged ZIP into Chromium, the broker as
       # its own process from the installation, killed and restarted. Nothing from companion/src/.
-      - run: DSH_BIN_DIR="$RUNNER_TEMP/dsh-pair/node_modules/.bin" xvfb-run --auto-servernum -- node --test --test-concurrency=1 --experimental-strip-types tests/e2e/released-pair.test.ts
+      # Gate Y: one live turn of a real dsh process, its model answered by DeepSeek Harness's own
+      # scripted mock provider, the tool call executed through the released pair.
+      - run: DSH_BIN_DIR="$RUNNER_TEMP/dsh-pair/node_modules/.bin" xvfb-run --auto-servernum -- node --test --test-concurrency=1 --experimental-strip-types tests/e2e/released-pair.test.ts tests/e2e/live-turn.test.ts
 
   provenance:
     name: provenance audit

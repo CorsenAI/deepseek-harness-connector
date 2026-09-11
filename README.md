@@ -18,19 +18,22 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
 Chrome extension with all twenty browser actions, the installers, and the release packaging work
-end to end and are covered by 322 tests: 246 unit and protocol tests, 14 cases running the shipped
-page module in a real Chrome, and 62 real-browser end-to-end cases — multi-session isolation, a
+end to end and are covered by 324 tests: 246 unit and protocol tests, 14 cases running the shipped
+page module in a real Chrome, and 64 real-browser end-to-end cases — multi-session isolation, a
 page built to leak hidden content, a page built to give a model instructions, an attached tab that
 changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
-agent connection, a closed tab and a relaunched Chrome, and the released pair installed into a real
-`dsh` with its broker killed and restarted as a process. Every suite has run on Linux, macOS and
+agent connection, a closed tab and a relaunched Chrome, the released pair installed into a real
+`dsh` with its broker killed and restarted as a process, and one live turn of a real `dsh` process
+whose model — DeepSeek Harness's own scripted mock provider — calls `browser_snapshot` on the
+attached tab. Every suite has run on Linux, macOS and
 Windows on real machines, against DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, and the
 release artifacts built on the three platforms are byte-identical. The Store listing, screenshots
 and privacy page are in `store/`.
 
 `docs/TEST-MATRIX.md` lists every release gate and its honest state. What remains needs the owner:
-a GitHub remote for the CI lanes and the privacy page's public URL, an API key or a reachable local
-model for one live model turn, the npm publication, and the Store submission itself.
+a GitHub remote for the CI lanes and the privacy page's public URL, the npm publication, and the
+Store submission itself. A turn with a real provider key instead of the scripted one is a one-line
+change of the provider endpoint.
 
 ## What it does
 
@@ -164,7 +167,7 @@ npm run build        # compile companion/ to lib/
 npm run typecheck
 npm run test:unit    # 246 tests, no browser needed
 npm run test:page    # 14 tests, the shipped page module in a real Chrome for Testing
-npm run test:e2e     # 62 tests, real Chrome with the extension loaded
+npm run test:e2e     # 64 tests, real Chrome with the extension loaded
 ```
 
 The browser suites need Playwright's Chrome for Testing (`npx playwright install chromium`). The
@@ -173,7 +176,8 @@ no display, `DSH_E2E_HEADLESS=1` runs the full browser in its new headless mode 
 `xvfb-run --auto-servernum -- npm run test:e2e` keeps them headed. The released-pair suite needs
 `dist/` from `node scripts/package.mjs --out dist` and a real `dsh` (`DSH_BIN_DIR` names its
 bin directory; otherwise the first `~/dsh-int/<lane>/node_modules/.bin/dsh` is used); without
-them it skips and says so.
+them it skips and says so. The live-turn suite also needs `@deepseek-ai/dsh-llm-mock-server@next`
+installed beside that `dsh`.
 
 `node --experimental-strip-types tests/perf/measure.ts` measures what each action costs
 (`docs/PERFORMANCE.md`), and `node --experimental-strip-types scripts/capture-screenshots.ts`
