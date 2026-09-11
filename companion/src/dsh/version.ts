@@ -21,7 +21,7 @@ export const SUPPORTED_DSH = {
   /** Lowest tested `@deepseek-ai/dsh-tools` version, inclusive. Below this the connector refuses. */
   minimum: '0.1.2-rc.1',
   /** Highest version with a passing row in `docs/COMPATIBILITY.md`, inclusive. */
-  maximumTested: '0.1.2-rc.1',
+  maximumTested: '0.1.5-rc.2',
   /**
    * The first version this connector refuses outright.
    *

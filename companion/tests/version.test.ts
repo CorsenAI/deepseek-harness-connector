@@ -39,7 +39,7 @@ describe('classifying a DeepSeek Harness runtime', () => {
   })
 
   it('calls a newer release inside the same line untested, and lets it load', () => {
-    for (const newer of ['0.1.3', '0.1.9', '0.1.3-alpha.1']) {
+    for (const newer of ['0.1.6', '0.1.9', '0.1.6-alpha.1']) {
       const verdict = classifyDshVersion(newer)
       assert.equal(verdict.status, 'untested', `${newer} is newer than tested, not incompatible`)
       assert.match(String(verdict.reason), /nothing has been verified/)

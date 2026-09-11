@@ -12,7 +12,17 @@ by runs, not assumptions.
 
 | DeepSeek Harness | Connector | Protocol | Status | Evidence | Limitations |
 |---|---|---|---|---|---|
-| `@deepseek-ai/dsh` 0.1.2-rc.1 with `@deepseek-ai/dsh-tools` 0.1.2-rc.1, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | `docs/TEST-EVIDENCE.md`, 2026-09-04: packaged tarball installed with `dsh plugin add`, composed into the Cordis tree, plugin applied; `tools.test.ts` against the real `defineTool` | A live model turn was not run (no API key in the test environment) |
+| `@deepseek-ai/dsh` 0.1.2-rc.1 with `@deepseek-ai/dsh-tools` 0.1.2-rc.1, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | `docs/TEST-EVIDENCE.md`, 2026-09-04 (Windows 11): packaged tarball installed with `dsh plugin add`, composed into the Cordis tree, plugin applied; `tools.test.ts` against the real `defineTool`. 2026-09-11 (Ubuntu 26.04): gate AQ, `tests/e2e/released-pair.test.ts` 5/5 — the released pair, a real `dsh` process applying the plugin, the installed tool layer driving a real Chromium through the packaged broker process | A live model turn was not run (no API key in the test environment) |
+| `@deepseek-ai/dsh` 0.1.5-rc.1 (npm `latest` on 2026-09-11) with `@deepseek-ai/dsh-tools` 0.1.5-rc.2, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | `docs/TEST-EVIDENCE.md`, 2026-09-11 (Ubuntu 26.04): the released lane — `dsh plugin add` of the packaged tarball, `--dump-config`, plugin applied in a real `dsh` process; gate AQ 5/5 with `DSH_BIN_DIR` at this installation; companion typecheck and the 240-case unit suite (the real `defineTool` included) against `dsh-tools` 0.1.5-rc.2 | Same: no live model turn |
+| `@deepseek-ai/dsh` 0.1.5-rc.2 (npm `next` on 2026-09-11) with `@deepseek-ai/dsh-tools` 0.1.5-rc.2, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | Same runs as the row above, on the `next` installation | Same: no live model turn |
+
+What changed in `@deepseek-ai/dsh-tools` between 0.1.2-rc.1 and 0.1.5-rc.2, read from the published
+type declarations: the programmatic-tool-calling events were renamed (`tool/code-dispatch` →
+`tool/ptc-dispatch`) and their sub-call ids became opaque. Nothing this connector uses —
+`defineTool`, `ToolRunContext.agent`, `ToolDefinition` — moved, and `agent/created` /
+`agent/disposed` are still emitted by `@deepseek-ai/dsh-agent` 0.1.5-rc.2. The releases between
+the two ends (0.1.3-alpha.2, 0.1.5-alpha.x, 0.1.5-rc.1 of `dsh-tools`) are alphas and release
+candidates of the same line and are declared on the strength of both ends, not of their own row.
 
 ## Declared range
 
@@ -20,7 +30,7 @@ by runs, not assumptions.
 
 ```
 minimum:       0.1.2-rc.1   (inclusive; below this the connector refuses to load)
-maximumTested: 0.1.2-rc.1   (inclusive; the highest version with a passing row above)
+maximumTested: 0.1.5-rc.2   (inclusive; the highest version with a passing row above)
 refuseFrom:    0.2.0        (at or above this the connector refuses to load)
 ```
 
@@ -87,16 +97,18 @@ Development was done against `deepseek-ai/deepseek-harness` at
 ahead of the published packages; the table above records what was *run*, which is the published
 `0.1.2-rc.1`.
 
-## CI lanes (planned)
+## CI lanes
 
-| Lane | Target | Gate |
-|---|---|---|
-| **released** | npm `latest` | release blocker |
-| **next** | npm `next` dist-tag | release blocker |
-| **upstream** | `deepseek-ai/deepseek-harness` `master`, scheduled | advisory — may fail without blocking a release; exists to discover a breaking change before users report it |
+| Lane | Target | Gate | Where |
+|---|---|---|---|
+| **released** | npm `latest` | release blocker | `.github/workflows/ci.yml`, jobs `dsh-integration` and `released-pair` |
+| **next** | npm `next` dist-tag | release blocker | same jobs |
+| **upstream** | `deepseek-ai/deepseek-harness` `master`, scheduled | advisory — may fail without blocking a release; exists to discover a breaking change before users report it | `dsh-integration` |
 
-None of these lanes is configured yet (`TEST-MATRIX.md` gate Z). Until they are, this table has one
-row and it was produced by hand.
+The lanes are configured and have been **run locally, by hand, on 2026-09-11** with the same
+commands the jobs run (`.scratch/compat-lane.sh` on this machine; the rows above). They have never
+run on GitHub, because the repository has no remote yet (`TEST-MATRIX.md` gate Z stays partial
+until the first hosted run writes its row).
 
 ## When upstream breaks us
 

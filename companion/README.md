@@ -26,7 +26,8 @@ Install the Chrome extension, type that code into its panel once, and attach a t
 Until a tab is attached, every browser tool fails with a clear refusal. There is no fallback to
 whatever tab happens to be active.
 
-Requires Node `^22.19 || >=24` and a DeepSeek Harness at or above `0.1.2-rc.1`.
+Requires Node `^22.19 || >=24` and a DeepSeek Harness at or above `0.1.2-rc.1`; tested up to
+`0.1.5-rc.2` (`docs/COMPATIBILITY.md` in the repository lists every tested release).
 
 ## What it does, and what it never does
 
