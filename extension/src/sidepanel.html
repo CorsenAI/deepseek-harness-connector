@@ -22,6 +22,31 @@
        the user always looks in the same place to learn why an action did not run. -->
   <section id="status" class="status" role="status" aria-live="polite"></section>
 
+  <!-- First run: what to install and whether the local connector is there yet. Shown whenever the
+       pairing form is, gone once paired. The commands are the same on every system; the installer
+       name and the wording follow the platform Chrome reports. -->
+  <section id="onboarding" class="card" hidden>
+    <h2 data-i18n="onboardingTitle">Set up in three steps</h2>
+    <p id="onboarding-detection" class="detection" data-tone="idle"></p>
+    <ol class="steps">
+      <li>
+        <span id="onboarding-step-install"></span>
+        <div class="cmd"><code id="cmd-install"></code><button type="button" class="ghost copy" data-copy="cmd-install" data-i18n="copy">Copy</button></div>
+      </li>
+      <li><span data-i18n="onboardingStepStart">Start DeepSeek Harness — for example dsh web. The connector starts its local broker by itself.</span></li>
+      <li>
+        <span data-i18n="onboardingStepCode">Print the pairing code, then type it below:</span>
+        <div class="cmd"><code id="cmd-code"></code><button type="button" class="ghost copy" data-copy="cmd-code" data-i18n="copy">Copy</button></div>
+        <p id="onboarding-installer" class="hint"></p>
+      </li>
+    </ol>
+    <div class="row">
+      <button type="button" id="onboarding-check" class="ghost" data-i18n="onboardingCheck">Check again</button>
+      <a id="onboarding-docs" class="linkish" href="https://github.com/CorsenAI/deepseek-harness-connector#installing" target="_blank"
+         rel="noreferrer noopener" data-i18n="onboardingDocs">Installation guide</a>
+    </div>
+  </section>
+
   <form id="pairing" class="card" hidden>
     <h2 data-i18n="pairTitle">Pair with your local connector</h2>
     <p class="hint" data-i18n="pairHint">

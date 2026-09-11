@@ -26,8 +26,8 @@ DeepSeek Harness Connector lets one exact DeepSeek Harness session — running o
 
 HOW IT WORKS
 1. Install the companion into a DeepSeek Harness profile: dsh plugin --profile web add @corsen-ai/dsh-browser-connector
-2. Start the local connector and read the pairing code it prints.
-3. Type that code once into this extension's side panel.
+2. Start DeepSeek Harness — the connector starts its local broker by itself — and print the pairing code: dsh plugin --profile web exec dsh-connector-broker --pairing-code
+3. Type that code once into this extension's side panel. Its setup card says whether the connector is reachable and shows these commands for your system.
 4. Pick a session, open the tab you want it to work in, and press "Attach this tab".
 
 The panel always shows the route in plain words: DeepSeek session → Chrome profile → attached tabs. If an action cannot run, the panel says why — not paired, no session selected, no tab attached, connector unreachable, versions mismatched.
@@ -78,8 +78,8 @@ Le Connecteur DeepSeek Harness permet à une session DeepSeek Harness précise �
 
 COMMENT ÇA MARCHE
 1. Installez le compagnon dans un profil DeepSeek Harness : dsh plugin --profile web add @corsen-ai/dsh-browser-connector
-2. Lancez le connecteur local et lisez le code d'appairage qu'il affiche.
-3. Saisissez ce code une seule fois dans le panneau latéral de cette extension.
+2. Démarrez DeepSeek Harness — le connecteur lance son broker local tout seul — puis affichez le code d'appairage : dsh plugin --profile web exec dsh-connector-broker --pairing-code
+3. Saisissez ce code une seule fois dans le panneau latéral de cette extension. Sa carte d'installation indique si le connecteur est joignable et montre ces commandes pour votre système.
 4. Choisissez une session, ouvrez l'onglet où elle doit travailler, puis appuyez sur « Attacher cet onglet ».
 
 Le panneau montre toujours le chemin en toutes lettres : session DeepSeek → profil Chrome → onglets attachés. Si une action ne peut pas s'exécuter, le panneau dit pourquoi — non appairé, aucune session choisie, aucun onglet attaché, connecteur injoignable, versions incompatibles.
@@ -107,7 +107,7 @@ Projet communautaire non officiel de Corsen AI. Sans affiliation, approbation ni
 
 | # | File | Caption (EN) | Caption (FR) |
 |---|---|---|---|
-| 1 | `screenshots/01-pair.png` | Pair once with the code your local connector prints. | Appairez une fois avec le code affiché par votre connecteur local. |
+| 1 | `screenshots/01-pair.png` | Set up in three steps: the panel finds your local connector and shows what to run. Pair once with the code it prints. | Installation en trois étapes : le panneau détecte votre connecteur local et montre quoi lancer. Appairez une fois avec le code affiché. |
 | 2 | `screenshots/02-no-tabs.png` | Pick the DeepSeek Harness session; nothing is shared until you attach a tab. | Choisissez la session DeepSeek Harness ; rien n'est partagé tant que vous n'attachez pas d'onglet. |
 | 3 | `screenshots/03-ready.png` | The route in plain words: session → Chrome profile → attached tabs. | Le chemin en toutes lettres : session → profil Chrome → onglets attachés. |
 | 4 | `screenshots/04-snapshot.png` | What the session receives — the password is masked before it leaves the page. | Ce que la session reçoit — le mot de passe est masqué avant de quitter la page. |

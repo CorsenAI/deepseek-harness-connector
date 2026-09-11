@@ -40,14 +40,18 @@ mv store/screenshots/promo-*.png store/
 
 (Headed, under a display or `xvfb-run`; `DSH_E2E_HEADLESS=1` on a machine without one.)
 
-## Files, as committed on 2026-09-11 at the commit `git log -1 -- store/screenshots` names
+## Files, as committed on 2026-09-12 at the commit `git log -1 -- store/screenshots` names
+
+Screenshot 1 shows the setup card of the first run — the connector detected on the running
+broker's port, the two commands, and the pairing form — which is why its size grew on 2026-09-12;
+screenshots 3 and 4 differ from 2026-09-11 only in the fixture server's port.
 
 | File | Size | Bytes | SHA-256 |
 |---|---|---|---|
-| `screenshots/01-pair.png` | 1280×800 | 70209 | `59e34fd6598ea1d610efd9e07fbcb3d537bac1d34a6d1afee4a4ebe8da785fb6` |
+| `screenshots/01-pair.png` | 1280×800 | 107759 | `00524c2e863187a48856e5c2b89137e15e402da2a307ec02ea1c3d438c3706af` |
 | `screenshots/02-no-tabs.png` | 1280×800 | 87181 | `5690c97cb982bfe2f7103fc672bd8d4e47388d119d21f09108e996a7e1c76b74` |
-| `screenshots/03-ready.png` | 1280×800 | 86997 | `19aa98bda7a0fc84510a2745478c345e278ef822c803d49139ccc6ed8d579492` |
-| `screenshots/04-snapshot.png` | 1280×800 | 102607 | `f5cf7bcca8da56777e145101b9095fe31b3995a0c2d62889bbadf68be81e5aad` |
+| `screenshots/03-ready.png` | 1280×800 | 86957 | `9e7f9fd39f6aa23e8fa52097559933bca830b16c40cb7e23a956e574d39c68fd` |
+| `screenshots/04-snapshot.png` | 1280×800 | 102597 | `90d552f5a3f8d8358a3d60256155249e34390e0eb3202ec8ae418c1f66529c48` |
 | `screenshots/05-update-required.png` | 1280×800 | 64946 | `b66e2b7c6565bce9b976f25a0719f0fc8a5a6544abcfadda0ccc60957e503e4d` |
 | `promo-small-440x280.png` | 440×280 | 44042 | `654a03508f4ae03813a1332f9d8c82a82eae03fd8545df2a3c7fd0751a327ab7` |
 | `promo-marquee-1400x560.png` | 1400×560 | 198549 | `35a52b77ae6ccb9e15b02e719e6a464771cba09af52363e70391f33ccdbf220c` |

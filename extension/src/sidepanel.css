@@ -184,6 +184,21 @@ button[disabled] { opacity: 0.45; cursor: not-allowed; }
 .chain strong { font-weight: 500; word-break: break-word; }
 
 .hint { color: var(--muted); font-size: 12px; }
+
+/* The setup card: a detection line whose colour follows the probe, numbered steps, and commands
+   the user copies rather than retypes. */
+.detection { font-size: 12px; padding-left: 14px; position: relative; }
+.detection::before { content: ""; position: absolute; left: 0; top: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.detection[data-tone="ok"]::before { background: var(--ok); }
+.detection[data-tone="warn"]::before { background: var(--warn); }
+.detection[data-tone="busy"]::before { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+.steps { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.steps li::marker { color: var(--muted); }
+.cmd { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.cmd code { flex: 1; min-width: 0; background: #0a0d13; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 11px; white-space: pre-wrap; word-break: break-all; line-height: 1.45; }
+.cmd .copy { flex: none; padding: 4px 8px; font-size: 11px; }
+.linkish { color: var(--muted); font-size: 12px; align-self: center; }
+.linkish:hover { color: var(--text); }
 .meta { color: var(--muted); font-size: 11px; margin: 10px 0 0; }
 .error { color: var(--bad); font-size: 12px; }
 .empty { color: var(--muted); font-size: 12px; padding: 10px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; }

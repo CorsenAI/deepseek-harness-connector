@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { PANEL_STATES, resolvePanelState } from '../../extension/src/panel-state.js'
+import { PANEL_STATES, classifyProbe, onboardingFor, osFamily, probeUrlFor, resolvePanelState } from '../../extension/src/panel-state.js'
 import { LOCALES, REFERENCE_LOCALE, dictionary, t } from '../../extension/src/i18n.js'
 
 /** A connected, paired, session-selected, tab-attached snapshot: the fully working case. */
@@ -114,6 +114,77 @@ describe('panel state', () => {
       nameOf({ ...ready(), updateNotice: { required: true } }),
     ])
     assert.deepEqual([...reached].sort(), [...PANEL_STATES].sort())
+  })
+})
+
+describe('the setup card', () => {
+  it('travels with the pairing form: shown before pairing, and after the code is forgotten, never once paired', () => {
+    const shown = (snapshot: Record<string, unknown>): boolean => (resolvePanelState(snapshot as never) as { showOnboarding: boolean }).showOnboarding
+    assert.equal(shown({ ...ready(), paired: null, connected: false, settings: { brokerUrl: 'x', pairingCode: '' } }), true, 'first run')
+    assert.equal(shown({ ...ready(), connected: false, settings: { brokerUrl: 'x', pairingCode: '' } }), true, 'code forgotten')
+    assert.equal(shown({ ...ready(), connected: false, paired: null }), true, 'a first handshake outstanding: the companion may still be missing')
+    assert.equal(shown({ ...ready(), connected: false }), false, 'paired before and unreachable now is the disconnected state, not setup')
+    assert.equal(shown(ready()), false)
+    assert.equal(shown({ ...ready(), updateNotice: { required: true } }), false)
+  })
+
+  it('reads Chrome\'s platform name into the family the instructions are written for', () => {
+    assert.equal(osFamily('win'), 'windows')
+    assert.equal(osFamily('mac'), 'mac')
+    assert.equal(osFamily('linux'), 'linux')
+    assert.equal(osFamily('openbsd'), 'linux')
+    assert.equal(osFamily('cros'), 'other')
+    assert.equal(osFamily(undefined), 'other')
+  })
+
+  it('probes the broker over plain HTTP at the connector address, and nothing else', () => {
+    assert.equal(probeUrlFor('ws://127.0.0.1:8781'), 'http://127.0.0.1:8781/')
+    assert.equal(probeUrlFor('ws://127.0.0.1:9000/some/path?x=1#f'), 'http://127.0.0.1:9000/')
+    assert.equal(probeUrlFor('wss://127.0.0.1:8781'), 'https://127.0.0.1:8781/')
+    assert.equal(probeUrlFor('http://127.0.0.1:8781'), null, 'a setting that is not a WebSocket address is not probed')
+    assert.equal(probeUrlFor('not a url'), null)
+    assert.equal(probeUrlFor(''), null)
+  })
+
+  it('reads 426 as the connector, any other answer as another program, and no answer as nothing', () => {
+    assert.equal(classifyProbe(426), 'running')
+    assert.equal(classifyProbe(404), 'other')
+    assert.equal(classifyProbe(200), 'other')
+    assert.equal(classifyProbe(null), 'none')
+    assert.equal(classifyProbe(0), 'none')
+  })
+
+  it('decides the whole card from the platform, the probe and the address', () => {
+    const card = onboardingFor({ platformOs: 'win', probe: 'running', brokerUrl: 'ws://127.0.0.1:8781' })
+    assert.equal(card.os, 'windows')
+    assert.equal(card.osKey, 'osWindows')
+    assert.equal(card.detectionKey, 'onboardingDetected')
+    assert.equal(card.tone, 'ok')
+    assert.equal(card.installerKey, 'onboardingInstallerWindows')
+    assert.equal(card.probeUrl, 'http://127.0.0.1:8781/')
+    assert.equal(card.installCommand, 'dsh plugin --profile web add @corsen-ai/dsh-browser-connector')
+    assert.equal(card.codeCommand, 'dsh plugin --profile web exec dsh-connector-broker --pairing-code')
+
+    const mac = onboardingFor({ platformOs: 'mac', probe: 'none', brokerUrl: 'ws://127.0.0.1:8781' })
+    assert.equal(mac.installerKey, 'onboardingInstallerPosix')
+    assert.equal(mac.detectionKey, 'onboardingNotDetected')
+    assert.equal(mac.tone, 'idle')
+    assert.equal(onboardingFor({ platformOs: 'linux', probe: 'other', brokerUrl: 'ws://127.0.0.1:8781' }).tone, 'warn')
+    assert.equal(onboardingFor({ platformOs: 'linux', probe: 'checking', brokerUrl: 'ws://127.0.0.1:8781' }).tone, 'busy')
+  })
+
+  it('has every key the card uses, in every locale, with the placeholders filled', () => {
+    for (const [locale, dict] of Object.entries(LOCALES as Record<string, Record<string, string>>)) {
+      for (const probe of ['checking', 'running', 'other', 'none'] as const) {
+        const card = onboardingFor({ platformOs: 'mac', probe, brokerUrl: 'ws://127.0.0.1:8781' })
+        const line = t(dict, card.detectionKey, { url: '127.0.0.1:8781', os: t(dict, card.osKey) })
+        assert.doesNotMatch(line, /\{|\}|^onboarding/, `${locale} ${probe}: ${line}`)
+        assert.ok(dict[card.installerKey], `${locale}: ${card.installerKey}`)
+      }
+      for (const key of ['onboardingTitle', 'onboardingStepInstall', 'onboardingStepStart', 'onboardingStepCode', 'onboardingCheck', 'onboardingDocs', 'copy', 'copied']) {
+        assert.ok(dict[key], `${locale}: ${key}`)
+      }
+    }
   })
 })
 

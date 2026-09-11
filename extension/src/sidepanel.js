@@ -5,7 +5,7 @@
 // worker.
 
 import { dictionary, t } from "./i18n.js";
-import { PANEL_STATES, resolvePanelState } from "./panel-state.js";
+import { PANEL_STATES, classifyProbe, onboardingFor, resolvePanelState } from "./panel-state.js";
 
 const dict = dictionary();
 
@@ -32,10 +32,27 @@ const el = {
   tabPicker: document.getElementById("tab-picker"),
   tabList: document.getElementById("tab-list"),
   openDsh: document.getElementById("open-dsh"),
+  onboarding: document.getElementById("onboarding"),
+  onboardingDetection: document.getElementById("onboarding-detection"),
+  onboardingStepInstall: document.getElementById("onboarding-step-install"),
+  onboardingInstaller: document.getElementById("onboarding-installer"),
+  onboardingCheck: document.getElementById("onboarding-check"),
+  cmdInstall: document.getElementById("cmd-install"),
+  cmdCode: document.getElementById("cmd-code"),
 };
 
 let snapshot = null;
 let pickerOpen = false;
+
+/** Chrome's name for this operating system, read once. */
+let platformOs;
+/** The last probe of the connector address: `checking` until the first answer. */
+let probe = /** @type {"checking"|"running"|"other"|"none"} */ ("checking");
+/** The address the last probe was for, so a changed setting is probed afresh. */
+let probedUrl = null;
+/** Re-probes while the setup card is showing, so a connector started meanwhile is noticed. */
+let probeTimer = null;
+const PROBE_EVERY_MS = 4000;
 
 /**
  * Ask the service worker something.
@@ -252,6 +269,68 @@ function renderPicker() {
   }
 }
 
+/**
+ * Ask the connector address whether the broker is there.
+ *
+ * A plain GET to the broker's HTTP side: the broker answers 426 and nothing else. Loopback only,
+ * from the extension's own origin; nothing about this leaves the machine. The status is read from
+ * the answer rather than assumed from the absence of an error.
+ * @param {string} url The probe address.
+ * @returns {Promise<number|null>} The status, or null when nothing answered.
+ */
+async function probeBroker(url) {
+  try {
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 2500);
+    const response = await fetch(url, { method: "GET", cache: "no-store", redirect: "manual", signal: controller.signal });
+    clearTimeout(deadline);
+    return response.status;
+  } catch {
+    return null;
+  }
+}
+
+/** Probe now and redraw the setup card with the verdict. */
+async function runProbe() {
+  const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot?.settings?.brokerUrl ?? "" });
+  if (card.probeUrl === null) { probe = "none"; renderOnboarding(); return; }
+  probedUrl = card.probeUrl;
+  const status = await probeBroker(card.probeUrl);
+  // The setting may have changed while the request was out; only the current address's answer counts.
+  if (probedUrl !== card.probeUrl) return;
+  probe = classifyProbe(status);
+  renderOnboarding();
+}
+
+/** Render the setup card from what is known now. */
+function renderOnboarding() {
+  const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot?.settings?.brokerUrl ?? "" });
+  const values = { url: card.probeUrl ? new URL(card.probeUrl).host : String(snapshot?.settings?.brokerUrl ?? ""), os: t(dict, card.osKey) };
+  el.onboardingDetection.dataset.tone = card.tone;
+  el.onboardingDetection.textContent = t(dict, card.detectionKey, values);
+  el.onboardingStepInstall.textContent = t(dict, "onboardingStepInstall", values);
+  el.onboardingInstaller.textContent = t(dict, card.installerKey);
+  el.cmdInstall.textContent = card.installCommand;
+  el.cmdCode.textContent = card.codeCommand;
+  el.onboarding.dataset.os = card.os;
+  el.onboarding.dataset.probe = probe;
+}
+
+/**
+ * Keep probing while the card shows; stop when it does not.
+ * @param {boolean} visible Whether the setup card is on screen.
+ */
+function scheduleProbes(visible) {
+  if (!visible) {
+    if (probeTimer !== null) { clearInterval(probeTimer); probeTimer = null; }
+    return;
+  }
+  if (probeTimer === null) {
+    void runProbe();
+    probeTimer = setInterval(() => { void runProbe(); }, PROBE_EVERY_MS);
+  }
+}
+
 /** Read the current state and redraw everything. */
 async function refresh() {
   const state = await ask({ type: "connector/state" });
@@ -263,9 +342,20 @@ async function refresh() {
   renderStatus(panel);
 
   el.pairing.hidden = !panel.showPairing;
+  el.onboarding.hidden = !panel.showOnboarding;
   el.sessions.hidden = !panel.showSessions;
   el.route.hidden = !panel.showRoute;
   if (!panel.showRoute) pickerOpen = false;
+
+  if (panel.showOnboarding) {
+    // A changed address is probed at once rather than described by an old verdict.
+    const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot.settings?.brokerUrl ?? "" });
+    const changed = card.probeUrl !== probedUrl;
+    if (changed) probe = "checking";
+    renderOnboarding();
+    if (changed && probeTimer !== null) void runProbe();
+  }
+  scheduleProbes(panel.showOnboarding);
 
   if (panel.showSessions) renderSessions();
   if (panel.showRoute) { renderRoute(); renderPicker(); }
@@ -341,12 +431,38 @@ el.chooseTabs.addEventListener("click", async () => {
   await refresh();
 });
 
+el.onboardingCheck.addEventListener("click", async () => {
+  probe = "checking";
+  renderOnboarding();
+  await runProbe();
+});
+
+for (const button of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("button.copy"))) {
+  button.addEventListener("click", async () => {
+    const source = document.getElementById(button.dataset.copy ?? "");
+    if (!source) return;
+    try {
+      await navigator.clipboard.writeText(source.textContent ?? "");
+      button.textContent = t(dict, "copied");
+      setTimeout(() => { button.textContent = t(dict, "copy"); }, 1500);
+    } catch {
+      // The clipboard can be refused (no user activation, a policy); the text is on screen anyway.
+    }
+  });
+}
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "connector/changed") void refresh();
 });
 
 localizeStaticCopy();
+chrome.runtime.getPlatformInfo().then((info) => { platformOs = info?.os; renderOnboardingIfShown(); }, () => {});
 void refresh();
+
+/** Redraw the setup card when it is on screen; the platform arrives after the first paint. */
+function renderOnboardingIfShown() {
+  if (el.onboarding && !el.onboarding.hidden && snapshot) renderOnboarding();
+}
 
 /** Exported for the panel-state tests, which assert every state is reachable. */
 export { PANEL_STATES, looksLikePairingCode };

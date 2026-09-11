@@ -87,8 +87,14 @@ async function shot(name: string): Promise<void> {
   save(name, compose(pageShot, panelShot))
 }
 
-// 1. First run: the pairing screen, before any code was typed.
+// 1. First run: the setup card and the pairing form, before any code was typed. The connector
+// address is set to the running broker so the card shows the state a user reaches after
+// installing the companion: detected, waiting for its code.
+await panel.evaluate(async (url: string) => {
+  await chrome.runtime.sendMessage({ type: 'connector/settings', settings: { brokerUrl: url, pairingCode: '' } })
+}, `ws://127.0.0.1:${harness.broker.port}`)
 await panel.reload()
+await waitFor('the setup card to detect the broker', async () => await panel.evaluate(() => document.getElementById('onboarding')?.dataset['probe'] === 'running'))
 await settle(400)
 await shot('01-pair.png')
 

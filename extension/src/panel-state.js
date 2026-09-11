@@ -24,6 +24,7 @@
  * @property {string} detailKey The dictionary key for the explanation.
  * @property {Record<string, string|number>} values Placeholder values for the detail.
  * @property {boolean} showPairing Whether the pairing form is visible.
+ * @property {boolean} showOnboarding Whether the first-run card (install, start, pair) is visible.
  * @property {boolean} showSessions Whether the session list is visible.
  * @property {boolean} showRoute Whether the route card is visible.
  */
@@ -51,6 +52,9 @@ export function resolvePanelState(snapshot) {
     detailKey,
     values,
     showPairing: panels.showPairing ?? false,
+    // Every state that shows the pairing form is a state in which the user may not have the
+    // companion yet, so the setup card travels with it.
+    showOnboarding: panels.showPairing ?? false,
     showSessions: panels.showSessions ?? false,
     showRoute: panels.showRoute ?? false,
   });
@@ -119,3 +123,92 @@ export const PANEL_STATES = Object.freeze([
   "ready",
   "update-required",
 ]);
+
+/**
+ * The operating system the setup card speaks to, from `chrome.runtime.getPlatformInfo().os`.
+ * @param {string|undefined} platformOs Chrome's value: `win`, `mac`, `linux`, `cros`, `openbsd`, …
+ * @returns {"windows"|"mac"|"linux"|"other"} The family the instructions are written for.
+ */
+export function osFamily(platformOs) {
+  switch (String(platformOs ?? "")) {
+    case "win": return "windows";
+    case "mac": return "mac";
+    case "linux":
+    case "openbsd": return "linux";
+    default: return "other";
+  }
+}
+
+/**
+ * The plain-HTTP address of a broker WebSocket address, which is what a reachability probe fetches.
+ * @param {string} brokerUrl The user's connector address, such as `ws://127.0.0.1:8781`.
+ * @returns {string|null} The probe address, or null when the setting is not a WebSocket address.
+ */
+export function probeUrlFor(brokerUrl) {
+  let parsed;
+  try {
+    parsed = new URL(String(brokerUrl ?? ""));
+  } catch {
+    return null;
+  }
+  if (parsed.protocol === "ws:") parsed.protocol = "http:";
+  else if (parsed.protocol === "wss:") parsed.protocol = "https:";
+  else return null;
+  parsed.pathname = "/";
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.href;
+}
+
+/**
+ * What one probe of the broker address means.
+ *
+ * The broker answers a plain request with `426 Upgrade Required` and nothing else, which no
+ * ordinary web server does; a different status is some other program on the port, and no answer
+ * at all is nothing listening.
+ * @param {number|null} status The HTTP status the address answered with, or null for no answer.
+ * @returns {"running"|"other"|"none"} The verdict.
+ */
+export function classifyProbe(status) {
+  if (status === 426) return "running";
+  if (typeof status === "number" && status > 0) return "other";
+  return "none";
+}
+
+/**
+ * Everything the setup card shows, decided without touching the DOM.
+ * @param {object} input What is known.
+ * @param {string|undefined} input.platformOs Chrome's platform name.
+ * @param {"checking"|"running"|"other"|"none"} input.probe The last probe's verdict.
+ * @param {string} input.brokerUrl The connector address setting.
+ * @returns {{
+ *   os: "windows"|"mac"|"linux"|"other",
+ *   osKey: string,
+ *   detectionKey: string,
+ *   tone: "ok"|"warn"|"busy"|"idle",
+ *   installCommand: string,
+ *   codeCommand: string,
+ *   installerKey: string,
+ *   probeUrl: string|null,
+ * }} What to render.
+ */
+export function onboardingFor({ platformOs, probe, brokerUrl }) {
+  const os = osFamily(platformOs);
+  const detection = {
+    checking: ["onboardingChecking", "busy"],
+    running: ["onboardingDetected", "ok"],
+    other: ["onboardingOtherProgram", "warn"],
+    none: ["onboardingNotDetected", "idle"],
+  }[probe] ?? ["onboardingNotDetected", "idle"];
+  return {
+    os,
+    osKey: { windows: "osWindows", mac: "osMac", linux: "osLinux", other: "osOther" }[os],
+    detectionKey: detection[0],
+    tone: /** @type {"ok"|"warn"|"busy"|"idle"} */ (detection[1]),
+    installCommand: "dsh plugin --profile web add @corsen-ai/dsh-browser-connector",
+    codeCommand: "dsh plugin --profile web exec dsh-connector-broker --pairing-code",
+    installerKey: os === "windows" ? "onboardingInstallerWindows" : "onboardingInstallerPosix",
+    probeUrl: probeUrlFor(brokerUrl),
+  };
+}
+

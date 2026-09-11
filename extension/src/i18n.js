@@ -14,7 +14,7 @@ const en = {
   openDsh: "Open DeepSeek Harness",
 
   pairTitle: "Pair with your local connector",
-  pairHint: "Run the installer, then type the pairing code it printed.",
+  pairHint: "Type the pairing code the installer printed, or the command above prints.",
   pairingCodeLabel: "Pairing code",
   pairAction: "Pair",
   pairingCodeInvalid: "That is not a complete pairing code. It is 20 letters and digits, usually shown in five groups.",
@@ -65,6 +65,25 @@ const en = {
 
   noneYet: "Nothing here yet.",
   detachAll: "Detach session",
+
+  onboardingTitle: "Set up in three steps",
+  onboardingChecking: "Looking for the local connector at {url}…",
+  onboardingDetected: "A connector is running at {url} on {os}. Type its pairing code below.",
+  onboardingNotDetected: "No connector is listening at {url} on {os} yet. Install it, then start DeepSeek Harness.",
+  onboardingOtherProgram: "Something other than the connector answers at {url}. Change the port in the DeepSeek Harness profile and in Settings here.",
+  onboardingStepInstall: "Install the companion into your DeepSeek Harness profile, in a terminal on {os}:",
+  onboardingStepStart: "Start DeepSeek Harness — for example dsh web. The connector starts its local broker by itself.",
+  onboardingStepCode: "Print the pairing code, then type it below:",
+  onboardingInstallerPosix: "Or run the one-file installer from the repository, install.sh, which does all of this and prints the code.",
+  onboardingInstallerWindows: "Or double-click the one-file installer from the repository, Install Connector.cmd, which does all of this and prints the code.",
+  onboardingCheck: "Check again",
+  onboardingDocs: "Installation guide",
+  copy: "Copy",
+  copied: "Copied",
+  osWindows: "Windows",
+  osMac: "macOS",
+  osLinux: "Linux",
+  osOther: "this computer",
 };
 
 /** French copy. */
@@ -76,7 +95,7 @@ const fr = {
   openDsh: "Ouvrir DeepSeek Harness",
 
   pairTitle: "Appairer le connecteur local",
-  pairHint: "Lancez l'installateur, puis saisissez le code d'appairage affiché.",
+  pairHint: "Saisissez le code d'appairage affiché par l'installateur, ou par la commande ci-dessus.",
   pairingCodeLabel: "Code d'appairage",
   pairAction: "Appairer",
   pairingCodeInvalid: "Ce code est incomplet. Il compte 20 lettres et chiffres, présentés en cinq groupes.",
@@ -127,6 +146,25 @@ const fr = {
 
   noneYet: "Rien pour l'instant.",
   detachAll: "Détacher la session",
+
+  onboardingTitle: "Installation en trois étapes",
+  onboardingChecking: "Recherche du connecteur local sur {url}…",
+  onboardingDetected: "Un connecteur tourne sur {url} ({os}). Saisissez son code d'appairage ci-dessous.",
+  onboardingNotDetected: "Aucun connecteur n'écoute sur {url} ({os}) pour l'instant. Installez-le, puis démarrez DeepSeek Harness.",
+  onboardingOtherProgram: "Un autre programme que le connecteur répond sur {url}. Changez le port dans le profil DeepSeek Harness et dans les réglages ici.",
+  onboardingStepInstall: "Installez le compagnon dans votre profil DeepSeek Harness, dans un terminal ({os}) :",
+  onboardingStepStart: "Démarrez DeepSeek Harness — par exemple dsh web. Le connecteur lance son broker local tout seul.",
+  onboardingStepCode: "Affichez le code d'appairage, puis saisissez-le ci-dessous :",
+  onboardingInstallerPosix: "Ou lancez l'installateur en un fichier du dépôt, install.sh, qui fait tout cela et affiche le code.",
+  onboardingInstallerWindows: "Ou double-cliquez sur l'installateur en un fichier du dépôt, Install Connector.cmd, qui fait tout cela et affiche le code.",
+  onboardingCheck: "Vérifier à nouveau",
+  onboardingDocs: "Guide d'installation",
+  copy: "Copier",
+  copied: "Copié",
+  osWindows: "Windows",
+  osMac: "macOS",
+  osLinux: "Linux",
+  osOther: "cet ordinateur",
 };
 
 /** Every dictionary, by locale prefix. */
