@@ -462,9 +462,12 @@ async function onAction(frame) {
   // reported performed, with the new address once the page has loaded; a read or a wait is asked
   // again of the page that arrived, since that is the page the model will act on; anything else is
   // told where the page went and that its own outcome is unknown.
-  const navigatedAway = async () => {
+  const navigatedAway = async (documentWentAway) => {
     const after = await chrome.tabs.get(targetTabId).catch(() => null);
     if (after === null) return "gone";
+    // A refusal Chrome states for another reason — no access to this host, a page it protects —
+    // is not a navigation even if the page happens to be loading something at that moment.
+    if (!documentWentAway) return null;
     const navigated = await navigationCausedBy(tab, after, targetTabId);
     if (navigated === null) return null;
     if (NAVIGATING_ACTIONS.includes(kind)) {
@@ -505,12 +508,15 @@ async function onAction(frame) {
     // action happened that Chrome refused to perform. A tab that vanished while the action ran is
     // the common cause; it is reported as such BEFORE the binding is cleaned, so the model learns
     // the real reason rather than a later "binding changed".
-    const moved = await navigatedAway();
+    // Chrome names the reason: a document torn down under the script reads "Frame with ID … was
+    // removed"; a page it will not let the extension into reads "Cannot access …".
+    const message = String(cause?.message ?? cause);
+    const moved = await navigatedAway(/frame|removed|detached|navigat/i.test(message));
     if (moved === "gone") {
       refuse(ERROR.TAB_GONE, "the attached tab was closed while the action was running");
       await releaseClosedTab(targetTabId);
     } else if (moved === null) {
-      refuse(ERROR.ACTION_FAILED, `Chrome refused to run the action in that tab: ${String(cause?.message ?? cause)}`);
+      refuse(ERROR.ACTION_FAILED, `Chrome refused to run the action in that tab: ${message}`);
     }
     return;
   } finally {
@@ -520,7 +526,7 @@ async function onAction(frame) {
   const outcome = injected?.[0]?.result;
   if (!outcome || typeof outcome !== "object") {
     // Chrome resolves an injection with no result when the document went away mid-script.
-    const moved = await navigatedAway();
+    const moved = await navigatedAway(true);
     if (moved === "gone") {
       refuse(ERROR.TAB_GONE, "the attached tab was closed while the action was running");
       await releaseClosedTab(targetTabId);
