@@ -209,10 +209,12 @@ for (let select = 0; select < 100; select += 1) {
 
     it('walks a deeply nested chain iteratively, within its budget', async () => {
       // The depth here is 200, not the thousands a threat model might imagine, for a measured
-      // reason: this machine's Chromium crashes or hangs while *building* a document nested a
-      // thousand levels deep, before any connector code runs. The browser bounds that case, and a
-      // test asserting our behaviour past the browser's own limit would prove nothing. What is
-      // ours, and is asserted, is that depth costs nodes like any other shape and never recursion.
+      // reason: a browser crashes or hangs while *building* a document nested deep enough, before
+      // any connector code runs — Chromium 131 on Windows at about 500, and the Chrome 153 headless
+      // shell on Windows already at 200 (its full browser passes 400). The browser bounds that
+      // case, and a test asserting our behaviour past the browser's own limit would prove nothing.
+      // What is ours, and is asserted, is that depth costs nodes like any other shape and never
+      // recursion.
       const probe = await probes.open(`<!doctype html><meta charset="utf-8"><title>deep</title><body><div id="host"></div>
 <script>
 let node = document.getElementById('host');

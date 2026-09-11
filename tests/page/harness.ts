@@ -98,19 +98,28 @@ export async function startProbes(): Promise<ProbeEnvironment> {
       response.writeHead(403).end('outside the repository')
       return
     }
+    // Read before answering: a header already sent cannot become a 404, and the full browser asks
+    // for things the shell never did, such as a favicon.
+    let body: Buffer
     try {
-      response.writeHead(200, { 'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream' })
-      response.end(readFileSync(target))
+      body = readFileSync(target)
     } catch {
       response.writeHead(404).end('not found')
+      return
     }
+    response.writeHead(200, { 'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream' })
+    response.end(body)
   })
   await new Promise<void>((resolve) => { files.listen(0, '127.0.0.1', () => { resolve() }) })
   const address = files.address()
   const port = typeof address === 'object' && address !== null ? address.port : 0
   const base = `http://127.0.0.1:${port}`
 
-  const browser: Browser = await chromium.launch()
+  // The full browser in its new headless mode, not the headless shell: it is what a user's Chrome
+  // is, and the shell's renderer on Windows dies building a document nested 200 deep (measured
+  // 2026-09-11 with Chrome for Testing 153: the shell fails at 200 and the full browser passes 400),
+  // which would make the deep-document case test the shell rather than the module.
+  const browser: Browser = await chromium.launch({ headless: true, channel: 'chromium' })
 
   return {
     open: async (html: string): Promise<PageProbe> => {
