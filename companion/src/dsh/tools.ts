@@ -294,7 +294,8 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
     name: 'browser_click',
     description:
       'Click one element in the browser tab attached to this session, addressed by a `ref` from the most '
-      + 'recent browser_snapshot. Take a fresh snapshot afterwards, because clicking usually changes the page.',
+      + 'recent browser_snapshot. Take a fresh snapshot afterwards, because clicking usually changes the page. '
+      + 'If the click navigated the tab to another page, the result says navigated: true with the new address.',
     parameters: { ref: REF },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: { ...PAGE_IDENTITY, clicked: { type: 'string', required: true } } },
@@ -310,7 +311,8 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
     description:
       'Type text into one input, textarea, or editable element in the browser tab attached to this session, '
       + 'addressed by a `ref` from the most recent browser_snapshot. With submit: true the containing form is submitted, '
-      + 'and the result says whether the browser actually dispatched that submission. '
+      + 'and the result says whether the browser actually dispatched that submission; if the submission navigated the '
+      + 'tab to another page, the result says navigated: true with the new address instead. '
       + 'Never type a password, payment card number, or one-time code: those fields are the user’s to fill.',
     parameters: {
       ref: REF,
@@ -347,7 +349,8 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
       'Press one key in the tab attached to this session: a single character, or Enter, Tab, Escape, Backspace, '
       + 'Delete, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp, PageDown, Space, optionally with '
       + 'modifiers such as Control+a or Shift+Tab. Give a `ref` to focus an element first. Enter in a form field '
-      + 'submits the form. To enter text, use browser_type instead.',
+      + 'submits the form; if that navigated the tab, the result says navigated: true with the new address. '
+      + 'To enter text, use browser_type instead.',
     parameters: {
       key: { type: 'string', required: true, description: 'The key, such as Enter or Control+a.' },
       ref: { type: 'string', description: 'An element reference to focus before pressing.' },

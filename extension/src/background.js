@@ -22,6 +22,7 @@ import {
 import { IMPLEMENTED_ACTIONS, TAB_ACTIONS, runPageAction } from "./page-actions.js";
 import { redactionConfig, scrubUrl } from "./redact.js";
 import {
+  ACTION,
   CLIENT,
   DEFAULT_SETTINGS,
   ERROR,
@@ -447,33 +448,70 @@ async function onAction(frame) {
     return;
   }
 
+  const inject = () => chrome.scripting.executeScript({
+    target: { tabId: targetTabId },
+    func: runPageAction,
+    args: [kind, args, redactionConfig()],
+    world: "ISOLATED",
+  });
+
+  // The document an action was injected into can be replaced while the action runs — by the
+  // action itself (a link, a submit, an Enter) or by the page. Chrome then either rejects the
+  // injection or resolves it with no result, and neither is a refusal Chrome made. What actually
+  // happened is a navigation, and it is reported as one: an action that navigates on purpose is
+  // reported performed, with the new address once the page has loaded; a read or a wait is asked
+  // again of the page that arrived, since that is the page the model will act on; anything else is
+  // told where the page went and that its own outcome is unknown.
+  const navigatedAway = async () => {
+    const after = await chrome.tabs.get(targetTabId).catch(() => null);
+    if (after === null) return "gone";
+    const navigated = await navigationCausedBy(tab, after, targetTabId);
+    if (navigated === null) return null;
+    if (NAVIGATING_ACTIONS.includes(kind)) {
+      reply({ ok: true, data: { ...navigatedSubject(kind, args), navigated: true, ...navigated } });
+      return "answered";
+    }
+    if (!REREADABLE_ACTIONS.includes(kind)) {
+      refuse(ERROR.ACTION_FAILED, `the page navigated away while the action was running and is now at ${navigated.url}; `
+        + "the action's outcome is unknown, take a fresh snapshot");
+      return "answered";
+    }
+    try {
+      const again = await inject();
+      const outcome = again?.[0]?.result;
+      if (!outcome || typeof outcome !== "object") {
+        refuse(ERROR.ACTION_FAILED, `the page navigated to ${navigated.url} while the action was running and returned no result afterwards`);
+      } else if (outcome.ok === true) {
+        reply({ ok: true, data: { ...outcome.data, navigated: true } });
+      } else {
+        refuse(String(outcome.error?.code ?? ERROR.ACTION_FAILED), String(outcome.error?.message ?? "the page could not perform the action"));
+      }
+    } catch (again) {
+      refuse(ERROR.ACTION_FAILED, `the page navigated to ${navigated.url} while the action was running, and could not be read `
+        + `afterwards: ${String(again?.message ?? again)}`);
+    }
+    return "answered";
+  };
+
   let injected;
   // A tab closed while its script runs does not always fail the injection promptly: Chrome can
   // leave executeScript pending for seconds on a tab that is being torn down. The removal event
   // is the authoritative, immediate signal, so the action settles on whichever comes first.
   const removal = watchTabRemoval(targetTabId);
   try {
-    injected = await Promise.race([
-      chrome.scripting.executeScript({
-        target: { tabId: targetTabId },
-        func: runPageAction,
-        args: [kind, args, redactionConfig()],
-        world: "ISOLATED",
-      }),
-      removal.removed,
-    ]);
+    injected = await Promise.race([inject(), removal.removed]);
   } catch (cause) {
     // Injection failure is reported as a failure. Reporting success here would tell the model an
     // action happened that Chrome refused to perform. A tab that vanished while the action ran is
     // the common cause; it is reported as such BEFORE the binding is cleaned, so the model learns
     // the real reason rather than a later "binding changed".
-    const stillThere = await chrome.tabs.get(targetTabId).then(() => true).catch(() => false);
-    if (!stillThere) {
+    const moved = await navigatedAway();
+    if (moved === "gone") {
       refuse(ERROR.TAB_GONE, "the attached tab was closed while the action was running");
       await releaseClosedTab(targetTabId);
-      return;
+    } else if (moved === null) {
+      refuse(ERROR.ACTION_FAILED, `Chrome refused to run the action in that tab: ${String(cause?.message ?? cause)}`);
     }
-    refuse(ERROR.ACTION_FAILED, `Chrome refused to run the action in that tab: ${String(cause?.message ?? cause)}`);
     return;
   } finally {
     removal.dispose();
@@ -481,7 +519,14 @@ async function onAction(frame) {
 
   const outcome = injected?.[0]?.result;
   if (!outcome || typeof outcome !== "object") {
-    refuse(ERROR.ACTION_FAILED, "the page returned no result");
+    // Chrome resolves an injection with no result when the document went away mid-script.
+    const moved = await navigatedAway();
+    if (moved === "gone") {
+      refuse(ERROR.TAB_GONE, "the attached tab was closed while the action was running");
+      await releaseClosedTab(targetTabId);
+    } else if (moved === null) {
+      refuse(ERROR.ACTION_FAILED, "the page returned no result");
+    }
     return;
   }
   if (outcome.ok === true) reply({ ok: true, data: outcome.data });
@@ -491,6 +536,56 @@ async function onAction(frame) {
       String(outcome.error?.message ?? "the page could not perform the action"),
     );
   }
+}
+
+/** Actions that navigate on purpose: a click on a link, a submitted form, an Enter. */
+const NAVIGATING_ACTIONS = [ACTION.CLICK, ACTION.TYPE, ACTION.KEY];
+
+/**
+ * Actions that only read or wait, and so can be asked again of the page that replaced the one
+ * they were injected into. A ref-addressed read on the new page fails as stale, which is honest.
+ */
+const REREADABLE_ACTIONS = [ACTION.SNAPSHOT, ACTION.READ_TEXT, ACTION.CURRENT_URL, ACTION.FIND, ACTION.WAIT, ACTION.SCROLL, ACTION.HOVER];
+
+/**
+ * Whether a tab left the document an action was injected into, and where it went.
+ *
+ * Compared on the address Chrome reports before and after, or on a load in progress: a document
+ * replaced by a same-address reload is not a navigation the model needs told about, and a tab
+ * merely still loading its old page is not one either.
+ * @param {chrome.tabs.Tab} before The tab as read just before the injection.
+ * @param {chrome.tabs.Tab} after The tab as read after the injection failed.
+ * @param {number} tabId The tab id.
+ * @returns {Promise<{url: string, title: string, loaded: string}|null>} The new page once loaded,
+ * or null when the tab did not navigate.
+ */
+async function navigationCausedBy(before, after, tabId) {
+  const wasAt = String(before.url ?? "");
+  const nowAt = String(after.pendingUrl ?? after.url ?? "");
+  const loading = after.status === "loading" && typeof after.pendingUrl === "string";
+  if (nowAt === wasAt && !loading) return null;
+  await waitForTabComplete(tabId, nowAt);
+  const landed = await chrome.tabs.get(tabId).catch(() => after);
+  return {
+    url: scrubUrl(String(landed.url ?? nowAt)),
+    title: String(landed.title ?? "").slice(0, MAX_TAB_TITLE_CHARS),
+    loaded: landed.status === "complete" ? "complete" : "loading",
+  };
+}
+
+/**
+ * The required subject field of an action whose page navigated before it could answer.
+ *
+ * The page module names what it acted on; after a navigation there is no page to ask, so the
+ * model's own reference or key stands in. It is what the model asked for, which it already knows.
+ * @param {string} kind The action kind.
+ * @param {Record<string, unknown>} args The action arguments.
+ * @returns {Record<string, string>} The subject field for that kind.
+ */
+function navigatedSubject(kind, args) {
+  if (kind === "click") return { clicked: String(args?.ref ?? "") };
+  if (kind === "type") return { typed: String(args?.text ?? "") };
+  return { key: String(args?.key ?? ""), target: typeof args?.ref === "string" ? String(args.ref) : "page" };
 }
 
 /**
