@@ -110,9 +110,16 @@ if ($Uninstall) {
   exit 0
 }
 
-# Absolute-ize a tarball path: `dsh plugin` runs pnpm with cwd = the profile directory.
-if ($Package -match '^\.{1,2}[\\/]' -or ($Package -match '\.tgz$' -and -not [System.IO.Path]::IsPathRooted($Package))) {
-  $Package = (Resolve-Path $Package).Path
+# Absolute-ize a local path: `dsh plugin` runs pnpm with cwd = the profile directory, where a
+# relative path means nothing — and pnpm reads a bare `dir\file.tgz` as a GitHub shorthand and
+# goes looking for a repository. A path that names nothing here is refused now, with a reason.
+if (-not $Package.StartsWith('@') -and -not [System.IO.Path]::IsPathRooted($Package)) {
+  if (Test-Path -LiteralPath $Package) {
+    $Package = (Resolve-Path -LiteralPath $Package).Path
+  }
+  elseif ($Package -match '\.tgz$' -or $Package -match '[\\/]') {
+    Fail "no such file: $Package (a -Package path is read from this directory: $(Get-Location))"
+  }
 }
 
 # Upstream limitation, DeepSeek Harness 0.1.2-rc.1: `dsh plugin` forwards to pnpm with

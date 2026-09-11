@@ -69,9 +69,16 @@ $code1 = if (Test-Path $broker) { (node $broker --pairing-code --home $env:DSH_H
 Expect "pairing code has the expected shape" ([int]("$code1" -match "^[34679ACDEFGHJKMNPQRTUVWXY]{4}(-[34679ACDEFGHJKMNPQRTUVWXY]{4}){4}$")) 1
 Write-Output ""
 
-Write-Output "=== install over existing (upgrade path) ==="
-$log2 = RunInstaller @("-Profile", "headless", "-Package", $Tarball)
-Expect "reinstall exit code" $LASTEXITCODE 0
+Write-Output "=== install over existing (upgrade path), the tarball given as a relative path ==="
+# A user types the file name as it sits in front of them. `dsh plugin` runs pnpm in the profile
+# directory, where that name means nothing — and pnpm reads a bare `dir\file.tgz` as a GitHub
+# shorthand; the installer must hand pnpm an absolute path (a regression seen on 2026-09-12).
+Push-Location (Split-Path -Parent $Tarball)
+$log2 = RunInstaller @("-Profile", "headless", "-Package", (Split-Path -Leaf $Tarball))
+$reinstallExit = $LASTEXITCODE
+Pop-Location
+Expect "reinstall exit code" $reinstallExit 0
+Expect "no git resolution attempted" ([int](($log2 | Out-String) -match "GIT_RESOLVE")) 0
 $log2 | Select-String "Stopped the previous broker" | ForEach-Object { "  | $_" }
 $pid2 = Get-Content (Join-Path $env:DSH_HOME "connector\broker.pid") -ErrorAction SilentlyContinue
 Expect "previous broker stopped" (Alive $pid1) "false"
@@ -79,6 +86,13 @@ Expect "new broker alive" (Alive $pid2) "true"
 Expect "exactly one broker on the port" (HttpCode) 426
 $code2 = if (Test-Path $broker) { (node $broker --pairing-code --home $env:DSH_HOME 2>$null | Select-Object -Last 1) } else { "" }
 Expect "pairing code unchanged across reinstall" $(if ("$code1" -eq "$code2") { "same" } else { "different" }) "same"
+Write-Output ""
+
+Write-Output "=== a package path that names nothing ==="
+$log4 = RunInstaller @("-Profile", "headless", "-Package", "nowhere\missing.tgz")
+Expect "refused before pnpm runs" $LASTEXITCODE 1
+Expect "the reason names the file" ([int](($log4 | Out-String) -match "no such file: nowhere\\missing.tgz")) 1
+Expect "the broker from the previous install is untouched" (Alive $pid2) "true"
 Write-Output ""
 
 Write-Output "=== uninstall ==="

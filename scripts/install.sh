@@ -80,10 +80,19 @@ if [ "$UNINSTALL" -eq 1 ]; then
   exit 0
 fi
 
-# Absolute-ize a tarball path: `dsh plugin` runs pnpm with cwd = the profile directory, and a bare
-# relative path would resolve there instead of here.
+# Absolute-ize a local path: `dsh plugin` runs pnpm with cwd = the profile directory, where a
+# relative path would resolve to nothing — and pnpm reads a bare `dir/file.tgz` as a GitHub
+# shorthand and goes looking for a repository. A path that names nothing here is refused now,
+# with a reason, rather than by pnpm with a git error.
 case "$PACKAGE" in
-  ./*|../*) PACKAGE="$(cd "$(dirname "$PACKAGE")" && pwd)/$(basename "$PACKAGE")" ;;
+  /*|@*) ;;
+  *)
+    if [ -e "$PACKAGE" ]; then
+      PACKAGE="$(cd "$(dirname "$PACKAGE")" && pwd)/$(basename "$PACKAGE")"
+    elif [ "${PACKAGE%.tgz}" != "$PACKAGE" ] || [ "${PACKAGE#*/}" != "$PACKAGE" ]; then
+      fail "no such file: $PACKAGE (a --package path is read from this directory: $(pwd))"
+    fi
+    ;;
 esac
 
 say "Installing $PACKAGE into DeepSeek Harness profile '$PROFILE'..."

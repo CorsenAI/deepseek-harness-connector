@@ -54,9 +54,13 @@ CODE1="$(node "$BROKER" --pairing-code --home "$DSH_HOME" 2>/dev/null | tail -1)
 expect "pairing code has the expected shape" "$(echo "$CODE1" | grep -cE "^[34679ACDEFGHJKMNPQRTUVWXY]{4}(-[34679ACDEFGHJKMNPQRTUVWXY]{4}){4}$")" "1"
 echo
 
-echo "=== install over existing (upgrade path) ==="
-bash "$INSTALLER" --profile headless --package "$TGZ" > "$DSH_HOME/install-2.log" 2>&1
+echo "=== install over existing (upgrade path), the tarball given as a relative path ==="
+# A user types the file name as it sits in front of them. `dsh plugin` runs pnpm in the profile
+# directory, where that name means nothing — and pnpm reads a bare `dir/file.tgz` as a GitHub
+# shorthand; the installer must hand pnpm an absolute path (a regression seen on 2026-09-12).
+(cd "$(dirname "$TGZ")" && bash "$INSTALLER" --profile headless --package "$(basename "$TGZ")" > "$DSH_HOME/install-2.log" 2>&1)
 expect "reinstall exit code" "$?" "0"
+expect "no git resolution attempted" "$(grep -c "GIT_RESOLVE" "$DSH_HOME/install-2.log")" "0"
 grep -E "Stopped the previous broker" "$DSH_HOME/install-2.log" | sed "s/^/  | /"
 PID2="$(cat "$DSH_HOME/connector/broker.pid" 2>/dev/null)"
 expect "previous broker stopped" "$(alive "$PID1")" "false"
@@ -64,6 +68,13 @@ expect "new broker alive" "$(alive "$PID2")" "true"
 expect "exactly one broker on the port" "$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$DSH_CONNECTOR_PORT/")" "426"
 CODE2="$(node "$BROKER" --pairing-code --home "$DSH_HOME" 2>/dev/null | tail -1)"
 expect "pairing code unchanged across reinstall" "$([ "$CODE1" = "$CODE2" ] && echo same || echo different)" "same"
+echo
+
+echo "=== a package path that names nothing ==="
+bash "$INSTALLER" --profile headless --package "nowhere/missing.tgz" > "$DSH_HOME/install-3.log" 2>&1
+expect "refused before pnpm runs" "$?" "1"
+expect "the reason names the file" "$(grep -c "no such file: nowhere/missing.tgz" "$DSH_HOME/install-3.log")" "1"
+expect "the broker from the previous install is untouched" "$(alive "$PID2")" "true"
 echo
 
 echo "=== uninstall ==="
