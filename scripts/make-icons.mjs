@@ -4,10 +4,10 @@
 // or reproduce, and makes a brand change a one-line edit rather than a round trip through a design
 // tool. Run it with `node scripts/make-icons.mjs`.
 
-import { deflateSync } from "node:zlib";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { encodePng } from "./png.mjs";
 
 /** Corsen AI's dark premium palette: a near-black ground with a single bright accent. */
 const BACKGROUND = [16, 18, 24];
@@ -16,68 +16,6 @@ const ACCENT_DIM = [58, 108, 168];
 
 /** Sizes Chrome asks for. */
 const SIZES = [16, 48, 128];
-
-/**
- * CRC-32, as PNG chunks require.
- * @param {Uint8Array} bytes The chunk type and data.
- * @returns {number} The checksum.
- */
-function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-/**
- * Build one PNG chunk.
- * @param {string} type The four-character chunk type.
- * @param {Buffer} data The chunk payload.
- * @returns {Buffer} The complete chunk.
- */
-function chunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-  const checksum = Buffer.alloc(4);
-  checksum.writeUInt32BE(crc32(body), 0);
-  return Buffer.concat([length, body, checksum]);
-}
-
-/**
- * Encode RGBA pixels as a PNG.
- * @param {number} size The square edge length.
- * @param {Uint8Array} pixels `size * size * 4` bytes, row-major RGBA.
- * @returns {Buffer} The PNG file.
- */
-function encodePng(size, pixels) {
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(size, 0);
-  header.writeUInt32BE(size, 4);
-  header[8] = 8; // bit depth
-  header[9] = 6; // colour type: RGBA
-  // Compression, filter, and interlace methods each have exactly one valid value here.
-
-  // Each scanline is prefixed with its filter type; 0 means "no filtering", which compresses
-  // perfectly well for flat artwork and keeps this encoder simple enough to audit.
-  const raw = Buffer.alloc(size * (size * 4 + 1));
-  for (let y = 0; y < size; y += 1) {
-    const target = y * (size * 4 + 1);
-    raw[target] = 0;
-    Buffer.from(pixels.buffer, pixels.byteOffset + y * size * 4, size * 4).copy(raw, target + 1);
-  }
-
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", header),
-    chunk("IDAT", deflateSync(raw, { level: 9 })),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
 
 /**
  * Draw the mark: a rounded dark tile carrying a bracket-and-link glyph.
@@ -146,6 +84,6 @@ const target = join(dirname(dirname(fileURLToPath(import.meta.url))), "extension
 mkdirSync(target, { recursive: true });
 for (const size of SIZES) {
   const file = join(target, `icon-${size}.png`);
-  writeFileSync(file, encodePng(size, draw(size)));
+  writeFileSync(file, encodePng(size, size, draw(size)));
   process.stdout.write(`wrote ${file}\n`);
 }

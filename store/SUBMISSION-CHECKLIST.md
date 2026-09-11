@@ -8,13 +8,13 @@ explicit owner authorization** — this repository prepares it and does not perf
 | Item | State | Where |
 |---|---|---|
 | Manifest V3, valid | done | `extension/manifest.json` |
-| Version matches the companion package | done (0.1.0) | manifest, `companion/package.json` |
-| No remote code, no `eval`, no interpreter | done | `src/` is plain ES modules |
-| Icons 16 / 48 / 128 | done, generated | `extension/assets/`, `scripts/make-icons.mjs` |
-| Production ZIP from a tagged clean tree | **open** | `scripts/package.mjs` not yet written |
-| ZIP contains only allowlisted files | **open** | `scripts/verify-package.mjs` not yet written |
-| ZIP byte-identical across two builds | **open** | gate AE |
-| Packaged ZIP tested in Chromium, not the source tree | **open** | gate AD |
+| Version matches the companion package | done (0.1.0) | manifest, `companion/package.json`, checked by `scripts/verify-package.mjs` |
+| No remote code, no `eval`, no interpreter | done | `src/` is plain ES modules; the verifier scans for foreign hosts |
+| Permission set frozen and enforced | done | ADR 0009; the verifier refuses any other set or any optional permission |
+| Production ZIP from a clean tree | done | `scripts/package.mjs`, which refuses a dirty tree |
+| ZIP contains only allowlisted files | done | `scripts/verify-package.mjs` |
+| ZIP byte-identical across builds and platforms | done | identical hashes from Linux, macOS and Windows builds of the same commit (`docs/TEST-EVIDENCE.md`, 2026-09-11) |
+| Packaged ZIP tested in Chromium, not the source tree | done | gates AD and AQ |
 
 ## Policy material
 
@@ -23,42 +23,31 @@ explicit owner authorization** — this repository prepares it and does not perf
 | Single purpose statement | done | `store/SINGLE-PURPOSE.md` |
 | Permission justification per permission | done | `store/PERMISSION-JUSTIFICATIONS.md` |
 | Data-use disclosures | done | `store/DATA-DISCLOSURES.md` |
-| Privacy policy, hosted at a public URL | **open** | needs a page on the project site; content is in `DATA-DISCLOSURES.md` |
+| Privacy policy page | done, **not yet hosted** | `store/privacy.html` — its content is `DATA-DISCLOSURES.md`; the listing needs it at a public URL (the repository's GitHub Pages, once the remote exists) |
 | Reviewer instructions | done | `store/REVIEWER-INSTRUCTIONS.md` |
-| Review stand-in script | **open** | `scripts/review-session.mjs` referenced but not yet written |
+| Review stand-in script | done | `scripts/review-session.mjs` |
 
 ## Listing
 
-| Item | State | Notes |
+| Item | State | Where |
 |---|---|---|
-| Title | done | `DeepSeek Harness Connector — by Corsen AI` (45 chars max: check) |
-| Short description (132 chars max) | draft | "Let an exact DeepSeek Harness session operate the tabs you choose, in your own signed-in Chrome. Local, unofficial, by Corsen AI." |
-| Detailed description | draft | Adapt `README.md` "What it does" and "What it never does" |
-| Category | decide | Developer Tools or Productivity |
-| Language | done | English; French UI shipped |
-| Screenshots 1280×800 (at least one, up to five) | **open** | plan below |
-| Small promo tile 440×280 | **open** | |
-| Marquee promo tile 1400×560 | **open**, optional | |
-| Support URL | **open** | GitHub issues |
-| Homepage URL | done | GitHub repository |
-
-## Screenshot plan
-
-1. The panel in the **Ready** state: session → Chrome profile → attached tabs, with one real tab.
-2. The **No tabs attached** state, showing the plain "nothing is shared" copy.
-3. A snapshot as the model sees it, beside the page it came from, with a masked password field
-   visible.
-4. The **Update required** state, showing the actionable message.
-5. The pairing screen.
-
-Each screenshot is captured from the real extension by a script so it can be regenerated for every
-release, not hand-made once.
+| Title (45 max) | done, 41 characters | `store/LISTING.md` |
+| Short description (132 max) | done, 129 characters | `store/LISTING.md` |
+| Detailed description | done, EN and FR | `store/LISTING.md` |
+| Category | Developer Tools | `store/LISTING.md` |
+| Language | English; French panel copy shipped | `extension/src/i18n.js` |
+| Screenshots 1280×800, five | done, captured by script from the real extension | `store/screenshots/`, provenance in `store/ASSETS.md` |
+| Small promo tile 440×280 | done | `store/promo-small-440x280.png` |
+| Marquee promo tile 1400×560 (optional) | done | `store/promo-marquee-1400x560.png` |
+| Store icon 128×128 | done | `extension/assets/icon-128.png` |
+| Support URL | GitHub issues | needs the remote |
+| Homepage URL | GitHub repository | needs the remote |
 
 ## Before pressing submit
 
 - [ ] All release-blocking gates in `docs/TEST-MATRIX.md` pass with evidence at the release tag.
+- [ ] The GitHub remote exists, CI has run green on it, and the privacy page is live at a public URL.
 - [ ] The npm package for the same version is published first, so a reviewer can install it.
-- [ ] The privacy policy URL is live.
 - [ ] The ZIP hash matches `release-manifest.json` in the GitHub release.
 - [ ] Owner authorization recorded for this specific submission.
 

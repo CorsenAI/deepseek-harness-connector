@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Northwind Notes — Team workspace</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; font: 15px/1.55 Inter, "Segoe UI", system-ui, sans-serif; color: #1c2330; background: #f6f7fb; }
+  header { display: flex; align-items: center; gap: 14px; padding: 18px 32px; background: #fff; border-bottom: 1px solid #e3e6ee; }
+  header .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #2f6fed, #58a6ff); }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header nav { margin-left: auto; display: flex; gap: 18px; color: #5b6578; font-size: 14px; }
+  main { display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; padding: 28px 32px; max-width: 1100px; }
+  .card { background: #fff; border: 1px solid #e3e6ee; border-radius: 12px; padding: 22px 24px; }
+  h2 { margin: 0 0 12px; font-size: 16px; }
+  ul.notes { list-style: none; margin: 0; padding: 0; }
+  ul.notes li { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid #edf0f5; }
+  ul.notes li:first-child { border-top: 0; }
+  ul.notes .meta { color: #7a8497; font-size: 13px; white-space: nowrap; }
+  label { display: block; font-size: 13px; color: #5b6578; margin: 12px 0 4px; }
+  input { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid #cfd5e1; border-radius: 8px; font: inherit; }
+  button { margin-top: 16px; padding: 10px 16px; border: 0; border-radius: 8px; background: #2f6fed; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: #eef2fb; color: #2f6fed; margin-left: 8px; }
+  p.hint { color: #7a8497; font-size: 13px; margin: 10px 0 0; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="logo" aria-hidden="true"></span>
+    <h1>Northwind Notes</h1>
+    <nav><span>Notes</span><span>Projects</span><span>Team</span></nav>
+  </header>
+  <main>
+    <section class="card">
+      <h2>This week</h2>
+      <ul class="notes">
+        <li><span>Draft the Q4 roadmap summary for the leadership review</span><span class="meta">Mon · Ana</span></li>
+        <li><span>Compare the two vendor quotes for the new office network</span><span class="meta">Tue · Malik</span></li>
+        <li><span>Book the venue for the October customer workshop</span><span class="meta">Wed · Priya</span></li>
+        <li><span>Collect feedback on the onboarding checklist from the support team</span><span class="meta">Thu · Jonas</span></li>
+        <li><span>Publish the release notes for version 2.4</span><span class="meta">Fri · Ana</span></li>
+      </ul>
+      <button type="button" id="new-note">New note</button>
+      <button type="button" class="secondary" id="export">Export as PDF</button>
+    </section>
+    <section class="card">
+      <h2>Sign in to sync</h2>
+      <form id="signin" onsubmit="event.preventDefault(); document.getElementById('outcome').textContent = 'Signed in';">
+        <label for="email">Work email</label>
+        <input id="email" name="email" type="email" autocomplete="email" value="ana@northwind.example">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" value="correct-horse-battery-staple">
+        <button type="submit">Sign in</button>
+        <p class="hint" id="outcome">Your notes sync once you sign in.</p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
