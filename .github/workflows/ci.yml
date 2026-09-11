@@ -27,8 +27,8 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm ci --prefix companion
+      # Companion, extension (checkJs), and the test tree — the harness included.
       - run: npm run typecheck
-      - run: node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit
       - run: npm run build
       # The POSIX permission case is skipped on Windows; this is where it actually runs.
       - run: npm run test:unit

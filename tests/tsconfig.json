@@ -1,0 +1,15 @@
+{
+  "extends": "../companion/tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "chrome"],
+    "typeRoots": ["../companion/node_modules/@types"],
+    "baseUrl": ".",
+    "paths": {
+      "ws": ["../companion/node_modules/@types/ws/index.d.ts"]
+    },
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"]
+}

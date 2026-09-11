@@ -121,8 +121,9 @@ export async function startProbes(): Promise<ProbeEnvironment> {
       await page.goto(`${base}${path}`)
 
       await page.evaluate(async () => {
-        const actions = await import('/extension/src/page-actions.js')
-        const redact = await import('/extension/src/redact.js')
+        // Served by the probe server from the repository root; the browser resolves these, not Node.
+        const actions = await import(/* @vite-ignore */ '/extension/src/page-actions.js' as string)
+        const redact = await import(/* @vite-ignore */ '/extension/src/redact.js' as string)
         Object.assign(globalThis, {
           __probe: async (kind: string, args: Record<string, unknown>) => {
             const walks: { calls: number }[] = []

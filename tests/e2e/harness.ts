@@ -13,26 +13,21 @@
  * @module
  */
 
-import { createServer, type Server } from 'node:http'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { chromium, type BrowserContext, type Page, type Worker } from 'playwright'
+import { join } from 'node:path'
+import type { BrowserContext, Page, Worker } from 'playwright'
 import { AgentClient } from '../../companion/src/agent-client.ts'
 import { createSecret, pairingCode } from '../../companion/src/auth.ts'
 import { startBroker, type RunningBroker } from '../../companion/src/broker-server.ts'
 import type { StateStore } from '../../companion/src/broker.ts'
 import { fileStateStore } from '../../companion/src/state-store.ts'
+import {
+  attachTab, EXTENSION_DIR, extensionConnected, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
+} from './browser.ts'
 
-/** This file's directory, for locating the extension and fixtures. */
-const here = dirname(fileURLToPath(import.meta.url))
-
-/** The unpacked extension Chromium loads. These are the files the Store package will contain. */
-export const EXTENSION_DIR = join(here, '..', '..', 'extension')
-
-/** Where the HTML fixtures live. */
-const FIXTURE_DIR = join(here, '..', 'fixtures')
+// The browser-only helpers are re-exported so every suite keeps one import.
+export { attachTab, EXTENSION_DIR, extensionConnected, settle, tabIdFor, waitFor }
 
 /** The connector version every component reports. */
 const VERSION = '0.1.0'
@@ -81,69 +76,6 @@ function memoryStore(): StateStore {
   return { load: () => held, save: (state) => { held = { scopeOwners: { ...state.scopeOwners } } } }
 }
 
-/** Let queued frames and Chrome events settle. */
-export async function settle(ms = 120): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/**
- * Wait until a condition holds, or fail with a message naming what never happened.
- * @param describe - what is being waited for, used in the failure.
- * @param check - the condition.
- * @param timeoutMs - how long to wait.
- * @returns settlement once the condition holds.
- * @throws when the condition never holds.
- */
-export async function waitFor(describe: string, check: () => boolean | Promise<boolean>, timeoutMs = 15000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  for (;;) {
-    if (await check()) return
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${describe}`)
-    await settle(60)
-  }
-}
-
-/** What one browser launch produces. */
-interface LaunchedBrowser {
-  context: BrowserContext
-  worker: Worker
-  extensionId: string
-  panel: Page
-}
-
-/**
- * Launch Chromium with the extension and open the panel page.
- *
- * Playwright's own Chromium is required rather than the installed Chrome: current Chrome stable
- * refuses `--load-extension`, so the extension silently never loads and no service worker appears.
- * Headed mode is required too, because an MV3 service worker does not start under the headless
- * shell, and a test against a worker that never runs proves nothing.
- * @param userDataDir - the profile directory.
- * @param extensionDir - the extension to load.
- * @returns the context, its worker, the extension id, and the panel page.
- */
-async function launchBrowser(userDataDir: string, extensionDir: string): Promise<LaunchedBrowser> {
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    args: [
-      `--disable-extensions-except=${extensionDir}`,
-      `--load-extension=${extensionDir}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-    ],
-  })
-
-  // The service worker appears shortly after launch; Playwright may or may not have seen it yet.
-  let [worker] = context.serviceWorkers()
-  if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30000 })
-  const extensionId = new URL(worker.url()).host
-
-  // The panel page is the control surface: a service worker's own `sendMessage` never reaches its own
-  // listener, and driving the extension the way the panel does keeps the tested path the real path.
-  const panel = await context.newPage()
-  await panel.goto(`chrome-extension://${extensionId}/src/sidepanel.html`)
-  return { context, worker, extensionId, panel }
-}
 
 /**
  * Start a broker, a fixture web server, and a Chromium with the extension loaded.
@@ -163,25 +95,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const store = (): StateStore => (stateFile === null ? sharedMemory : fileStateStore(stateFile))
   let broker = await startBroker({ secret, version: VERSION, port: 0, store: store() })
 
-  const files: Server = createServer((request, response) => {
-    const name = String(request.url ?? '/').replace(/^\/+/, '').split('?')[0] ?? ''
-    if (!/^[a-z0-9-]+\.html$/.test(name)) {
-      response.writeHead(404, { 'content-type': 'text/plain' })
-      response.end('not found\n')
-      return
-    }
-    try {
-      const body = readFileSync(join(FIXTURE_DIR, name), 'utf8')
-      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      response.end(body)
-    } catch {
-      response.writeHead(404, { 'content-type': 'text/plain' })
-      response.end('not found\n')
-    }
-  })
-  await new Promise<void>((resolve) => { files.listen(0, '127.0.0.1', () => { resolve() }) })
-  const filesAddress = files.address()
-  const filesPort = typeof filesAddress === 'object' && filesAddress !== null ? filesAddress.port : 0
+  const files = await serveFixtures()
 
   const launched = await launchBrowser(userDataDir, extensionDir)
   const agents: AgentClient[] = []
@@ -195,7 +109,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     secret,
     userDataDir,
     stateFile,
-    pageUrl: (name) => `http://127.0.0.1:${filesPort}/${name}`,
+    pageUrl: (name) => files.url(name),
 
     agent: async (profileId, sessions) => {
       const client = new AgentClient({
@@ -258,7 +172,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       for (const client of agents) client.dispose()
       await harness.context.close()
       await harness.broker.close()
-      await new Promise<void>((resolve) => { files.close(() => { resolve() }) })
+      await files.close()
       // Chrome can hold profile files for a moment after it exits, especially on Windows; a
       // leftover temporary profile is a nuisance, not a test failure.
       if (ownsUserDataDir) {
@@ -274,63 +188,12 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
 }
 
 /**
- * Pair the extension with the broker by writing its settings, the way the panel does.
- *
- * The panel's form is exercised separately; driving storage here keeps the routing tests about
- * routing instead of about typing into a form.
+ * Pair the extension with the harness's broker, the way the panel does.
  * @param harness - the running harness.
  * @param brokerUrl - where the extension should connect; defaults to the harness's own broker. A
  * test that records the wire gives the address of its relay instead.
  * @returns settlement once the extension has authenticated.
  */
 export async function pairExtension(harness: Harness, brokerUrl = `ws://127.0.0.1:${harness.broker.port}`): Promise<void> {
-  await harness.panel.evaluate(async ([url, code]: string[]) => {
-    await chrome.runtime.sendMessage({ type: 'connector/settings', settings: { brokerUrl: url, pairingCode: code } })
-  }, [brokerUrl, pairingCode(harness.secret)])
-
-  await waitFor('the extension to authenticate with the broker', () => extensionConnected(harness))
-}
-
-/**
- * Whether the extension currently holds an authenticated broker connection.
- * @param harness - the running harness.
- * @returns the panel's own view of the connection.
- */
-export async function extensionConnected(harness: Harness): Promise<boolean> {
-  const state = await harness.panel.evaluate(async () => await chrome.runtime.sendMessage({ type: 'connector/state' }))
-  return (state as { connected?: boolean } | undefined)?.connected === true
-}
-
-/**
- * Attach one open tab to one scope through the extension's own panel API.
- * @param harness - the running harness.
- * @param scope - the profile and session.
- * @param tabId - the Chrome tab id.
- * @returns the reply the extension gave.
- */
-export async function attachTab(
-  harness: Harness,
-  scope: { profileId: string, sessionId: string },
-  tabId: number,
-): Promise<{ ok: boolean, error?: string }> {
-  const reply = await harness.panel.evaluate(async (payload: Record<string, unknown>) => (
-    await chrome.runtime.sendMessage({ type: 'connector/attach', ...payload })
-  ), { ...scope, tabId })
-  await settle()
-  return reply as { ok: boolean, error?: string }
-}
-
-/**
- * The Chrome tab id of one open page.
- * @param harness - the running harness.
- * @param url - the page's URL.
- * @returns the tab id.
- */
-export async function tabIdFor(harness: Harness, url: string): Promise<number> {
-  const id = await harness.panel.evaluate(async (target: string) => {
-    const tabs = await chrome.tabs.query({})
-    return tabs.find((tab) => tab.url === target)?.id ?? -1
-  }, url)
-  if (id < 0) throw new Error(`no open tab for ${url}`)
-  return id
+  await pairWith(harness, brokerUrl, pairingCode(harness.secret))
 }

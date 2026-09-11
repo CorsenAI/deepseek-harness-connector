@@ -18,14 +18,18 @@
 
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
-import type { Context } from '@deepseek-ai/cordis'
-import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { AgentClient } from '../../companion/src/agent-client.ts'
 import { pairingCode } from '../../companion/src/auth.ts'
 import { BROWSER_TOOL_NAMES, registerBrowserTools } from '../../companion/src/dsh/tools.ts'
 import type { SessionView } from '../../companion/src/broker.ts'
 import { attachTab, pairExtension, settle, startHarness, tabIdFor, waitFor, type Harness } from './harness.ts'
 import { startWiretap, type Wiretap } from './wiretap.ts'
+
+// The DeepSeek Harness types, taken from the adapter's own signature so that nothing outside
+// `companion/src/dsh/` names a DeepSeek Harness package (ADR 0005).
+type Context = Parameters<typeof registerBrowserTools>[0]
+type ToolDefinition = Parameters<Context['tools']['register']>[0]
+type ToolRunContext = Parameters<ToolDefinition['execute']>[1]
 
 const PROFILE = 'web.inj000000001'
 const SESSION = 'injection-session'
@@ -259,7 +263,7 @@ describe('a page that speaks to the connector directly', () => {
 
     const attempt = await page.evaluate(async ([brokerUrl, extensionId]: string[]) => (
       await (window as unknown as { __hostileTalkToBroker: (url: string, id: string) => Promise<Record<string, unknown>> })
-        .__hostileTalkToBroker(brokerUrl, extensionId)
+        .__hostileTalkToBroker(String(brokerUrl), String(extensionId))
     ), [`ws://127.0.0.1:${harness.broker.port}`, harness.extensionId]) as { runtime: string, broker: string, brokerFrames: string[] }
 
     assert.equal(attempt.runtime, 'chrome.runtime is absent', 'an ordinary page must have no message route to the extension')

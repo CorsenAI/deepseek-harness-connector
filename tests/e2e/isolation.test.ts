@@ -117,8 +117,8 @@ describe('multi-session isolation', () => {
     }
     const owned: number[] = []
     for (let index = 0; index < pages.length; index += 1) {
-      const url = pages[index]?.url() ?? ''
-      const tabId = await harness.panel.evaluate(async (target: string) => {
+      const url: string = pages[index]?.url() ?? ''
+      const tabId: number = await harness.panel.evaluate(async (target: string) => {
         const tabs = await chrome.tabs.query({})
         return tabs.find((tab) => tab.url === target)?.id ?? -1
       }, url)
