@@ -115,6 +115,13 @@ DeepSeek session  →  Chrome profile  →  attached tabs
 If an action does not run, the panel says why — not paired, no session selected, no tab attached,
 connector unreachable, versions mismatched. You should never have to guess what the agent can reach.
 
+## What it does not do yet
+
+Content inside iframes and inside shadow DOM is neither read nor acted on: the page code runs in
+the tab's top document and does not descend into either. There is no screenshot action, and no
+trusted-input mode (`chrome.debugger`) for sites that ignore synthetic events — ADR 0006 keeps
+both out of this version on purpose, and says what adding them would cost.
+
 ## What it never does
 
 - **Never reads your cookies.** The extension does not request the `cookies` permission. Your logins

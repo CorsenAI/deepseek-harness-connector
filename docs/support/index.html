@@ -39,6 +39,7 @@
   <li>Pages Chrome protects (<code>chrome://</code>, the Web Store) cannot be attached; the panel marks them as restricted.</li>
   <li>Sites that require trusted input events may not respond to the connector's synthetic clicks; the failure is reported as a failed action, never as a success.</li>
   <li>On Windows, <code>dsh plugin add</code> splits a path containing a space (an upstream limitation); the installer works around it with the file's short name.</li>
+  <li>Content inside iframes and inside shadow DOM is not read or acted on in this version: the page code runs in the tab's top document and does not descend into either.</li>
   <li>Secret masking is by the signals a page gives; a field with no telling type, attribute, name or label cannot be told from an ordinary one.</li>
 </ul>
 
