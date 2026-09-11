@@ -1,20 +1,23 @@
+#!/usr/bin/env node
 /**
  * The broker's process entry point.
  *
- * Started detached by the installer and, when it is missing, by a plugin instance. It is a separate
- * process because it must outlive any one DeepSeek Harness process: `dsh --profile headless "task"`
- * exits when the task ends, while pairing, browser identity, and tab ownership have to persist
- * (ADR 0001).
+ * Started detached by the installer and, when nothing is listening, by a plugin instance
+ * (`broker-launch.ts`). It is a separate process because it must outlive any one DeepSeek Harness
+ * process: `dsh --profile headless "task"` exits when the task ends, while pairing, browser
+ * identity, and tab ownership have to persist (ADR 0001). Once listening it records its own
+ * process id in `connector/broker.pid`, which the installers read to stop it before starting a
+ * newer one.
  *
  * @module @corsen-ai/dsh-browser-connector/broker-main
  */
 
-import { appendFileSync, mkdirSync, realpathSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadOrCreateCredentials, pairingCode } from './auth.ts'
 import { startBroker } from './broker-server.ts'
-import { brokerLogPath, brokerStatePath, credentialsPath } from './paths.ts'
+import { brokerLogPath, brokerPidPath, brokerStatePath, credentialsPath } from './paths.ts'
 import { resolveDshHome } from './dsh/profile.ts'
 import { DEFAULT_BROKER_PORT } from './protocol.ts'
 import { fileStateStore } from './state-store.ts'
@@ -136,8 +139,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 1
   }
 
+  // The pid file is this process's own claim; a later broker overwrites it, so it is removed on
+  // stop only while it still names this process.
+  const pidFile = brokerPidPath(options.home)
+  try {
+    writeFileSync(pidFile, `${process.pid}\n`, { mode: 0o600 })
+  } catch (cause) {
+    log(`could not write ${pidFile}: ${(cause as Error).message}`)
+  }
   const stop = (signal: string): void => {
     log(`stopping on ${signal}`)
+    try {
+      if (readFileSync(pidFile, 'utf8').trim() === String(process.pid)) rmSync(pidFile, { force: true })
+    } catch {
+      // Already gone, or never written: nothing to remove.
+    }
     void running.close().then(() => { process.exit(0) })
   }
   process.on('SIGINT', () => { stop('SIGINT') })

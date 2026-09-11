@@ -44,3 +44,34 @@ export function brokerStatePath(home: string): string {
 export function brokerLogPath(home: string): string {
   return join(connectorDir(home), 'broker.log')
 }
+
+/**
+ * The running broker's process id, written by the broker itself once it listens and removed when
+ * it stops on a signal. The installers read it to stop a previous broker before starting a new
+ * one.
+ * @param home - the DeepSeek Harness home.
+ * @returns the absolute path.
+ */
+export function brokerPidPath(home: string): string {
+  return join(connectorDir(home), 'broker.pid')
+}
+
+/**
+ * The launch lock a plugin instance takes while it starts a broker, so several DeepSeek Harness
+ * processes starting at once do not each start one.
+ * @param home - the DeepSeek Harness home.
+ * @returns the absolute path.
+ */
+export function brokerLaunchLockPath(home: string): string {
+  return join(connectorDir(home), 'broker.launch.json')
+}
+
+/**
+ * Where a broker started by a plugin instance keeps its standard error, for the reason a broker
+ * that died before it could write its own log leaves nowhere else.
+ * @param home - the DeepSeek Harness home.
+ * @returns the absolute path.
+ */
+export function brokerStderrPath(home: string): string {
+  return join(connectorDir(home), 'broker.stderr.log')
+}

@@ -158,14 +158,31 @@ async function startBrokerProcess(): Promise<void> {
   await waitFor('the packaged broker process to listen', async () => await brokerAnswers() === 426, 20000)
 }
 
-/** Stop the broker process the way a crash would, and wait for the port to go quiet. */
+/** @returns the process id the broker recorded for itself, or null. */
+function recordedBrokerPid(): number | null {
+  const pidFile = join(home, 'connector', 'broker.pid')
+  if (!existsSync(pidFile)) return null
+  const pid = Number(readFileSync(pidFile, 'utf8').trim())
+  return Number.isInteger(pid) && pid > 0 ? pid : null
+}
+
+/**
+ * Stop the broker process the way a crash would, and wait for the port to go quiet. The process
+ * is either the one this suite spawned or the one the installed plugin started on its own, known
+ * only by the pid it recorded.
+ */
 async function killBrokerProcess(): Promise<void> {
   const child = broker
-  assert.ok(child, 'no broker process to kill')
-  const exited = new Promise<void>((resolveExit) => { child.once('exit', () => { resolveExit() }) })
-  child.kill('SIGKILL')
-  await exited
-  broker = null
+  if (child) {
+    const exited = new Promise<void>((resolveExit) => { child.once('exit', () => { resolveExit() }) })
+    child.kill('SIGKILL')
+    await exited
+    broker = null
+  } else {
+    const pid = recordedBrokerPid()
+    assert.ok(pid, 'no broker process to kill: neither spawned here nor recorded in broker.pid')
+    process.kill(pid, 'SIGKILL')
+  }
   await waitFor('the broker port to stop answering', async () => await brokerAnswers() === 0, 10000)
 }
 
@@ -217,6 +234,9 @@ before(async () => {
 after(async () => {
   agent?.dispose()
   if (broker) { broker.kill('SIGKILL'); broker = null }
+  // A broker the installed plugin started on its own is detached from everything but its pid file.
+  const recorded = home ? recordedBrokerPid() : null
+  if (recorded !== null) { try { process.kill(recorded, 'SIGKILL') } catch { /* already gone */ } }
   await browser?.context.close()
   await files?.close()
   for (const dir of [home, unpacked, profile]) {
@@ -241,9 +261,16 @@ describe('the released pair, installed as a user installs it', () => {
     const dumped = dsh(['--profile', 'headless', '--dump-config'])
     assert.equal(dumped.status, 0, `--dump-config failed:\n${dumped.out}`)
     assert.match(dumped.out, /corsen-browser-connector/, 'the composed tree must contain the plugin')
+
+    // The user patch layer: the broker port this suite owns, so a broker the plugin starts lands
+    // there and never on a real machine's default port.
+    writeFileSync(join(home, 'profiles', 'headless', 'cordis.patch.yml'), [
+      '- id: corsen-browser-connector', '  config:', `    port: ${brokerPort}`, '',
+    ].join('\n'))
   })
 
-  it('applies the installed plugin in a real DeepSeek Harness process; the only failure left is the missing API key', { timeout: 180000, skip: skipReason }, () => {
+  it('applies the installed plugin in a real DeepSeek Harness process, which starts the broker it found missing; the only failure left is the missing API key', { timeout: 180000, skip: skipReason }, async () => {
+    assert.equal(await brokerAnswers(), 0, 'nothing must listen on the port before the launch')
     // A real profile launch: DeepSeek Harness composes the tree, applies every plugin, and stops at
     // the model call because this environment holds no API key. Anything the connector says here
     // is a failure of the connector.
@@ -253,14 +280,25 @@ describe('the released pair, installed as a user installs it', () => {
     // The launch is also what makes the installation resolvable: DeepSeek Harness links its own
     // packages beside the profile so the installed connector can import the real `defineTool`.
     assert.ok(existsSync(join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-tools')), 'DeepSeek Harness must have linked dsh-tools for the profile')
+
+    // The plugin found nothing listening and started the packaged broker, detached: the dsh
+    // process has exited and the broker is still there, its pid recorded by itself.
+    await waitFor('the broker the plugin started to listen', async () => await brokerAnswers() === 426, 20000)
+    const pid = recordedBrokerPid()
+    assert.ok(pid, 'the started broker must have recorded its pid')
+    assert.doesNotThrow(() => process.kill(pid, 0), 'the recorded pid must be alive')
+    assert.match(readFileSync(brokerLog, 'utf8'), /listening on ws:\/\/127\.0\.0\.1:/)
   })
 
-  it('runs the packaged broker as its own process, and the packaged extension pairs with the code it prints', { timeout: 120000, skip: skipReason }, async () => {
-    await startBrokerProcess()
-    const printed = run(process.execPath, [join(installed, 'lib', 'broker-main.js'), '--pairing-code', '--home', home])
-    assert.equal(printed.status, 0, printed.out)
-    code = printed.out.trim().split('\n').pop() ?? ''
+  it('prints the pairing code through dsh plugin exec, and the packaged extension pairs with it against the broker the plugin started', { timeout: 120000, skip: skipReason }, async () => {
+    // The documented way to read the code after `dsh plugin add`: DeepSeek Harness forwards
+    // `exec` to pnpm in the profile directory, where the package's bin is on the path.
+    const viaDsh = dsh(['plugin', '--profile', 'headless', 'exec', 'dsh-connector-broker', '--pairing-code'])
+    assert.equal(viaDsh.status, 0, viaDsh.out)
+    code = viaDsh.out.trim().split('\n').pop() ?? ''
     assert.match(code, /^[34679ACDEFGHJKMNPQRTUVWXY]{4}(-[34679ACDEFGHJKMNPQRTUVWXY]{4}){4}$/, `not a pairing code: ${code}`)
+    const direct = run(process.execPath, [join(installed, 'lib', 'broker-main.js'), '--pairing-code', '--home', home])
+    assert.equal(direct.out.trim().split('\n').pop(), code, 'the bin and the entry file print the same code')
 
     // The ZIP's own bytes, unpacked, are what Chromium loads.
     const bytes = readFileSync(zip)
@@ -339,6 +377,7 @@ describe('the released pair, installed as a user installs it', () => {
     await killBrokerProcess()
     assert.equal(await extensionConnected(browser), false, 'the extension must notice its broker is gone')
 
+    // Restarted here as the installer restarts it; the plugin's own restart is the previous case.
     await startBrokerProcess()
     assert.equal(readFileSync(statePath, 'utf8'), before, 'the new process must start from the same ownership file, unchanged')
     // Both sides reconnect on their own, within their bounded backoff.

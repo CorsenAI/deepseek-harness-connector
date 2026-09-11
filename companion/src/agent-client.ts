@@ -44,14 +44,20 @@ export class BrowserActionError extends Error {
 
 /** The socket surface this client needs, so tests can supply a fake. */
 export interface MinimalSocket {
-  on(event: 'open' | 'close' | 'error', listener: () => void): void
+  on(event: 'open' | 'close', listener: () => void): void
+  on(event: 'error', listener: (error?: Error) => void): void
   on(event: 'message', listener: (data: Buffer | ArrayBuffer | string) => void): void
   send(data: string): void
   close(): void
 }
 
-/** Connection states this client reports. */
-export type AgentClientStatus = 'connecting' | 'connected' | 'disconnected' | 'refused'
+/**
+ * Connection states this client reports. `unreachable` is a connection that never opened —
+ * nothing listening, most often — as opposed to `disconnected`, an open connection that closed;
+ * the difference is what lets a plugin instance start a missing broker without restarting a
+ * broker that is merely busy.
+ */
+export type AgentClientStatus = 'connecting' | 'connected' | 'disconnected' | 'refused' | 'unreachable'
 
 /** How this client connects and identifies itself. */
 export interface AgentClientOptions {
@@ -219,9 +225,13 @@ export class AgentClient {
     this.#socket = socket
     this.#authenticated = false
 
-    socket.on('open', () => { this.#clientNonce = createNonce() })
+    let opened = false
+    let failure = ''
+    socket.on('open', () => { opened = true; this.#clientNonce = createNonce() })
     socket.on('message', (data) => { this.#onMessage(socket, data) })
-    socket.on('error', () => { /* `close` always follows, and reconnection is handled there. */ })
+    // `close` always follows an error, and reconnection is handled there; the error is kept so the
+    // close can say whether the connection ever existed.
+    socket.on('error', (error) => { failure = String(error?.message ?? error ?? '') })
     socket.on('close', () => {
       if (this.#socket !== socket) return
       this.#socket = null
@@ -233,7 +243,8 @@ export class AgentClient {
         ERROR.INTERRUPTED,
         'the connection to the connector broker closed while this action was in flight; the browser may have performed it',
       )
-      this.#report('disconnected', 'the broker connection closed')
+      if (opened) this.#report('disconnected', 'the broker connection closed')
+      else this.#report('unreachable', failure || `nothing answered at ${this.#options.url}`)
       this.#scheduleReconnect()
     })
   }

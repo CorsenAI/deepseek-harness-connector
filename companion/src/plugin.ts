@@ -3,7 +3,8 @@
  *
  * Installed as a profile bundle with `dsh plugin --profile <name> add @corsen-ai/dsh-browser-connector`
  * (ADR 0002). On apply it verifies the DeepSeek Harness version, connects to the local broker as an
- * `agent` client, announces this process's live sessions, and registers the browser tools.
+ * `agent` client — starting the broker first when nothing is listening — announces this process's
+ * live sessions, and registers the browser tools.
  *
  * @module @corsen-ai/dsh-browser-connector
  */
@@ -12,6 +13,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { AgentClient } from './agent-client.ts'
 import { loadOrCreateCredentials } from './auth.ts'
+import { ensureBrokerProcess } from './broker-launch.ts'
 import { credentialsPath } from './paths.ts'
 import { DEFAULT_BROKER_PORT, BROKER_HOST } from './protocol.ts'
 import { resolveProfileIdentity } from './dsh/profile.ts'
@@ -44,6 +46,11 @@ export interface Config {
    * Leaving this on is what keeps an untested runtime from driving a signed-in browser.
    */
   requireSupportedHarness: boolean
+  /**
+   * Whether this instance starts the broker when nothing is listening on the port. Off, the
+   * broker has to be started by the installer or by hand (`dsh-connector-broker`).
+   */
+  autoStartBroker: boolean
 }
 
 /** Schemastery configuration for the browser connector. */
@@ -51,7 +58,11 @@ export const Config: z<Config> = z.object({
   port: z.natural().default(DEFAULT_BROKER_PORT),
   profileName: z.string().default(''),
   requireSupportedHarness: z.boolean().default(true),
+  autoStartBroker: z.boolean().default(true),
 })
+
+/** How often an instance will try to start a broker that keeps not answering. */
+const AUTO_START_INTERVAL_MS = 30_000
 
 /**
  * Mount the connector into one DeepSeek Harness process.
@@ -80,6 +91,23 @@ export function apply(ctx: Context, config: Config): void {
   const identity = resolveProfileIdentity({ configuredName: config.profileName || undefined })
   const credentials = loadOrCreateCredentials(credentialsPath(identity.home))
 
+  // Nothing listening is the ordinary first-run state — the user installed with `dsh plugin add`
+  // and started DeepSeek Harness — and the broker is this package's own process, so it is started
+  // here rather than asked of the user. Bounded: once per interval, never for a broker that
+  // answered and then closed (that is `disconnected`, and reconnecting is the client's job).
+  let lastLaunch = 0
+  const startBrokerIfMissing = (): void => {
+    if (!config.autoStartBroker || Date.now() - lastLaunch < AUTO_START_INTERVAL_MS) return
+    lastLaunch = Date.now()
+    const launch = ensureBrokerProcess({ home: identity.home, port: config.port })
+    if (launch.started) {
+      ctx.logger?.info?.(`corsen-browser-connector: no broker was listening on ${BROKER_HOST}:${config.port}; started one (pid ${launch.pid ?? '?'}). `
+        + 'Its pairing code: dsh plugin --profile <name> exec dsh-connector-broker --pairing-code')
+    } else {
+      ctx.logger?.debug?.(`corsen-browser-connector: broker not started (${launch.reason ?? 'unknown reason'})`)
+    }
+  }
+
   const client = new AgentClient({
     url: `ws://${BROKER_HOST}:${config.port}`,
     secret: credentials.secret,
@@ -90,6 +118,7 @@ export function apply(ctx: Context, config: Config): void {
       const line = `corsen-browser-connector: ${status} (${detail})`
       if (status === 'refused') ctx.logger?.warn?.(line)
       else ctx.logger?.debug?.(line)
+      if (status === 'unreachable') startBrokerIfMissing()
     },
   })
 
