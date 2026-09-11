@@ -67,7 +67,7 @@ naming the stored file.
 
 ### Evidence
 
-331 tests: 249 unit and protocol, 14 on the shipped page module in a real Chrome, 68 real-browser
+340 tests: 258 unit and protocol, 14 on the shipped page module in a real Chrome, 68 real-browser
 end-to-end — multi-session isolation, a page built to leak hidden content, a page built to give a
 model instructions, an attached tab that changes site mid-task, recovery from a killed worker, a
 restarted broker, a replaced agent, a closed tab and a relaunched Chrome, the released pair

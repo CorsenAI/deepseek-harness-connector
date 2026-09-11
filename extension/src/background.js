@@ -647,6 +647,16 @@ const SCREENSHOT_JPEG_QUALITY = 75;
 const MAX_SCREENSHOT_CHARS = 6 * 1024 * 1024;
 
 /**
+ * Chrome copies the tab's compositor surface; right after a tab is shown, or before a headless
+ * renderer has produced its first frame, there is nothing to copy yet and Chrome answers "image
+ * readback failed" (an empty bitmap) or "view is invisible" (no view yet). Both clear once a frame
+ * exists, so a capture is retried a few times over well under a second before it is reported.
+ */
+const CAPTURE_ATTEMPTS = 5;
+const CAPTURE_RETRY_MS = 150;
+const TRANSIENT_CAPTURE_FAILURE = /image readback failed|view is invisible/i;
+
+/**
  * The opaque reference a model uses for one of its scope's tabs.
  * @param {number} tabId The Chrome tab id.
  * @returns {string} A reference such as `t42`.
@@ -833,13 +843,34 @@ export async function performTabAction(kind, args, scope, binding, targetTabId) 
       }
     }
     let dataUrl;
-    try {
-      dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: SCREENSHOT_JPEG_QUALITY });
-    } catch (cause) {
-      return failed(`Chrome could not capture the tab: ${String(cause?.message ?? cause)}`);
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: SCREENSHOT_JPEG_QUALITY });
+        break;
+      } catch (cause) {
+        const message = String(cause?.message ?? cause);
+        if (attempt < CAPTURE_ATTEMPTS && TRANSIENT_CAPTURE_FAILURE.test(message)) {
+          await new Promise((resolve) => setTimeout(resolve, CAPTURE_RETRY_MS));
+          continue;
+        }
+        return failed(`Chrome could not capture the tab: ${message}`);
+      }
     }
     if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/jpeg;base64,")) {
       return failed("Chrome returned no image");
+    }
+    // Chrome captured whatever was at the front of the window. If the attached tab is no longer
+    // that — the user switched tabs or moved it while the capture ran — the picture may be of
+    // another page, and it is discarded rather than reported as the attached tab.
+    let after;
+    try {
+      after = await chrome.tabs.get(targetTabId);
+    } catch {
+      await releaseClosedTab(targetTabId);
+      return gone("the attached tab closed during the capture; the image was discarded");
+    }
+    if (after.active !== true || after.windowId !== tab.windowId) {
+      return failed("the active tab changed during the capture; the image was discarded");
     }
     if (dataUrl.length > MAX_SCREENSHOT_CHARS) {
       return failed(`the capture is ${dataUrl.length} characters, beyond the ${MAX_SCREENSHOT_CHARS} this connector carries; make the window smaller`);
@@ -861,7 +892,6 @@ export async function performTabAction(kind, args, scope, binding, targetTabId) 
     } catch (cause) {
       return failed(`Chrome returned an image this connector could not decode: ${String(cause?.message ?? cause)}`);
     }
-    const after = await chrome.tabs.get(targetTabId).catch(() => tab);
     return ok({
       url: scrubUrl(String(after.url ?? tab.url ?? "")),
       title: String(after.title ?? tab.title ?? "").slice(0, MAX_TAB_TITLE_CHARS),

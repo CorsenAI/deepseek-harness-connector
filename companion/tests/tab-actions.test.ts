@@ -20,6 +20,7 @@ interface FakeTab {
   url: string
   windowId: number
   status: string
+  active?: boolean
 }
 
 /** The controllable parts of the stub. */
@@ -34,6 +35,11 @@ interface ChromeStub {
   afterCreate: ((tab: FakeTab) => void) | null
   removed: number[]
   activated: number[]
+  /** What each successive `captureVisibleTab` answers: a data URL, or the error Chrome throws. */
+  captures: (string | Error)[]
+  /** Called while a capture is in progress, so a test can change the world under it. */
+  duringCapture: (() => void) | null
+  captureCalls: number
 }
 
 const stub: ChromeStub = {
@@ -46,7 +52,13 @@ const stub: ChromeStub = {
   afterCreate: null,
   removed: [],
   activated: [],
+  captures: [],
+  duringCapture: null,
+  captureCalls: 0,
 }
+
+/** A tiny but valid JPEG data URL, as Chrome's capture answers. */
+const JPEG_DATA_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k='
 
 /** A no-op event that remembers nothing; the worker registers listeners it never needs here. */
 const inertEvent = { addListener: () => {}, removeListener: () => {} }
@@ -98,11 +110,23 @@ Object.assign(globalThis, {
         stub.afterCreate?.(tab)
         return { ...tab }
       },
-      update: async (tabId: number, _change: { active?: boolean }) => {
+      update: async (tabId: number, change: { active?: boolean }) => {
         if (!stub.tabs.has(tabId)) return noSuchTab(tabId)
         if (stub.updateError) throw stub.updateError
         stub.activated.push(tabId)
+        if (change.active === true) {
+          const target = stub.tabs.get(tabId)!
+          for (const tab of stub.tabs.values()) if (tab.windowId === target.windowId) tab.active = tab.id === tabId
+        }
         return { ...stub.tabs.get(tabId) }
+      },
+      captureVisibleTab: async (_windowId: number, _options: { format: string, quality: number }) => {
+        stub.captureCalls += 1
+        stub.duringCapture?.()
+        const answer = stub.captures.shift()
+        if (answer === undefined) throw new Error('the test scripted no answer for this capture')
+        if (answer instanceof Error) throw answer
+        return answer
       },
       remove: async (tabId: number) => {
         if (!stub.tabs.has(tabId)) return noSuchTab(tabId)
@@ -112,6 +136,13 @@ Object.assign(globalThis, {
       },
     },
   },
+})
+
+// The worker reads a capture's size by decoding the bytes; Node has no image decoder, so the
+// stand-in answers a fixed size, and what the tests check is that the result reports what the
+// decoder said rather than what the window claimed.
+Object.assign(globalThis, {
+  createImageBitmap: async () => ({ width: 640, height: 360, close() {} }),
 })
 
 const { performTabAction, restrictionReason } = await import('../../extension/src/background.js')
@@ -152,6 +183,9 @@ beforeEach(() => {
   stub.afterCreate = null
   stub.removed = []
   stub.activated = []
+  stub.captures = []
+  stub.duringCapture = null
+  stub.captureCalls = 0
   stub.nextTabId = 100
 })
 
@@ -299,6 +333,134 @@ describe('switch_tab', () => {
     assert.equal(result.ok, false)
     assert.match(String(result.error?.message), /not attached to this session/)
     assert.deepEqual(stub.activated, [])
+  })
+})
+
+describe('screenshot', () => {
+  /** The shape of a capture's answer. */
+  interface Capture { ok: boolean, data?: { url: string, title: string, mediaType: string, dataUrl: string, width: number, height: number, foregrounded: boolean }, error?: { code: string, message: string } }
+
+  it('captures a tab already at the front without touching it, and reports the decoded size', async () => {
+    const binding = own([11])
+    stub.tabs.get(11)!.active = true
+    stub.captures = [JPEG_DATA_URL]
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, true, result.error?.message)
+    assert.equal(result.data?.mediaType, 'image/jpeg')
+    assert.equal(result.data?.dataUrl, JPEG_DATA_URL)
+    assert.deepEqual({ width: result.data?.width, height: result.data?.height }, { width: 640, height: 360 }, 'the size is what the bytes decode to')
+    assert.equal(result.data?.foregrounded, false)
+    assert.deepEqual(stub.activated, [], 'a tab at the front is not brought there again')
+    assert.equal(result.data?.title, 'Tab 11')
+  })
+
+  it('brings a covered tab to the front first and says so', async () => {
+    const binding = own([11, 12])
+    stub.tabs.get(12)!.active = true
+    stub.captures = [JPEG_DATA_URL]
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, true, result.error?.message)
+    assert.equal(result.data?.foregrounded, true)
+    assert.deepEqual(stub.activated, [11])
+    assert.equal(stub.tabs.get(11)?.active, true)
+  })
+
+  it('retries while Chrome has no frame to read back yet, and reports the capture that then succeeds', async () => {
+    // The two answers Chrome gives before a tab's compositor has produced a frame: an empty
+    // bitmap, or no view. Both clear on their own; a capture is not refused for them at once.
+    const binding = own([11])
+    stub.tabs.get(11)!.active = true
+    stub.captures = [new Error('Failed to capture tab: image readback failed'), new Error('Failed to capture tab: view is invisible'), JPEG_DATA_URL]
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, true, result.error?.message)
+    assert.equal(stub.captureCalls, 3)
+    assert.equal(result.data?.dataUrl, JPEG_DATA_URL)
+  })
+
+  it('reports the failure, with Chrome\'s own reason, when the readback never succeeds', async () => {
+    const binding = own([11])
+    stub.tabs.get(11)!.active = true
+    stub.captures = Array.from({ length: 8 }, () => new Error('Failed to capture tab: image readback failed'))
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, false, 'a capture that never happened must not be reported as one')
+    assert.equal(result.error?.code, ERROR.ACTION_FAILED)
+    assert.match(String(result.error?.message), /image readback failed/)
+    assert.equal(stub.captureCalls, 5, 'bounded: five attempts, then the truth')
+  })
+
+  it('does not retry a refusal that is not transient', async () => {
+    const binding = own([11])
+    stub.tabs.get(11)!.active = true
+    stub.captures = [new Error('Taking screenshots has been disabled'), JPEG_DATA_URL]
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, false)
+    assert.equal(result.error?.code, ERROR.ACTION_FAILED)
+    assert.match(String(result.error?.message), /has been disabled/)
+    assert.equal(stub.captureCalls, 1)
+  })
+
+  it('discards the image when the active tab changed during the capture', async () => {
+    // Chrome captured whatever was at the front; if that stopped being the attached tab while the
+    // capture ran, the picture may be of another page and must not be reported as this one.
+    const binding = own([11, 12])
+    stub.tabs.get(11)!.active = true
+    stub.captures = [JPEG_DATA_URL]
+    stub.duringCapture = () => { stub.tabs.get(11)!.active = false; stub.tabs.get(12)!.active = true }
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, false)
+    assert.equal(result.error?.code, ERROR.ACTION_FAILED)
+    assert.match(String(result.error?.message), /active tab changed during the capture/)
+    assert.match(String(result.error?.message), /discarded/)
+  })
+
+  it('reports TAB_GONE, and cleans the binding, when the tab closed during the capture', async () => {
+    const binding = own([11, 12])
+    stub.tabs.get(11)!.active = true
+    stub.captures = [JPEG_DATA_URL]
+    stub.duringCapture = () => { stub.tabs.delete(11) }
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, false)
+    assert.equal(result.error?.code, ERROR.TAB_GONE)
+    assert.deepEqual(ownedNow(), [12])
+  })
+
+  it('refuses a page Chrome protects before capturing anything', async () => {
+    const binding = own([11])
+    stub.tabs.get(11)!.url = 'chrome://settings/'
+    stub.tabs.get(11)!.active = true
+    stub.captures = [JPEG_DATA_URL]
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, false)
+    assert.equal(result.error?.code, ERROR.RESTRICTED_PAGE)
+    assert.equal(stub.captureCalls, 0)
+  })
+
+  it('refuses a capture larger than the connector carries, and says what to do', async () => {
+    const binding = own([11])
+    stub.tabs.get(11)!.active = true
+    stub.captures = [`data:image/jpeg;base64,${'A'.repeat(6 * 1024 * 1024)}`]
+
+    const result = await performTabAction('screenshot', {}, SCOPE, binding, 11) as Capture
+
+    assert.equal(result.ok, false)
+    assert.equal(result.error?.code, ERROR.ACTION_FAILED)
+    assert.match(String(result.error?.message), /make the window smaller/)
   })
 })
 

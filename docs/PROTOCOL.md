@@ -117,12 +117,19 @@ Takes no arguments and answers with the scope's active tab as pixels:
 `dataUrl` is a `data:image/jpeg;base64,` URL of the visible viewport, JPEG quality 75, at most
 6 MiB; `width` and `height` are read from the bytes, not assumed. Chrome captures only the tab that
 is at the front of its window, so a covered tab is brought to the front first and the answer says
-so with `foregrounded: true` — the user's window changed, and the result does not hide it. The
+so with `foregrounded: true` — the user's window changed, and the result does not hide it. Chrome
+copies the tab's compositor surface, and right after a tab is shown (or before a headless renderer
+has painted) there is nothing to copy yet — "image readback failed" or "view is invisible"; the
+extension retries those up to five times, 150 ms apart, then reports Chrome's reason. Any other
+refusal is reported at once. After the capture the extension checks that the attached tab is still
+the one at the front of the same window; if the user switched or moved tabs meanwhile, the picture
+may be of another page and is discarded (`ACTION_FAILED`), never reported as the attached tab. The
 capture is of the rendered page: **the masking that applies to text results does not apply to
 pixels** (a value the page shows on screen is in the picture), which is why the companion's tool
 description steers a model to `snapshot` for reading and keeps `screenshot` for layout. `url` is
-scrubbed like every other result's. A page Chrome protects is refused with `RESTRICTED_PAGE`, a
-tab that no longer exists with `TAB_GONE`, and a capture Chrome declines with `ACTION_FAILED`.
+scrubbed like every other result's. A page Chrome protects is refused with `RESTRICTED_PAGE`
+before anything is captured, a tab that no longer exists with `TAB_GONE`, and a capture Chrome
+declines with `ACTION_FAILED`.
 
 ### Element references
 
