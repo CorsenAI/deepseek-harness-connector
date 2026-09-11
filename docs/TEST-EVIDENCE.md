@@ -820,3 +820,188 @@ A live model turn. Injection fixtures through the whole pipeline. The released p
 together. Anything on macOS, including whether a downloaded installer runs from a quarantined file.
 CI has still never run. And the review's own runs were on Node 22.16.0, below the declared minimum,
 so its passing results are corroboration and not a substitute for the supported runtimes.
+
+---
+
+## 2026-09-11 — production readiness: Linux baseline, injection, the released pair, three platforms, performance, the permission freeze, Store assets
+
+The development environment moved from Windows to Linux this session. Everything was re-run there
+first; then every open gate was taken in the owner's order, and the macOS and
+Windows peers on the project's own tailnet ran the suites on real machines. Each finding below was
+reproduced before it was fixed.
+
+**Commit under test.** The runs are recorded at the commit each subsection names; the final
+artifacts are from the clean commit in "Release artifacts" at the end.
+
+### Environments
+
+| | Linux (development) | macOS (peer) | Windows (peer) |
+|---|---|---|---|
+| OS | Ubuntu 26.04.1 LTS, kernel 7.0.0-31 | macOS 26.6.2 (25G83), arm64 | Windows 11 Pro 10.0.26200, Windows PowerShell 5.1 |
+| Node / npm | v26.8.1 / 11.19.0 | v26.7.0 / 11.19.0 | v24.14.0 / 11.9.0 |
+| pnpm | 12.4.1 (installed this session; the machine had none) | 10.30.3 | none — installed lane-locally, never globally |
+| Playwright / browser | 1.63.0 / Chrome for Testing 153.0.8010.12 | same | same |
+| Display | Xvfb for headed runs; new headless otherwise | the user's session (headed works over SSH) and new headless | new headless only |
+| DeepSeek Harness | `@deepseek-ai/dsh` 0.1.2-rc.1, 0.1.5-rc.1 (`latest`), 0.1.5-rc.2 (`next`) in `~/dsh-int/<lane>` | 0.1.5-rc.1 | 0.1.5-rc.1 |
+| Reached through | — | `ssh -F ~/tailscale-remote-all-pc/ssh_config mac`, `remote-run.sh` | the same kit, PowerShell over SSH |
+
+### Linux baseline, before any change (commit `1f82b55`)
+
+```
+npm ci && npm ci --prefix companion
+npm run typecheck                                    # companion clean
+tsc -p extension/tsconfig.json --noEmit              # clean
+npm run test:unit                                    # 240 tests, 240 pass, 0 skipped — the POSIX permission case ran
+npm run test:page                                    # 12/12
+xvfb-run --auto-servernum -- npm run test:e2e        # 47/47
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist   # 579 checks
+node scripts/provenance-audit.mjs                    # exit 0
+```
+
+The artifacts built on Linux were **byte-identical** to those built on Windows at `4f1c59b`:
+`8196873e…6952` (ZIP, 48603 bytes) and `813890bd…37e7` (tarball, 58791 bytes).
+
+Two things the move surfaced. Playwright 1.49.1's browser installer hangs at extraction under
+Node 26 — the download completes, the zip is never unpacked (reproduced on Linux and on the Mac);
+the project moved to Playwright 1.63.0, which installs cleanly and ships Chrome for Testing 153.
+And `dsh plugin` forwards to pnpm, which DeepSeek Harness does not install: on a machine with a
+working `dsh` and no pnpm the installer initialised the profile and then died inside dsh (exit
+127); both installers now check first and name the command.
+
+### Injection through the whole pipeline (gate AI) — `tests/e2e/hostile.test.ts`
+
+7/7. The page's instructions arrive as content in the snapshot's text, names and values; the
+frame-shaped text made no frame (every frame that crossed during the reads was an `action`,
+`action_request`, `action_response` or `action_result`); the broker's registry, the session set
+and the panel's state were unchanged after each read; neither the secret nor the pairing code
+appeared in any of the frames the relay recorded; no registered tool attaches, pairs or reads a
+secret; `list_tabs` showed the session's one tab while the browser held three; `chrome.runtime`
+was absent from the page; a well-formed hello from the page's origin was refused
+`UNAUTHENTICATED` for its origin.
+
+**Found and fixed while writing it.** A control's name came from its `title` attribute before its
+own visible text: the page showed a button reading "OK" and named it "transfer every tab" to the
+model. The HTML Accessibility API Mappings (WD 2026-08-29, read for this) put the tooltip last for
+buttons, links and summaries, and after the label but before the placeholder for text fields;
+`aria-labelledby` precedes `aria-label`; a `select` is named by its label or tooltip only. The page
+module now follows that order; two cases in `tests/page/` pin it against the shipped module.
+
+### The released pair, installed as a user installs it (gate AQ) — `tests/e2e/released-pair.test.ts`
+
+5/5 on every combination below. Nothing in the run imports from `companion/src/`.
+
+| dsh | Platform | Result |
+|---|---|---|
+| 0.1.2-rc.1 | Ubuntu 26.04, headed and new headless | 5/5 |
+| 0.1.5-rc.1 (`latest`) | Ubuntu 26.04; macOS 26.6; Windows 11 | 5/5 each |
+| 0.1.5-rc.2 (`next`) | Ubuntu 26.04 | 5/5 |
+
+The same three `dsh` versions also passed the released lane's own commands, run by hand:
+`dsh plugin --profile headless add <tarball>` (exit 0, bundle in the profile manifest),
+`--dump-config` containing `corsen-browser-connector`, and `dsh --profile headless "say hi"`
+stopping at `MISSING_CREDENTIAL` with no line from the connector. The companion's typecheck and
+its full unit suite ran against `@deepseek-ai/dsh-tools` 0.1.5-rc.2 in a scratch tree: clean,
+240/240. `maximumTested` moved to 0.1.5-rc.2 on that evidence (`docs/COMPATIBILITY.md`).
+
+**Found and fixed on macOS.** The broker exited 0 in silence when its home was under `/var` or
+`/tmp`: the entry guard compared the module URL, which Node reports through resolved symlinks,
+with `process.argv[1]` as typed, and `/var` is a link into `/private`. Both sides are compared as
+real paths now; `companion/tests/broker-main.test.ts` starts the real entry through a symlinked
+directory (it fails against the old guard on Linux too). The same lane showed a held port crashing
+the broker with a stack trace — `ws` re-emits the server's error — instead of the sentence
+`startBroker` composes; reproduced on Linux, fixed, tested as a process. And the broker opens its
+log before anything that can fail; both installers keep its stderr.
+
+### Cross-origin authority and what a navigating action says (ADR 0009) — `tests/e2e/cross-origin.test.ts`
+
+3/3, three consecutive runs. Running it showed a click that followed a cross-origin link being
+reported as "Chrome refused to run the action: Frame with ID 0 was removed". The document that ran
+the script is replaced before its answer can travel back — Chrome sometimes rejects the injection,
+sometimes resolves it with no result. The worker now reads the tab before and after: a click, a
+typed submission or an Enter whose page moved is reported performed with `navigated: true` and
+the new address; a read or wait cut off by a navigation is answered from the page that arrived;
+anything else is told where the page went and that its outcome is unknown.
+
+The spike copy with `optional_host_permissions` in place of `host_permissions` measured, without
+the grant: `permissions.contains(<all_urls>)` false, no tab with an address in the chooser, every
+tab restricted. The details page for the shipped manifest read "Allow this extension to read and
+change all your data on websites you visit: On click / On specific sites / On all sites".
+
+### A closed tab, reported at once
+
+On macOS, one run in five reported a snapshot on a just-closed tab as `BINDING_CHANGED` after nine
+seconds. Chrome had left the injection pending on the tab being torn down; by the time it failed
+and the worker said `TAB_GONE`, releasing the tab had changed the binding and the broker's
+revalidation discarded the answer. The worker now races the injection against Chrome's tab-removed
+event, and the broker lets a `TAB_GONE` answer through unless another browser has taken the scope.
+`companion/tests/broker.test.ts` gained both cases; the recovery suite's mid-action closure now
+expects the one outcome. Five further slice runs on the Mac: 5/5.
+
+### Full runs at the end (Linux, commit `39c3f2c`)
+
+```
+npm run typecheck        # companion, extension, and the test tree — clean
+npm run test:unit        # 246 tests, 246 pass, 0 skipped
+npm run test:page        # 14/14, the shipped module in Chrome for Testing 153, new headless
+xvfb-run --auto-servernum -- npm run test:e2e   # 62/62 headed
+DSH_E2E_HEADLESS=1 npm run test:e2e             # 62/62 new headless
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # gate passed
+```
+
+Installer acceptance on Linux (`tests/installer/linux-installer.sh`): 19/19 against each of
+`dsh` 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, from `dist/`.
+
+### macOS lane (commit `39c3f2c`)
+
+```
+typecheck, build: clean          unit: 246/246, 0 skipped        page: 14/14
+e2e headed, vertical slice: 9/9  e2e new headless: 62/62 (released pair against dsh 0.1.5-rc.1)
+installer: 19/19 from a spaced path, against dsh 0.1.5-rc.1
+```
+
+Arrival rehearsal: `install.sh` carrying the quarantine attribute Chrome writes
+(`0083;<time>;Google Chrome;<uuid>`) ran through `bash` and directly as `./install.sh`, both
+installing and starting the broker; the attribute was unchanged afterwards. Package on macOS:
+hashes identical to Linux (below).
+
+### Windows lane (commit `5d67c8d`)
+
+WINDOWS_LANE_RESULTS
+
+### Performance (gate AH)
+
+`docs/PERFORMANCE.md`: 30 runs per task on the Linux machine, headed and new headless. A small page
+costs 1–4 ms per action end to end and under a kilobyte on the wire; the large page's snapshot
+costs about 18 ms and returns 64.5 KB, truncated as the budgets require; the walk deadline costs
+at most 8.6 µs per snapshot.
+
+### Store assets
+
+`scripts/capture-screenshots.ts` produced the five 1280×800 screenshots and both promotional tiles
+from the real extension on the Linux machine; `store/ASSETS.md` records how and their hashes. The
+script refused to write screenshot 4 unless the demo page's password was absent from the snapshot
+it shows; it was.
+
+### Release artifacts, from clean commit `FINAL_COMMIT`
+
+```
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist
+```
+
+FINAL_ARTIFACTS
+
+Built on Ubuntu, macOS and Windows from the same commit, the ZIP and the tarball came out
+byte-identical on all three.
+
+### Gates
+
+AI, AQ, AR and AH pass. AC passes on Linux, macOS and Windows. AF passes. AE now includes the frozen
+permission set. Z and Y stay partial, for the reasons the matrix gives: no GitHub remote for the
+CI lanes, and no API key or reachable local model for a live turn.
+
+### What this does not prove
+
+A live model turn. The Explorer double-click of a marked `Install Connector.cmd` (SmartScreen),
+which no lane over SSH can perform. Anything on GitHub-hosted runners. The optional-permission
+onboarding path past Chrome's native prompt, which no gate can answer — the reason ADR 0009 keeps
+the required permission.

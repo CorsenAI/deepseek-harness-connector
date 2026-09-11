@@ -16,18 +16,21 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 ## Status
 
-**Pre-release, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the Chrome
-extension with all twenty browser actions, the installers, and the release packaging work end to
-end and are covered by 299 tests: 240 unit and protocol tests, 12 cases running the shipped page
-module in a real browser, and 47 real-browser end-to-end cases including multi-session isolation, a
-page built to leak hidden content, and recovery from a killed service worker, a restarted broker, a
-replaced agent connection, a closed tab, and a relaunched Chrome. Installer acceptance runs against
-a real `dsh` on Windows and Linux. CI is written but has not yet run, and the Chrome Web Store
-submission is prepared only on paper.
+**Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
+Chrome extension with all twenty browser actions, the installers, and the release packaging work
+end to end and are covered by 322 tests: 246 unit and protocol tests, 14 cases running the shipped
+page module in a real Chrome, and 62 real-browser end-to-end cases — multi-session isolation, a
+page built to leak hidden content, a page built to give a model instructions, an attached tab that
+changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
+agent connection, a closed tab and a relaunched Chrome, and the released pair installed into a real
+`dsh` with its broker killed and restarted as a process. Every suite has run on Linux, macOS and
+Windows on real machines, against DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, and the
+release artifacts built on the three platforms are byte-identical. The Store listing, screenshots
+and privacy page are in `store/`.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state, including where a passing gate
-stops short of its name. Four are open and two are partial. Do not treat this as shippable until
-they are closed.
+`docs/TEST-MATRIX.md` lists every release gate and its honest state. What remains needs the owner:
+a GitHub remote for the CI lanes and the privacy page's public URL, an API key or a reachable local
+model for one live model turn, the npm publication, and the Store submission itself.
 
 ## What it does
 
@@ -159,13 +162,22 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 240 tests, no browser needed
-npm run test:page    # 12 tests, the shipped page module in real Chromium
-npm run test:e2e     # 47 tests, real Chromium with the extension loaded
+npm run test:unit    # 246 tests, no browser needed
+npm run test:page    # 14 tests, the shipped page module in a real Chrome for Testing
+npm run test:e2e     # 62 tests, real Chrome with the extension loaded
 ```
 
-The end-to-end tests need Playwright's Chromium (`npx playwright install chromium`) and run headed,
-because MV3 service workers do not start under the headless shell.
+The browser suites need Playwright's Chrome for Testing (`npx playwright install chromium`). The
+end-to-end suites run headed by default, which is how users run the extension; on a machine with
+no display, `DSH_E2E_HEADLESS=1` runs the full browser in its new headless mode instead, or
+`xvfb-run --auto-servernum -- npm run test:e2e` keeps them headed. The released-pair suite needs
+`dist/` from `node scripts/package.mjs --out dist` and a real `dsh` (`DSH_BIN_DIR` names its
+bin directory; otherwise the first `~/dsh-int/<lane>/node_modules/.bin/dsh` is used); without
+them it skips and says so.
+
+`node --experimental-strip-types tests/perf/measure.ts` measures what each action costs
+(`docs/PERFORMANCE.md`), and `node --experimental-strip-types scripts/capture-screenshots.ts`
+regenerates the Store screenshots from the real extension.
 
 ## Contributing
 
