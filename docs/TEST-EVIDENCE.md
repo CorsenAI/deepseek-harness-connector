@@ -1114,3 +1114,115 @@ Unchanged from `cda0ae7`: the commits between changed tests, CI and documentatio
 
 Y passes, with the scope above. Z stays partial (no GitHub remote). Everything else as recorded
 earlier today.
+
+## 2026-09-12 — the screenshot action, through a real DeepSeek Harness (gate AS; commits `412b6fa` → `eb650c2`)
+
+**What was added.** A twenty-first action, `screenshot`, and its tool `browser_screenshot`: the
+attached tab's viewport as a JPEG through `chrome.tabs.captureVisibleTab`, handed to DeepSeek
+Harness's attachment service (`ctx.attachments.saveImage`) and rendered as an image content block
+with a caption. The comparison with Hermes Connector v0.2.4 on 2026-09-11 named the missing
+screenshot as the first gap; this closes it within the frozen permission set (ADR 0006,
+amendment of 2026-09-12; ADR 0009 holds).
+
+### In a real browser — `tests/e2e/screenshot.test.ts`, 3 cases
+
+The JPEG's own start-of-frame dimensions equal the ones the extension reported (1280×720 in the
+test window), the capture is of the attached tab; a covered tab is brought to the front first and
+the answer says `foregrounded: true` with the tab active afterwards; `chrome://version/` is refused
+`RESTRICTED_PAGE`. Headed under Xvfb and new headless, Linux; new headless on macOS and Windows.
+
+### Through a real `dsh` process — `tests/e2e/live-turn.test.ts`, now three turns
+
+Each turn is its own `dsh --profile headless "<task>"` with its own scripted mock provider
+(`rate_limit`, then one tool call, then a sentence); the model is set through the profile's user
+patch (`agent-default-model`, whose patch config replaces rather than merges — the provider must
+be restated, learned from the validation error the first attempt got).
+
+| Turn | Model | What the provider received in the final request |
+|---|---|---|
+| `browser_snapshot` | the profile's default | as on 2026-09-11, with 21 `browser_*` tools offered per request |
+| `browser_screenshot` | `deepseek-v4-flash-vision-exp` (catalogued with image input at every tested version) | the `tool` message carries DeepSeek Harness's image handle (`Image "browser-screenshot.jpg" (sha256:…); request preview 1066x600px…`) and the connector's caption `Screenshot of Connector fixture A (http://127.0.0.1:<port>/page-a.html), 1280×720 pixels.`; the adapter's next `user` message carries the JPEG itself, inline base64 in an `image_url` part (the mock has no files API, so the adapter's files-first path fell back to inline), decoded by the test to exactly the 1066×600 preview the handle announced, 16:9 kept; the durable 1280×720 copy is at `attachments/v1/objects/<xx>/<sha256>` under the harness home |
+| `browser_screenshot` | `deepseek-v4-flash` (text-only at every tested version) | the `tool` message is `[image omitted because this model accepts text only; attachment sha256:…]` followed by the same caption; no image part anywhere in the request; the same durable copy saved |
+
+Run against `dsh` 0.1.2-rc.1, 0.1.5-rc.1 (`latest`) and 0.1.5-rc.2 (`next`) on Ubuntu; against
+0.1.5-rc.1 on macOS and Windows. 3/3 everywhere.
+
+**What this establishes about DeepSeek Harness.** A tool result's image is sent only to a model
+whose catalogue entry accepts images; the DeepSeek adapter refuses image content in any non-user
+message, so the harness carries tool-result images in a user message it appends; the request copy
+is fitted to a pixel budget and the handle text says so; for a text-only model the placeholder
+names the stored file. The default model of the `headless` profile is text-only at 0.1.2-rc.1
+(`deepseek-v4-flash`) and image-capable at 0.1.5-rc.x (`deepseek-flash`), so a user of the older
+version needs a vision model selected to see anything.
+
+### Under a stubbed Chrome — `companion/tests/tab-actions.test.ts`, 9 new cases (23 in all)
+
+A tab at the front is not touched; a covered tab is foregrounded and says so; two no-frame-yet
+refusals and a quota refusal, then a capture, with the retries measured at least 550 ms apart;
+four transient refusals reported with Chrome's reason and no fifth attempt; a non-transient
+refusal not retried; the image discarded when the active tab changed during the capture; `TAB_GONE`
+with the binding cleaned when the tab closed during it; a protected page refused before any
+capture; a capture beyond the carried size refused with what to do.
+
+### What the lanes found, and the fixes
+
+- **Windows, first run (`e7687b2`)**: the first capture in the new headless mode failed with
+  Chrome's `Failed to capture tab: image readback failed` — `captureVisibleTab` copies the tab's
+  compositor surface, and before the renderer has painted there is nothing to copy (Chromium:
+  `CopyFromSurfaceComplete` with `bitmap.drawsNothing()`); the second capture of the same run,
+  after a tab activation, succeeded. Fix `876d442`: retry that answer and `view is invisible`.
+- **Windows, second run (`876d442`)**: `This request exceeds the MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND
+  quota` — Chrome allows two calls per second, and retries 150 ms apart were the third. Fix
+  `52aa846`: 600 ms apart, four attempts, and the quota refusal retried the same way. Third run:
+  68/68.
+- **Linux, the installer acceptance by hand**: `scripts/install.sh --package dist/…tgz` — a
+  relative path — reached pnpm, which read `dist/…` as a GitHub shorthand and failed with
+  `ERR_PNPM_GIT_RESOLVE_FAILED`. Fix `eb650c2`: both installers absolutise any existing local
+  path and refuse a path that names nothing, before pnpm runs; the acceptance scripts reinstall
+  by bare file name from the tarball's directory and check the refusal (23/23 POSIX, 21/21
+  Windows).
+- macOS found nothing at any of the three commits.
+
+### Final runs at `eb650c2`
+
+Linux (Ubuntu 26.04, Node 26.8):
+
+```
+npm run typecheck                                # clean
+npm run test:unit                                # 258/258
+npm run test:page                                # 14/14
+xvfb-run --auto-servernum -- npm run test:e2e   # 68/68 headed (released pair, three live turns and the screenshot against dsh 0.1.2-rc.1)
+DSH_E2E_HEADLESS=1 npm run test:e2e             # 68/68 new headless
+released-pair + live-turn with DSH_BIN_DIR at latest, at next   # 8/8 each
+tests/installer/linux-installer.sh against 0.1.2-rc.1, latest, next   # 23/23 each
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # gate passed
+npm audit, root and companion                   # 0 vulnerabilities
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist   # 583 checks, clean tree
+```
+
+macOS 26.6.2 (arm64, Node 26.7), same commit, the same lane as 2026-09-11: typecheck and build
+clean; unit 258/258; page 14/14; the vertical slice headed 9/9; end-to-end new headless
+**68/68** against `dsh` 0.1.5-rc.1 with the mock provider beside it; installer 23/23 from a
+spaced path and by bare name; the quarantined `install.sh` ran through `bash` and directly;
+package hashes identical.
+
+Windows 11 Pro 10.0.26200 (Node 24.14, Windows PowerShell 5.1), same commit: typecheck and build
+clean; unit 258 (257 pass, the POSIX case skipped); page 14/14; end-to-end new headless
+**68/68** against `dsh` 0.1.5-rc.1; without pnpm the installer created nothing; installer 21/21;
+the Mark-of-the-Web rehearsal as before; package hashes identical.
+
+### Release artifacts, from clean commit `eb650c2`
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `4472fe8aa404bf776507a68197e58b8a515e0859091837cf770c73555ea90d8e` | 52596 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `9fd23306a537b916ea95f736171f7742826f0a4b3f3c62e971a2943ffc555ea1` | 61521 |
+
+Byte-identical on Ubuntu, macOS and Windows. The ZIP changed at `412b6fa`, `876d442` and
+`52aa846` (the extension), the tarball at `412b6fa` (the companion); `eb650c2` changed scripts and
+tests only, so its artifacts are those of `52aa846`.
+
+### Gates after this section
+
+AS passes with the scope above. Y now covers three turns. Z stays partial (no GitHub remote).
+Everything else as recorded on 2026-09-11.

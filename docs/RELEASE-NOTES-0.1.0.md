@@ -1,7 +1,7 @@
 # DeepSeek Harness Connector 0.1.0 — release notes
 
 The text for the GitHub release `v0.1.0`, ready to paste. Hashes are those of the artifacts built
-from the closing commit of 2026-09-11 (`docs/TEST-EVIDENCE.md`); they hold for any later commit
+from the closing commit of 2026-09-12 (`docs/TEST-EVIDENCE.md`); they hold for any later commit
 that leaves `extension/` and `companion/` untouched, and `scripts/verify-package.mjs` refuses a
 build whose manifest does not match the tree it was built from.
 
@@ -15,8 +15,8 @@ you are already signed in to. Two parts, released together at the same version:
 
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
-| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `f7573fce6cf65ede7707ef2453e9d859edce2f82a10fc1b479876adf46f61a9e` | 51079 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `614e26cc6f3758f38a30c74bdd8c62245ea5ceaa1abed9282df253eb74826fd2` | 59888 |
+| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `4472fe8aa404bf776507a68197e58b8a515e0859091837cf770c73555ea90d8e` | 52596 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `9fd23306a537b916ea95f736171f7742826f0a4b3f3c62e971a2943ffc555ea1` | 61521 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows. `SHA256SUMS` and
 `release-manifest.json` accompany them.
