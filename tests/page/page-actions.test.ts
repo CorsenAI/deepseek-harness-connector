@@ -272,4 +272,59 @@ for (const form of document.querySelectorAll('form')) {
       assert.equal(await probe.page.evaluate(() => (globalThis as unknown as { submits: number }).submits), 1)
     })
   })
+
+  describe('a control is named the way the HTML accessibility mappings name it', () => {
+    // The order the HTML Accessibility API Mappings give, checked here because it is also a trust
+    // boundary: a tooltip nobody sees without hovering must not rename a control that shows its own
+    // text. Every control below carries a title that says something else.
+    const NAMES = `<!doctype html><meta charset="utf-8"><title>names</title><body>
+<button id="b1" title="TITLE_B1">Shown B1</button>
+<a id="a1" href="#" title="TITLE_A1">Shown A1</a>
+<button id="b2" title="TITLE_B2"></button>
+<div id="d1" role="button" tabindex="0" title="TITLE_D1">Shown D1</div>
+<label for="t1">Label T1</label><input id="t1" title="TITLE_T1" placeholder="PLACEHOLDER_T1">
+<input id="t2" title="TITLE_T2" placeholder="PLACEHOLDER_T2">
+<input id="t3" placeholder="PLACEHOLDER_T3">
+<input id="t4" aria-label="ARIA_T4" title="TITLE_T4"><span id="lb">Labelled T5</span>
+<input id="t5" aria-labelledby="lb" aria-label="ARIA_T5">
+<input id="s1" type="submit" value="Send S1" title="TITLE_S1">
+<select id="sel" title="TITLE_SEL"><option>Alpha</option><option>Beta</option></select>
+<summary id="sum" title="TITLE_SUM">Shown SUM</summary>
+</body>`
+
+    it('names a control by what it shows before its tooltip, and by its tooltip only when it shows nothing', async () => {
+      const probe = await probes.open(NAMES)
+      const snapshot = await probe.run('snapshot')
+      const names = new Map((snapshot.result.data?.['elements'] as Record<string, unknown>[]).map((entry) => [String(entry['role']) + ':' + String(entry['name']), entry]))
+      const has = (role: string, name: string): boolean => names.has(`${role}:${name}`)
+
+      assert.ok(has('button', 'Shown B1'), 'a button that shows text is named by it')
+      assert.ok(has('link', 'Shown A1'), 'a link that shows text is named by it')
+      assert.ok(has('button', 'TITLE_B2'), 'an empty button falls back to its tooltip')
+      assert.ok(has('button', 'Shown D1'), 'a role=button element is named by its content')
+      assert.ok(has('button', 'Send S1'), 'a submit button is named by its value')
+      assert.ok(has('button', 'Shown SUM') || has('summary', 'Shown SUM'), 'a summary is named by its content')
+      assert.ok(has('combobox', 'TITLE_SEL') || has('select', 'TITLE_SEL'), 'a select is named by its tooltip, never by its options')
+      const whole = JSON.stringify(snapshot.result)
+      for (const hidden of ['TITLE_B1', 'TITLE_A1', 'TITLE_D1', 'TITLE_S1', 'TITLE_SUM']) {
+        assert.ok(!whole.includes(hidden), `${hidden} is a tooltip on a control that shows its own text and must not be reported`)
+      }
+    })
+
+    it('names a text field by its label, then its tooltip, then its placeholder, and ARIA before all of them', async () => {
+      const probe = await probes.open(NAMES)
+      const snapshot = await probe.run('snapshot')
+      const textboxes = (snapshot.result.data?.['elements'] as Record<string, unknown>[])
+        .filter((entry) => entry['role'] === 'textbox').map((entry) => String(entry['name']))
+
+      assert.ok(textboxes.includes('Label T1'), 'a labelled field is named by its label')
+      assert.ok(textboxes.includes('TITLE_T2'), 'an unlabelled field with a title is named by the title, as the mappings say')
+      assert.ok(textboxes.includes('PLACEHOLDER_T3'), 'a field with nothing but a placeholder is named by it')
+      assert.ok(textboxes.includes('ARIA_T4'), 'aria-label wins over the title')
+      assert.ok(textboxes.includes('Labelled T5'), 'aria-labelledby wins over aria-label')
+      for (const unexpected of ['TITLE_T1', 'PLACEHOLDER_T1', 'PLACEHOLDER_T2', 'TITLE_T4', 'ARIA_T5']) {
+        assert.ok(!textboxes.includes(unexpected), `${unexpected} lost the name computation and must not be a name`)
+      }
+    })
+  })
 })

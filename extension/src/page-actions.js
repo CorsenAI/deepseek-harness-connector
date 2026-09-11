@@ -516,18 +516,32 @@ export async function runPageAction(kind, args, config) {
   }
 
   /**
+   * @param {Element} element The element.
+   * @param {string} attribute An attribute name.
+   * @returns {string} Its trimmed, bounded value, or an empty string.
+   */
+  function attributeText(element, attribute) {
+    const value = element.getAttribute(attribute);
+    return value ? value.trim().slice(0, MAX_NAME_CHARS) : "";
+  }
+
+  /**
    * The name a person would use for one element.
+   *
+   * The sources are tried in the order the HTML Accessibility API Mappings give them, so the model
+   * is told what a screen reader would announce: the author's ARIA name, then the label, then what
+   * the element itself shows, and only then its `title`. The order matters for trust as much as
+   * for fidelity: `title` is a tooltip nobody sees without hovering, and a page must not be able
+   * to show the user a button that says "OK" while naming it something else to the model.
    *
    * Every text-derived branch reads visible text only, so a hidden descendant cannot name a
    * visible control. `aria-label` is taken as written: it is the author's name for the control,
-   * not page content.
+   * not page content. A text field's `value` is never its name: it is content, and content that
+   * may be secret.
    * @param {Element} element The element.
    * @returns {string} A short accessible name.
    */
   function accessibleName(element) {
-    const aria = element.getAttribute("aria-label");
-    if (aria && aria.trim() !== "") return aria.trim().slice(0, MAX_NAME_CHARS);
-
     const labelledBy = element.getAttribute("aria-labelledby");
     if (labelledBy) {
       const parts = labelledBy.split(/\s+/)
@@ -538,23 +552,38 @@ export async function runPageAction(kind, args, config) {
       if (parts.length > 0) return parts.join(" ").slice(0, MAX_NAME_CHARS);
     }
 
+    const aria = attributeText(element, "aria-label");
+    if (aria !== "") return aria;
+
     const label = labelFor(element);
     if (label !== "") return label.slice(0, MAX_NAME_CHARS);
 
-    for (const attribute of ["placeholder", "title", "alt", "value"]) {
-      // `value` is a name only for a button; for a text field it is content, and content that may
-      // be secret, so it is never used as a name there.
-      if (attribute === "value") {
-        const type = String(element.getAttribute("type") ?? "").toLowerCase();
-        if (!["button", "submit", "reset"].includes(type)) continue;
-      }
-      const candidate = element.getAttribute(attribute);
-      if (candidate && candidate.trim() !== "") return candidate.trim().slice(0, MAX_NAME_CHARS);
+    const tag = element.tagName.toLowerCase();
+    const type = String(element.getAttribute("type") ?? "text").toLowerCase();
+    /** @type {string[]} */
+    let sources;
+    if (tag === "textarea" || (tag === "input" && !["button", "submit", "reset", "image"].includes(type))) {
+      // A text-entry control shows its placeholder, but the mappings put the tooltip first.
+      sources = ["title", "placeholder", "aria-placeholder"];
+    } else if (tag === "input") {
+      // Input buttons show their value; an image button shows its alt text.
+      sources = type === "image" ? ["alt", "title"] : ["value", "title"];
+    } else if (tag === "img") {
+      sources = ["alt", "title"];
+    } else if (tag === "select") {
+      // A select is named by its label or tooltip, never by its options; those are reported apart.
+      sources = ["title"];
+    } else {
+      // Buttons, links, summaries, and anything named by a role: what they show, then the tooltip.
+      const text = visibleTextOf(element, MAX_NAME_CHARS);
+      if (text !== "") return text;
+      sources = ["title"];
     }
-
-    const text = visibleTextOf(element, MAX_NAME_CHARS);
-    if (text !== "") return text;
-    return element.tagName.toLowerCase();
+    for (const attribute of sources) {
+      const candidate = attributeText(element, attribute);
+      if (candidate !== "") return candidate;
+    }
+    return tag;
   }
 
   /**
