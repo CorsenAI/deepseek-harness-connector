@@ -131,7 +131,15 @@ export async function serveFixtures(generated: Readonly<Record<string, string>> 
   const port = typeof address === 'object' && address !== null ? address.port : 0
   return {
     url: (name) => `http://127.0.0.1:${port}/${name}`,
-    close: async () => { await new Promise<void>((resolve) => { files.close(() => { resolve() }) }) },
+    close: async () => {
+      // `close` waits for every connection to end. Chrome keeps sockets it opened speculatively —
+      // connected, never used — and those are neither idle nor active to Node, so a close that only
+      // shut idle ones hung the Windows lane after a cross-origin navigation. Destroy them all.
+      await new Promise<void>((resolve) => {
+        files.close(() => { resolve() })
+        files.closeAllConnections()
+      })
+    },
   }
 }
 
