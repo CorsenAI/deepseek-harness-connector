@@ -20,8 +20,14 @@
  */
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { after, before, describe, it } from 'node:test'
 import { startProbes, type ProbeEnvironment } from './harness.ts'
+
+/** The shadow DOM fixture the end-to-end suites also load. */
+const SHADOW_FIXTURE = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'page-shadow.html'), 'utf8')
 
 /** Declared in `page-actions.js`; asserted here so a change to either side is caught. */
 const MAX_VISITED_NODES = 6000
@@ -327,6 +333,70 @@ for (const form of document.querySelectorAll('form')) {
       for (const unexpected of ['TITLE_T1', 'PLACEHOLDER_T1', 'PLACEHOLDER_T2', 'TITLE_T4', 'ARIA_T5']) {
         assert.ok(!textboxes.includes(unexpected), `${unexpected} lost the name computation and must not be a name`)
       }
+    })
+  })
+  describe('content inside open shadow roots is read and acted on; closed roots are not claimed', () => {
+    /** @returns the inventory entries as role:name keys. */
+    const keysOf = (snapshot: { result: { data?: Record<string, unknown> } }): Set<string> => new Set(
+      (snapshot.result.data?.['elements'] as Record<string, unknown>[]).map((entry) => `${String(entry['role'])}:${String(entry['name'])}`),
+    )
+
+    it('lists the controls of an open shadow root, a nested one, and slotted light content — and only what renders', async () => {
+      const probe = await probes.open(SHADOW_FIXTURE)
+      const snapshot = await probe.run('snapshot')
+      const keys = keysOf(snapshot)
+      assert.ok(keys.has('button:Shadow button'), `the shadow root's button is listed; got ${[...keys].join(' | ')}`)
+      assert.ok(keys.has('textbox:Shadow field'), 'a control inside the root is named by the label inside the root')
+      assert.ok(keys.has('textbox:Labelled from shadow'), 'aria-labelledby resolves inside the root, where the id lives')
+      assert.ok(keys.has('link:Deep link'), 'a root nested in a root is walked too')
+      assert.ok(keys.has('button:Slotted button'), 'a light-DOM control slotted into the root renders, and is listed')
+      const whole = JSON.stringify(snapshot.result)
+      for (const absent of ['CLOSED_LEAK', 'CLOSED_TEXT_LEAK']) {
+        assert.ok(!whole.includes(absent), `${absent}: a closed root cannot be reached and must not be claimed`)
+      }
+      assert.ok(!whole.includes('UNSLOTTED_LEAK'), 'a light child of a host that no slot places does not render, and is not reported')
+      assert.ok(!whole.includes('SHADOW_HIDDEN_LEAK'), 'a stylesheet inside the root hides what it hides')
+      assert.ok(!whole.includes('hunter2shadow'), 'a password field inside a root is masked like any other')
+      const masked = (snapshot.result.data?.['elements'] as Record<string, unknown>[]).find((entry) => entry['name'] === 'Shadow password')
+      assert.equal(masked?.['masked'], true)
+    })
+
+    it('reads and finds the text that renders, through the root and the slot, and nothing under a hidden host', async () => {
+      const probe = await probes.open(SHADOW_FIXTURE)
+      const text = String((await probe.run('read_text')).result.data?.['text'])
+      for (const present of ['LIGHT_TEXT_OK', 'SHADOW_TEXT_OK', 'DEEP_TEXT_OK', 'SLOTTED_TEXT_OK']) {
+        assert.ok(text.includes(present), `${present} renders and must be read; text was:\n${text}`)
+      }
+      for (const absent of ['UNSLOTTED_LEAK', 'SHADOW_HIDDEN_LEAK', 'CLOSED_TEXT_LEAK']) {
+        assert.ok(!text.includes(absent), `${absent} does not render and must not be read`)
+      }
+      // The two hosts that are hidden as a whole: their roots hold the same text, and none of it
+      // may come through.
+      assert.equal((text.match(/SHADOW_TEXT_OK/g) ?? []).length, 1, 'one visible host, so the text once — not three times')
+      const found = await probe.run('find', { text: 'DEEP_TEXT_OK' })
+      assert.equal(found.result.data?.['found'], true)
+      assert.equal(found.result.data?.['count'], 1)
+      const missing = await probe.run('find', { text: 'UNSLOTTED_LEAK' })
+      assert.equal(missing.result.data?.['found'], false)
+    })
+
+    it('acts on a control inside a root through its reference: the page sees the click and the typing', async () => {
+      const probe = await probes.open(SHADOW_FIXTURE)
+      const snapshot = await probe.run('snapshot')
+      const entries = snapshot.result.data?.['elements'] as Record<string, unknown>[]
+      const button = entries.find((entry) => entry['name'] === 'Shadow button')
+      const field = entries.find((entry) => entry['name'] === 'Shadow field')
+      assert.ok(button && field)
+      const clicked = await probe.run('click', { ref: button['ref'] })
+      assert.equal(clicked.result.ok, true, JSON.stringify(clicked.result))
+      const typed = await probe.run('type', { ref: field['ref'], text: 'from outside', replace: true })
+      assert.equal(typed.result.ok, true, JSON.stringify(typed.result))
+      const events = await probe.page.evaluate(() => (globalThis as unknown as { __events: string[] }).__events)
+      assert.ok(events.includes('shadow-button-clicked'), `the page's own listener inside the root must have run; got ${JSON.stringify(events)}`)
+      assert.ok(events.includes('shadow-input:from outside'), `the input event must reach the root's listener; got ${JSON.stringify(events)}`)
+      const after = await probe.run('snapshot')
+      const now = (after.result.data?.['elements'] as Record<string, unknown>[]).find((entry) => entry['name'] === 'Shadow field')
+      assert.equal(now?.['value'], 'from outside')
     })
   })
 })

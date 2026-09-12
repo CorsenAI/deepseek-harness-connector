@@ -79,17 +79,45 @@ New headless mode (`DSH_E2E_HEADLESS=1`), same machine and commit:
 
 Deadline clock: 73.0 ns per read, 8.6 µs per snapshot at most.
 
+### 2026-09-12 — same machine, Chrome for Testing 153, after the flat-tree walk (open shadow DOM)
+
+The walkers now cross open shadow roots and follow slots (`walkFlatTree` in `page-actions.js`),
+which adds a parent check and a host-or-slot check per node walked. Measured against the previous
+walker in the same session on the same machine (each 30 runs, headed under Xvfb): `page-large`
+snapshot **18.2 → 20.4–22.3 ms** median across three runs of the new code, `read_text`
+**2.7 → 3.2–4.7 ms**, `find` **9.8 → 9.4–11.5 ms**; the small pages within their own spread.
+About three milliseconds on the one page that spends the whole inventory budget; nothing a user
+can notice, and the walk deadline is five seconds.
+
+Headed, the run of record for this code:
+
+| Task | Runs | Median ms | p95 ms | Min ms | Max ms | Result frame (median B) | Truncated runs |
+|---|---|---|---|---|---|---|---|
+| page-a snapshot | 30 | 1.8 | 4.7 | 1.4 | 5.9 | 832 | 0 |
+| page-a read_text | 30 | 2.7 | 5.0 | 1.5 | 5.3 | 299 | 0 |
+| page-a click | 30 | 2.3 | 4.2 | 0.9 | 4.2 | 148 | 0 |
+| page-a current_url | 30 | 2.3 | 3.9 | 0.7 | 4.0 | 128 | 0 |
+| page-c snapshot | 30 | 2.9 | 4.9 | 2.0 | 5.4 | 1013 | 0 |
+| page-c find | 30 | 1.8 | 2.4 | 1.2 | 3.2 | 186 | 0 |
+| page-large snapshot | 30 | 20.4 | 31.4 | 18.3 | 32.3 | 64567 | 30 |
+| page-large read_text | 30 | 4.7 | 5.8 | 3.2 | 10.8 | 40469 | 30 |
+| page-large find (last paragraph) | 30 | 11.5 | 19.1 | 9.9 | 28.6 | 172 | 0 |
+
+New headless mode, same code: page-a snapshot 1.6 ms, page-c snapshot 2.1 ms, page-large
+snapshot 21.5 ms (p95 24.6), read_text 3.3 ms, find 9.1 ms; frames identical to the table above.
+Deadline clock 72.2 ns per read, 8.5 µs per snapshot at most.
+
 ## Reading the numbers
 
 - A small page costs **1–4 ms** per action end to end, and under a kilobyte on the wire. The
   broker and the worker are not where time goes.
-- The large page's snapshot costs **about 18 ms** and returns **64.5 KB**, and every run reports
+- The large page's snapshot costs **about 20 ms** and returns **64.5 KB**, and every run reports
   `truncated`. That is the budgets doing what they are for: the inventory stops at 400 interactive
   elements (the page has 420) and the text at the default 40,000 characters (`DEFAULT_TEXT_CHARS`;
   a caller may ask for up to `HARD_TEXT_CHARS`, 200,000). `read_text` on the same page is 40 KB for
   the same reason. The connector tells the model the payload was cut rather than silently handing
   it a partial page.
-- `find` on the large page costs **about 8 ms** because it is a visible-text walk to the last
+- `find` on the large page costs **about 10 ms** because it is a visible-text walk to the last
   paragraph; the answer is 172 bytes.
 - The wall-clock deadline costs microseconds. It is insurance against a page whose layout is slow,
   not a cost on ordinary pages.

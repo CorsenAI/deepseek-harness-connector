@@ -87,8 +87,9 @@ what is not proven.
 - Sites that require trusted input events may ignore synthetic clicks; the failure is reported.
 - On Windows, `dsh plugin add` splits a path containing a space (an upstream limitation); the
   installer works around it.
-- Content inside iframes and shadow DOM is not read or acted on in this version: the page code
-  runs in the tab's top document and does not descend into either.
+- Content inside iframes is not read or acted on in this version: the page code runs in the tab's
+  top document and does not descend into frames. Open shadow DOM is read and acted on as rendered;
+  a closed shadow root cannot be reached by any script and is not claimed.
 - Secret masking is by the signals a page gives; an unlabelled field cannot be told from an
   ordinary one. It applies to text; a screenshot shows the page as rendered.
 - A screenshot is of the tab at the front of its window, which is all Chrome captures; a covered

@@ -133,8 +133,10 @@ connector unreachable, versions mismatched. You should never have to guess what 
 
 ## What it does not do yet
 
-Content inside iframes and inside shadow DOM is neither read nor acted on: the page code runs in
-the tab's top document and does not descend into either. There is no trusted-input mode
+Content inside iframes is neither read nor acted on: the page code runs in the tab's top document
+and does not descend into frames. (Open shadow DOM — web components, most design systems — is
+read and acted on as the user sees it, through slots and nested roots; a closed shadow root cannot
+be reached by any script and is not claimed.) There is no trusted-input mode
 (`chrome.debugger`) for sites that ignore synthetic events — ADR 0006 keeps it out of this version
 on purpose, and says what adding it would cost.
 

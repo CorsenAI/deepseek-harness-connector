@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shadow fixture</title>
+</head>
+<body>
+<h1>Shadow fixture</h1>
+<p>LIGHT_TEXT_OK</p>
+
+<!-- An open shadow root: its controls and text render; its light children render only through
+     the named slot — there is no default slot, so a child without a slot name does not render. -->
+<x-open id="open-host">
+  <span slot="extra">SLOTTED_TEXT_OK</span>
+  <button slot="extra" id="slotted-button">Slotted button</button>
+  <span>UNSLOTTED_LEAK</span>
+</x-open>
+
+<!-- A host hidden by aria-hidden, and one by display: none: nothing under either may show. -->
+<x-open id="aria-hidden-host" aria-hidden="true"></x-open>
+<x-open id="none-host" style="display: none"></x-open>
+
+<!-- A closed root cannot be reached from outside; the page states this so the test can prove the
+     module does not pretend otherwise. -->
+<x-closed id="closed-host"></x-closed>
+
+<output id="log"></output>
+
+<script>
+  const OPEN_TEMPLATE = `
+    <style>.hidden { display: none }</style>
+    <p>SHADOW_TEXT_OK</p>
+    <p class="hidden">SHADOW_HIDDEN_LEAK</p>
+    <label for="s-in">Shadow field</label>
+    <input id="s-in" name="shadow-field">
+    <label for="s-pw">Shadow password</label>
+    <input id="s-pw" type="password" name="shadow-pw" value="hunter2shadow">
+    <span id="s-lb">Labelled from shadow</span>
+    <input id="s-al" aria-labelledby="s-lb">
+    <button id="s-btn">Shadow button</button>
+    <x-deep></x-deep>
+    <slot name="extra"></slot>
+  `
+  const DEEP_TEMPLATE = `<a href="#deep" id="deep-link">Deep link</a><p>DEEP_TEXT_OK</p>`
+
+  customElements.define('x-deep', class extends HTMLElement {
+    constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = DEEP_TEMPLATE }
+  })
+  customElements.define('x-open', class extends HTMLElement {
+    constructor() {
+      super()
+      const root = this.attachShadow({ mode: 'open' })
+      root.innerHTML = OPEN_TEMPLATE
+      root.getElementById('s-btn').addEventListener('click', () => { window.__log('shadow-button-clicked') })
+      root.getElementById('s-in').addEventListener('input', (event) => { window.__log('shadow-input:' + event.target.value) })
+    }
+  })
+  customElements.define('x-closed', class extends HTMLElement {
+    constructor() { super(); this.attachShadow({ mode: 'closed' }).innerHTML = '<button>CLOSED_LEAK</button><p>CLOSED_TEXT_LEAK</p>' }
+  })
+  window.__events = []
+  window.__log = (entry) => { window.__events.push(entry); document.getElementById('log').textContent = window.__events.join(',') }
+</script>
+</body>
+</html>

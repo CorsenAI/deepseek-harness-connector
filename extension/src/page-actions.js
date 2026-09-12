@@ -243,6 +243,149 @@ export async function runPageAction(kind, args, config) {
     return url.toString();
   }
 
+  // ---- the rendered tree ----------------------------------------------------
+
+  /**
+   * The parent an element has in what the user sees: through a slot for slotted content, and
+   * through a shadow root's host for content inside one. `Element.closest()` and `parentElement`
+   * stop at a shadow boundary; the visibility rules must not.
+   * @param {Node} node The node.
+   * @returns {Element|null} The parent in the flat tree, or null at the document.
+   */
+  function flatParent(node) {
+    const slot = /** @type {{assignedSlot?: Element|null}} */ (node).assignedSlot;
+    if (slot) return slot;
+    if (node.parentElement) return node.parentElement;
+    const root = node.getRootNode();
+    return root instanceof ShadowRoot ? root.host : null;
+  }
+
+  /**
+   * Whether a shadow host's rendered contents are its open shadow tree rather than its children.
+   * A closed root cannot be reached and is not claimed; its host is walked as an ordinary element.
+   * @param {Node} node The node.
+   * @returns {node is Element} Whether it has an open shadow root.
+   */
+  function isOpenHost(node) {
+    return node.nodeType === Node.ELEMENT_NODE && /** @type {Element} */ (node).shadowRoot !== null;
+  }
+
+  /**
+   * What a slot renders: the nodes assigned to it, or its own children as fallback.
+   * @param {Node} node The node.
+   * @returns {Node[]|null} The assigned nodes, or null when the node is not a slot with any.
+   */
+  function slotted(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE || /** @type {Element} */ (node).localName !== "slot") return null;
+    if (typeof (/** @type {HTMLSlotElement} */ (node)).assignedNodes !== "function") return null;
+    const assigned = /** @type {HTMLSlotElement} */ (node).assignedNodes({ flatten: true });
+    return assigned.length > 0 ? assigned : null;
+  }
+
+  /**
+   * Whether a node renders a tree of its own in place of its children: an open host, or a slot
+   * with nodes assigned. Cheap on purpose — it runs once per node walked.
+   * @param {Node} node The node.
+   * @returns {boolean} Whether the walker must not descend into its children.
+   */
+  function rendersOwnTree(node) {
+    return isOpenHost(node) || slotted(node) !== null;
+  }
+
+  /**
+   * Walk the rendered tree under a root in document order — the tree the user sees, which crosses
+   * open shadow roots and follows slots — with `TreeWalker` doing every step, so a budget counted
+   * in filter calls stays a count of the work.
+   *
+   * A shadow host's light children render only where a slot places them, so the walker refuses
+   * them and the host's shadow tree is walked in their place, right after the host; a slot with
+   * assigned nodes has those walked in place of its fallback children. The filter and the visit
+   * keep `TreeWalker` semantics: `FILTER_ACCEPT` visits and descends, `FILTER_SKIP` descends
+   * without visiting, `FILTER_REJECT` does neither. Hosts and slots are always brought back to
+   * this function, whatever the filter said short of rejecting, because their descent is not the
+   * walker's to make.
+   * @param {Node} root Where to start; not visited itself.
+   * @param {number} whatToShow The `NodeFilter` mask.
+   * @param {(node: Node) => number} acceptNode The caller's filter.
+   * @param {(node: Node) => boolean} visit Called per accepted node; return false to stop the walk.
+   */
+  function walkFlatTree(root, whatToShow, acceptNode, visit) {
+    let stopped = false;
+    /** Verdicts the wrapper overrode to ACCEPT so it could descend itself, by node. */
+    const overridden = new Map();
+
+    /**
+     * Descend from a host or a slot into what it renders.
+     * @param {Node} node The host or slot.
+     */
+    const descendRendered = (node) => {
+      if (isOpenHost(node)) {
+        walkUnder(/** @type {ShadowRoot} */ (node.shadowRoot));
+        return;
+      }
+      const assigned = slotted(node);
+      if (assigned) for (const child of assigned) { if (stopped) return; walkFrom(child); }
+    };
+
+    /**
+     * Walk one subtree, its root excluded.
+     * @param {Node} subtreeRoot The subtree's root.
+     */
+    const walkUnder = (subtreeRoot) => {
+      if (stopped) return;
+      // Siblings share a parent, so the parent's verdict is computed once per run of siblings.
+      let lastParent = null;
+      let parentRendersOwnTree = false;
+      const walker = document.createTreeWalker(subtreeRoot, whatToShow, {
+        acceptNode(node) {
+          // Light children of a host render only through slots; a slot's own children only when
+          // nothing is assigned to it. Both are reached, when rendered, from their host or slot.
+          const parent = node.parentNode;
+          if (parent !== lastParent) {
+            lastParent = parent;
+            parentRendersOwnTree = parent !== null && rendersOwnTree(parent);
+          }
+          if (parentRendersOwnTree) return NodeFilter.FILTER_REJECT;
+          const verdict = acceptNode(node);
+          if (verdict !== NodeFilter.FILTER_REJECT && rendersOwnTree(node)) {
+            overridden.set(node, verdict);
+            return NodeFilter.FILTER_ACCEPT;
+          }
+          return verdict;
+        },
+      });
+      let node;
+      while ((node = walker.nextNode())) {
+        if (stopped) return;
+        // The map is consulted only while something is in it: on an ordinary page, never.
+        const verdict = overridden.size === 0 ? undefined : overridden.get(node);
+        if (verdict === undefined || verdict === NodeFilter.FILTER_ACCEPT) {
+          if (!visit(node)) { stopped = true; return; }
+        }
+        if (verdict !== undefined) { overridden.delete(node); descendRendered(node); }
+      }
+    };
+
+    /**
+     * Walk one node and its subtree, the node included: what a slot's assigned node needs.
+     * @param {Node} node The node.
+     */
+    const walkFrom = (node) => {
+      if (stopped) return;
+      const shown = node.nodeType === Node.TEXT_NODE ? NodeFilter.SHOW_TEXT : NodeFilter.SHOW_ELEMENT;
+      if ((whatToShow & shown) !== 0) {
+        const verdict = acceptNode(node);
+        if (verdict === NodeFilter.FILTER_REJECT) return;
+        if (verdict === NodeFilter.FILTER_ACCEPT && !visit(node)) { stopped = true; return; }
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (rendersOwnTree(node)) descendRendered(node);
+      else walkUnder(node);
+    };
+
+    walkUnder(root);
+  }
+
   // ---- the visibility policy ------------------------------------------------
 
   /**
@@ -289,7 +432,9 @@ export async function runPageAction(kind, args, config) {
   function isVisible(candidate) {
     if (!(candidate instanceof Element) || !candidate.isConnected) return false;
     const element = candidate;
-    if (element.closest('[aria-hidden="true"]')) return false;
+    for (let ancestor = element; ancestor; ancestor = flatParent(ancestor)) {
+      if (ancestor.getAttribute("aria-hidden") === "true") return false;
+    }
     if (typeof element.checkVisibility === "function") {
       try {
         return element.checkVisibility({
@@ -335,37 +480,35 @@ export async function runPageAction(kind, args, config) {
     }
     let remaining = budget;
     let exhausted = false;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        remaining -= 1;
-        // Accepting on exhaustion, rather than rejecting, is what makes the budget real: a
-        // rejection leaves nextNode() scanning every remaining sibling before it returns null, so
-        // a thirty-thousand-node page cost thirty thousand filter calls against a budget of
-        // twenty-four thousand. An acceptance returns at once and the loop below stops.
-        if (remaining < 0) { exhausted = true; return NodeFilter.FILTER_ACCEPT; }
-        if ((remaining % CLOCK_EVERY_NODES) === 0 && outOfTime()) { exhausted = true; return NodeFilter.FILTER_ACCEPT; }
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const element = /** @type {Element} */ (node);
-          if (exclude !== null && element === exclude) return NodeFilter.FILTER_REJECT;
-          if (isSecretValueHolder(element)) return NodeFilter.FILTER_REJECT;
-          // An element carries no text of its own: descend into it, or refuse its whole subtree.
-          return subtreeMayBeVisible(element)
-            ? NodeFilter.FILTER_SKIP
-            : NodeFilter.FILTER_REJECT;
-        }
-        const value = node.nodeValue;
-        if (!value || value.trim() === "") return NodeFilter.FILTER_REJECT;
-        const parent = node.parentElement;
-        if (!parent || !isVisible(parent)) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-    let node;
-    while ((node = walker.nextNode())) {
-      if (exhausted) break;
+    walkFlatTree(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, (node) => {
+      remaining -= 1;
+      // Accepting on exhaustion, rather than rejecting, is what makes the budget real: a
+      // rejection leaves nextNode() scanning every remaining sibling before it returns null, so
+      // a thirty-thousand-node page cost thirty thousand filter calls against a budget of
+      // twenty-four thousand. An acceptance returns at once and the loop below stops.
+      if (remaining < 0) { exhausted = true; return NodeFilter.FILTER_ACCEPT; }
+      if ((remaining % CLOCK_EVERY_NODES) === 0 && outOfTime()) { exhausted = true; return NodeFilter.FILTER_ACCEPT; }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = /** @type {Element} */ (node);
+        if (exclude !== null && element === exclude) return NodeFilter.FILTER_REJECT;
+        if (isSecretValueHolder(element)) return NodeFilter.FILTER_REJECT;
+        // An element carries no text of its own: descend into it, or refuse its whole subtree.
+        return subtreeMayBeVisible(element)
+          ? NodeFilter.FILTER_SKIP
+          : NodeFilter.FILTER_REJECT;
+      }
+      const value = node.nodeValue;
+      if (!value || value.trim() === "") return NodeFilter.FILTER_REJECT;
+      const parent = node.parentElement;
+      if (!parent || !isVisible(parent)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }, (node) => {
+      if (exhausted) return false;
+      // Only text nodes are accepted above; an element accepted on exhaustion stops the walk first.
+      if (node.nodeType !== Node.TEXT_NODE) return false;
       const parent = /** @type {Element} */ (node.parentElement);
-      if (!onText(/** @type {string} */ (node.nodeValue), parent)) break;
-    }
+      return onText(/** @type {string} */ (node.nodeValue), parent);
+    });
     return exhausted;
   }
 
@@ -401,7 +544,11 @@ export async function runPageAction(kind, args, config) {
   function labelFor(element) {
     const id = element.getAttribute("id");
     if (id) {
-      const explicit = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      // Ids are scoped to a tree: a control inside a shadow root is labelled from that root.
+      const scope = /** @type {Document|ShadowRoot} */ (element.getRootNode());
+      const explicit = typeof scope.querySelector === "function"
+        ? scope.querySelector(`label[for="${CSS.escape(id)}"]`)
+        : null;
       if (explicit) return visibleTextOf(explicit, MAX_NAME_CHARS, element);
     }
     const wrapping = element.closest("label");
@@ -545,8 +692,9 @@ export async function runPageAction(kind, args, config) {
   function accessibleName(element) {
     const labelledBy = element.getAttribute("aria-labelledby");
     if (labelledBy) {
+      const scope = /** @type {Document|ShadowRoot} */ (element.getRootNode());
       const parts = labelledBy.split(/\s+/)
-        .map((id) => document.getElementById(id))
+        .map((id) => (typeof scope.getElementById === "function" ? scope.getElementById(id) : null))
         .filter((node) => node !== null)
         .map((node) => visibleTextOf(/** @type {Element} */ (node), MAX_NAME_CHARS))
         .filter((text) => text !== "");
@@ -630,27 +778,23 @@ export async function runPageAction(kind, args, config) {
     const root = document.body ?? document.documentElement;
     if (!root) return { elements, truncated };
 
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
-      acceptNode(node) {
-        visited += 1;
-        // Accept, do not reject, once the budget is spent: see the note in walkVisibleText. The
-        // loop below stops on the flag, so the walk costs the budget and not the document.
-        if (visited > MAX_VISITED_NODES) { truncated = true; budgetSpent = true; return NodeFilter.FILTER_ACCEPT; }
-        if ((visited % CLOCK_EVERY_NODES) === 0 && outOfTime()) {
-          truncated = true; budgetSpent = true; return NodeFilter.FILTER_ACCEPT;
-        }
-        return subtreeMayBeVisible(/** @type {Element} */ (node))
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_REJECT;
-      },
-    });
-
-    while (walker.nextNode()) {
-      if (budgetSpent) break;
-      // A SHOW_ELEMENT walker yields only elements; the cast records what the filter guarantees.
-      const element = /** @type {Element} */ (walker.currentNode);
-      if (!isInteractive(element) || !isVisible(element)) continue;
-      if (elements.length >= MAX_INTERACTIVE) { truncated = true; break; }
+    walkFlatTree(root, NodeFilter.SHOW_ELEMENT, (node) => {
+      visited += 1;
+      // Accept, do not reject, once the budget is spent: see the note in walkVisibleText. The
+      // visit below stops on the flag, so the walk costs the budget and not the document.
+      if (visited > MAX_VISITED_NODES) { truncated = true; budgetSpent = true; return NodeFilter.FILTER_ACCEPT; }
+      if ((visited % CLOCK_EVERY_NODES) === 0 && outOfTime()) {
+        truncated = true; budgetSpent = true; return NodeFilter.FILTER_ACCEPT;
+      }
+      return subtreeMayBeVisible(/** @type {Element} */ (node))
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    }, (node) => {
+      if (budgetSpent) return false;
+      // A SHOW_ELEMENT walk yields only elements; the cast records what the filter guarantees.
+      const element = /** @type {Element} */ (node);
+      if (!isInteractive(element) || !isVisible(element)) return true;
+      if (elements.length >= MAX_INTERACTIVE) { truncated = true; return false; }
 
       const ref = `e${elements.length + 1}@${generation}`;
       state.refs.set(ref, element);
@@ -688,7 +832,8 @@ export async function runPageAction(kind, args, config) {
         entry.expanded = element.getAttribute("aria-expanded") === "true";
       }
       elements.push(entry);
-    }
+      return true;
+    });
     return { elements, truncated };
   }
 
@@ -975,6 +1120,9 @@ export async function runPageAction(kind, args, config) {
         return fail("ACTION_FAILED", `${keyName} is not a supported key; use a single character or one of ${Object.keys(NAMED_KEYS).filter((name) => name !== " ").join(", ")}`);
       }
       let target = document.activeElement;
+      // Focus inside an open shadow tree shows at the document as the host; the element that
+      // actually has it is the root's own active element, as deep as the trees go.
+      while (target && target.shadowRoot && target.shadowRoot.activeElement) target = target.shadowRoot.activeElement;
       if (args.ref !== undefined) {
         const { element, error } = resolve(args.ref);
         if (!element) return fail(error.code, error.message);
