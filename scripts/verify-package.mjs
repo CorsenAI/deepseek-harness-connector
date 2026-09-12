@@ -294,6 +294,23 @@ if (existsSync(manifestPath)) {
   for (const name of summed) {
     check(listed.some((artifact) => artifact.name === name), `SHA256SUMS names only released artifacts: ${name}`);
   }
+
+  // The release notes are what the owner pastes into the GitHub release; the hashes there are
+  // kept by hand and have changed four times in two days. They must be the built artifacts'.
+  const notesPath = join(root, "docs", `RELEASE-NOTES-${String(release.version)}.md`);
+  check(existsSync(notesPath), `release notes exist for ${release.version} (${notesPath})`);
+  if (existsSync(notesPath)) {
+    const notes = readFileSync(notesPath, "utf8");
+    for (const artifact of listed) {
+      const row = notes.split("\n").find((line) => line.includes(`\`${artifact.name}\``) && /`[0-9a-f]{64}`/.test(line));
+      check(row !== undefined, `release notes carry a hash row for ${artifact.name}`);
+      if (row === undefined) continue;
+      const hash = /`([0-9a-f]{64})`/.exec(row)?.[1];
+      const bytes = /\| (\d+) \|\s*$/.exec(row)?.[1];
+      check(hash === artifact.sha256, `release notes hash matches ${artifact.name}`, `notes ${String(hash).slice(0, 12)}, built ${String(artifact.sha256).slice(0, 12)}`);
+      check(bytes === String(artifact.bytes), `release notes size matches ${artifact.name}`, `notes ${bytes}, built ${artifact.bytes}`);
+    }
+  }
 }
 
 process.stdout.write(failures === 0 ? "\nall checks passed\n" : `\n${failures} check(s) failed\n`);
