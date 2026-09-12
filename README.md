@@ -18,15 +18,17 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
 Chrome extension with all twenty-one browser actions, the installers, and the release packaging work
-end to end and are covered by 340 tests: 258 unit and protocol tests, 14 cases running the shipped
-page module in a real Chrome, and 68 real-browser end-to-end cases — multi-session isolation, a
+end to end and are covered by 362 tests: 270 unit and protocol tests, 17 cases running the shipped
+page module in a real Chrome, and 75 real-browser end-to-end cases — multi-session isolation, a
 page built to leak hidden content, a page built to give a model instructions, an attached tab that
 changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
 agent connection, a closed tab and a relaunched Chrome, the released pair installed into a real
 `dsh` with its broker killed and restarted as a process, and three live turns of a real `dsh`
 process whose model — DeepSeek Harness's own scripted mock provider — calls `browser_snapshot`
 and `browser_screenshot` on the attached tab (the screenshot reaching a vision model as pixels and
-a text-only model as DeepSeek Harness's placeholder). Every suite has run on Linux, macOS and
+a text-only model as DeepSeek Harness's placeholder), a real `dsh` process starting the packaged
+broker it found missing, the panel's setup card against a real broker, a silent port and another
+program, and web components read and clicked through open shadow roots. Every suite has run on Linux, macOS and
 Windows on real machines, against DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, and the
 release artifacts built on the three platforms are byte-identical. The Store listing, screenshots
 and privacy page are in `store/`.
@@ -190,9 +192,9 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 258 tests, no browser needed
-npm run test:page    # 14 tests, the shipped page module in a real Chrome for Testing
-npm run test:e2e     # 68 tests, real Chrome with the extension loaded
+npm run test:unit    # 270 tests, no browser needed
+npm run test:page    # 17 tests, the shipped page module in a real Chrome for Testing
+npm run test:e2e     # 75 tests, real Chrome with the extension loaded
 ```
 
 The browser suites need Playwright's Chrome for Testing (`npx playwright install chromium`). The

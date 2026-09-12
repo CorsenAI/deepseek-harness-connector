@@ -108,11 +108,11 @@ the project cannot be called ready while they are open.
 Every row was run on 2026-09-12 at the commit `docs/TEST-EVIDENCE.md` names, on real machines
 reached over the project's own tailnet where they are not the development machine.
 
-| Platform | Typecheck, build | Unit | Page module | E2E (68: released pair, three live turns and the screenshot included) | Installer | Package hashes | State |
+| Platform | Typecheck, build | Unit | Page module | E2E (75: released pair with the plugin's broker start, three live turns, the screenshot, the setup card and shadow DOM included) | Installer | Package hashes | State |
 |---|---|---|---|---|---|---|---|
-| Ubuntu 26.04.1 (native, x86-64, Node 26.8) | pass | 258/258, POSIX case unskipped | 14/14 | 68/68 headed under Xvfb **and** 68/68 new headless | 23/23 against `dsh` 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2 | reference | supported |
-| macOS 26.6.2 (arm64, Node 26.7) | pass | 258/258, POSIX case unskipped | 14/14 | 68/68 new headless, plus the vertical slice headed (9/9) | 23/23 against `dsh` 0.1.5-rc.1, quarantined arrival rehearsed | identical to Linux | supported |
-| Windows 11 Pro 10.0.26200 (x86-64, Node 24.14, Windows PowerShell 5.1) | pass | 258 with the POSIX case skipped | 14/14 | 68/68 new headless | 21/21 against `dsh` 0.1.5-rc.1, Mark-of-the-Web arrival rehearsed | identical to Linux | supported |
+| Ubuntu 26.04.1 (native, x86-64, Node 26.8) | pass | 270/270, POSIX case unskipped | 17/17 | 75/75 headed under Xvfb **and** 75/75 new headless | 23/23 against `dsh` 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2 | reference | supported |
+| macOS 26.6.2 (arm64, Node 26.7, Chrome in French) | pass | 270/270, POSIX case unskipped | 17/17 | 75/75 new headless, plus the vertical slice headed (9/9) | 23/23 against `dsh` 0.1.5-rc.1, quarantined arrival rehearsed | identical to Linux | supported |
+| Windows 11 Pro 10.0.26200 (x86-64, Node 24.14, Windows PowerShell 5.1) | pass | 270 with the POSIX case skipped | 17/17 | 75/75 new headless | 21/21 against `dsh` 0.1.5-rc.1, Mark-of-the-Web arrival rehearsed | identical to Linux | supported |
 | WSL 2 Ubuntu 24.04 | — | — | — | — | 21/21 on 2026-09-05 | — | historical; superseded by the native rows |
 
 No platform is marked supported on the grounds that the code looks portable. Headed runs on

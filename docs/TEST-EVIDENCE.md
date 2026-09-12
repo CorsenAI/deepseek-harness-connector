@@ -1226,3 +1226,75 @@ tests only, so its artifacts are those of `52aa846`.
 
 AS passes with the scope above. Y now covers three turns. Z stays partial (no GitHub remote).
 Everything else as recorded on 2026-09-11.
+
+## 2026-09-12, later — the two other gaps to Hermes Connector: onboarding with a self-starting broker, and open shadow DOM (commits `7d9a14f` → `644b080`)
+
+### What was wrong with the first run, found while writing the setup card
+
+- The documented `npx dsh-connector-broker --pairing-code` **does not work outside the profile
+  directory**: npm looks for a package named `dsh-connector-broker` and gets a 404 (reproduced
+  from `/tmp`). Inside the profile the bin did not work either: pnpm links `node_modules/.bin/
+  dsh-connector-broker` straight to `lib/broker-main.js`, which had no shebang, so the shell ran
+  the JavaScript as a script (`line 132: syntax error near unexpected token '('`).
+- Nothing started the broker unless an installer did; Hermes Connector's plugin starts its own.
+
+### Fixes, and what proves them
+
+| What | Proof |
+|---|---|
+| `#!/usr/bin/env node` on the entry; `dsh plugin --profile <name> exec dsh-connector-broker --pairing-code` documented everywhere | `tests/e2e/released-pair.test.ts`: the code printed through `dsh plugin exec` equals the entry file's, against `dsh` 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2 on Ubuntu, 0.1.5-rc.1 on macOS and Windows (pnpm's `.cmd` shim there) |
+| The plugin starts a missing broker (`broker-launch.ts`: detached, stderr kept, a 15 s launch lock, once per 30 s, `autoStartBroker: false` to turn off); the client tells `unreachable` from `disconnected`; the broker writes `connector/broker.pid` itself | `companion/tests/broker-launch.test.ts` 6/6 on the three platforms — the real entry started detached into a scratch home, an `AgentClient` reporting `unreachable` and then pairing with it, the pid file, SIGTERM (the pid file removed on POSIX). `tests/e2e/released-pair.test.ts`: a real `dsh --profile headless` launch with nothing on the port it is patched to; the process exits at the missing API key and the packaged broker it started is still listening, its pid recorded — on the three `dsh` versions (Ubuntu) and the three platforms |
+| The setup card (gate AT): probe, OS, commands, EN/FR | `companion/tests/panel-state.test.ts` (23 in all); `tests/e2e/onboarding.test.ts` 6/6 on the three platforms, the Mac's Chrome rendering the French copy and the suite asserting it from the panel's own dictionary (the first Mac run failed four cases on English regular expressions — `081ccc8`; fixed in `644b080`); `DSH_E2E_LOCALE=fr-FR` reproduces the French run on Linux, 6/6 |
+| Open shadow DOM (gate AV): `walkFlatTree` | `tests/page/page-actions.test.ts` 3 new cases on `tests/fixtures/page-shadow.html` (17 in all), `tests/e2e/shadow.test.ts` through the extension's isolated world; on the three platforms. `docs/PERFORMANCE.md`: about three milliseconds more on the full-budget page, measured against the previous walker in the same session |
+| Store screenshot 1 regenerated with the card | `store/ASSETS.md` |
+
+### One flaky run, and what it was
+
+The Mac lane at `081ccc8` reported 7 failures: the four English-regex cases above, and three that
+did not reproduce when their suites were run alone on the same machine minutes later (recovery's
+worker-kill case at 57.9 s and two live turns at 11 s and 60 s). The Mac was busy with another
+project's automation at the time (its Chrome held the remote-debugging port). At `644b080` the
+whole lane passed, 75/75; the three are not counted as findings.
+
+### Final runs at `644b080`
+
+Linux (Ubuntu 26.04, Node 26.8):
+
+```
+npm run typecheck                                # clean
+npm run test:unit                                # 270/270
+npm run test:page                                # 17/17
+xvfb-run --auto-servernum -- npm run test:e2e   # 75/75 headed
+DSH_E2E_HEADLESS=1 npm run test:e2e             # 75/75 new headless
+DSH_E2E_LOCALE=fr-FR … tests/e2e/onboarding.test.ts   # 6/6 in French
+released-pair + live-turn with DSH_BIN_DIR at latest, at next   # 8/8 each
+tests/installer/linux-installer.sh against 0.1.2-rc.1, latest, next   # 23/23 each (at 081ccc8; the scripts are unchanged since)
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # gate passed
+npm audit, root and companion                   # 0 vulnerabilities
+node scripts/package.mjs && node scripts/verify-package.mjs   # 607 checks, clean tree
+```
+
+macOS 26.6.2 (arm64, Node 26.7, Chrome in French): typecheck and build clean; unit 270/270; page
+17/17; the vertical slice headed 9/9; end-to-end new headless **75/75** against `dsh` 0.1.5-rc.1;
+installer 23/23; the quarantined `install.sh` ran through `bash` and directly; hashes identical.
+
+Windows 11 Pro 10.0.26200 (Node 24.14, Windows PowerShell 5.1): typecheck and build clean; unit
+270 (269 pass, the POSIX case skipped); page 17/17; end-to-end new headless **75/75** against
+`dsh` 0.1.5-rc.1 — the plugin's detached broker start through a real `dsh` included; without pnpm
+the installer created nothing; installer 21/21; the Mark-of-the-Web rehearsal as before; hashes
+identical.
+
+### Release artifacts, from clean commit `644b080`
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `9e2c08ed4e9deab95679cbbc40b86797d0581b872a35dc6afa2d560d6984857a` | 58647 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `bd1557365ca8b60b97b08c0a75dead38e397e22d77bb7b69dfee2dce810861ef` | 65751 |
+
+Byte-identical on Ubuntu, macOS and Windows. The tarball changed at `7d9a14f` (the companion),
+the ZIP at `e5678ad` (the panel) and `573389f` (the page code).
+
+### Gates after this section
+
+AS, AT, AU and AV pass; AQ covers the broker the plugin starts. Z stays partial (no GitHub
+remote). The three gaps named against Hermes Connector v0.2.4 on 2026-09-11 are closed.

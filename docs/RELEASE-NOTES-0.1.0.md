@@ -15,8 +15,8 @@ you are already signed in to. Two parts, released together at the same version:
 
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
-| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `4472fe8aa404bf776507a68197e58b8a515e0859091837cf770c73555ea90d8e` | 52596 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `9fd23306a537b916ea95f736171f7742826f0a4b3f3c62e971a2943ffc555ea1` | 61521 |
+| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `9e2c08ed4e9deab95679cbbc40b86797d0581b872a35dc6afa2d560d6984857a` | 58647 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `bd1557365ca8b60b97b08c0a75dead38e397e22d77bb7b69dfee2dce810861ef` | 65751 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows. `SHA256SUMS` and
 `release-manifest.json` accompany them.
@@ -69,11 +69,13 @@ naming the stored file.
 
 ### Evidence
 
-340 tests: 258 unit and protocol, 14 on the shipped page module in a real Chrome, 68 real-browser
+362 tests: 270 unit and protocol, 17 on the shipped page module in a real Chrome, 75 real-browser
 end-to-end — multi-session isolation, a page built to leak hidden content, a page built to give a
-model instructions, an attached tab that changes site mid-task, recovery from a killed worker, a
-restarted broker, a replaced agent, a closed tab and a relaunched Chrome, the released pair
-installed into a real `dsh` with its broker killed and restarted as a process, and three live
+model instructions, web components read and clicked through open shadow roots, an attached tab
+that changes site mid-task, recovery from a killed worker, a restarted broker, a replaced agent, a
+closed tab and a relaunched Chrome, the panel's setup card against a real broker, a silent port
+and another program, the released pair installed into a real `dsh` — which starts the packaged
+broker it finds missing — with that broker killed and restarted as a process, and three live
 turns of a real `dsh` process (its model being DeepSeek Harness's own scripted mock provider):
 a text snapshot, a screenshot delivered to a vision model as pixels, and a screenshot delivered to
 a text-only model as the placeholder. Run on Ubuntu 26.04, macOS 26.6 and Windows 11 against the
