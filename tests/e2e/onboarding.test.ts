@@ -13,10 +13,17 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:net'
 import { after, before, describe, it } from 'node:test'
 import { pairingCode } from '../../companion/src/auth.ts'
+import { dictionary, t } from '../../extension/src/i18n.js'
 import { extensionConnected, settle, startHarness, waitFor, type Harness } from './harness.ts'
 
 let harness: Harness
 let silentPort: number
+/** The panel's own dictionary: the browser's language decides the copy, and the machine decides the language. */
+let dict: Record<string, string>
+/** The name the panel gives this machine's operating system, in its language. */
+let osName: string
+/** The family the instructions are written for, from what Chrome reports. */
+let expectedOs: string
 
 /** @returns a loopback port nothing is listening on right now. */
 async function freePort(): Promise<number> {
@@ -81,9 +88,26 @@ async function verdict(expected: string): Promise<CardView> {
   return await card()
 }
 
+/**
+ * The detection line the panel must show for a verdict, in its own language.
+ * @param key - the dictionary key of the verdict.
+ * @param port - the port the address names.
+ */
+function detectionLine(key: string, port: number): string {
+  return t(dict, key, { url: `127.0.0.1:${port}`, os: osName })
+}
+
 before(async () => {
   harness = await startHarness()
   silentPort = await freePort()
+  // The copy is asserted in the language the panel actually renders — the Mac lane runs Chrome in
+  // French — against the same dictionary the panel reads, so a wrong key or an unfilled
+  // placeholder fails here in every language.
+  const language = await harness.panel.evaluate(() => navigator.language)
+  dict = dictionary(language) as Record<string, string>
+  const platform = await harness.panel.evaluate(async () => (await chrome.runtime.getPlatformInfo()).os)
+  expectedOs = ({ win: 'windows', mac: 'mac', linux: 'linux' } as Record<string, string>)[platform] ?? 'other'
+  osName = t(dict, ({ windows: 'osWindows', mac: 'osMac', linux: 'osLinux' } as Record<string, string>)[expectedOs] ?? 'osOther')
 }, { timeout: 120000 })
 
 after(async () => { await harness?.close() })
@@ -92,14 +116,13 @@ describe('the setup card', () => {
   it('shows on first run, names the system Chrome runs on, and gives the commands for it', async () => {
     // The panel draws itself after its first round trip to the worker; the card is what it draws.
     await waitFor('the setup card to show before pairing', async () => !(await card()).hidden)
-    const platform = await harness.panel.evaluate(async () => (await chrome.runtime.getPlatformInfo()).os)
-    const expectedOs = ({ win: 'windows', mac: 'mac', linux: 'linux' } as Record<string, string>)[platform] ?? 'other'
     await waitFor('the platform to be read', async () => (await card()).os === expectedOs)
     const labelled = await card()
-    const osName = ({ windows: 'Windows', mac: 'macOS', linux: 'Linux' } as Record<string, string>)[expectedOs] ?? 'this computer'
-    assert.match(labelled.stepInstall, new RegExp(osName), `the step must name ${osName}; got: ${labelled.stepInstall}`)
+    assert.equal(labelled.stepInstall, t(dict, 'onboardingStepInstall', { os: osName }), 'the step names this system')
+    assert.ok(osName !== '' && labelled.stepInstall.includes(osName))
     assert.equal(labelled.installCommand, 'dsh plugin --profile web add @corsen-ai/dsh-browser-connector')
     assert.equal(labelled.codeCommand, 'dsh plugin --profile web exec dsh-connector-broker --pairing-code')
+    assert.equal(labelled.installer, t(dict, expectedOs === 'windows' ? 'onboardingInstallerWindows' : 'onboardingInstallerPosix'))
     assert.match(labelled.installer, expectedOs === 'windows' ? /Install Connector\.cmd/ : /install\.sh/)
   })
 
@@ -107,16 +130,14 @@ describe('the setup card', () => {
     await setAddress(`ws://127.0.0.1:${harness.broker.port}`)
     const view = await verdict('running')
     assert.equal(view.tone, 'ok')
-    assert.match(view.detection, /A connector is running at 127\.0\.0\.1:\d+/)
-    assert.match(view.detection, /Type its pairing code below/)
+    assert.equal(view.detection, detectionLine('onboardingDetected', harness.broker.port))
   })
 
   it('says nothing is listening when nothing is, and that the install comes first', async () => {
     await setAddress(`ws://127.0.0.1:${silentPort}`)
     const view = await verdict('none')
     assert.equal(view.tone, 'idle')
-    assert.match(view.detection, /No connector is listening at 127\.0\.0\.1:\d+/)
-    assert.match(view.detection, /Install it, then start DeepSeek Harness/)
+    assert.equal(view.detection, detectionLine('onboardingNotDetected', silentPort))
   })
 
   it('tells another program on the port apart from the connector', async () => {
@@ -125,7 +146,7 @@ describe('the setup card', () => {
     await setAddress(`ws://${fixtures.host}`)
     const view = await verdict('other')
     assert.equal(view.tone, 'warn')
-    assert.match(view.detection, /Something other than the connector answers/)
+    assert.equal(view.detection, detectionLine('onboardingOtherProgram', Number(fixtures.port)))
   })
 
   it('notices a connector that appears after the card was drawn, without the user doing anything', async () => {
@@ -150,6 +171,6 @@ describe('the setup card', () => {
     await settle(300)
     await waitFor('the card to return', async () => !(await card()).hidden)
     const view = await verdict('running')
-    assert.match(view.detection, /A connector is running/)
+    assert.equal(view.detection, detectionLine('onboardingDetected', harness.broker.port))
   })
 })

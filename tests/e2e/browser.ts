@@ -74,9 +74,13 @@ export type PanelView = Pick<LaunchedBrowser, 'panel'>
  */
 export async function launchBrowser(userDataDir: string, extensionDir: string): Promise<LaunchedBrowser> {
   const headless = process.env['DSH_E2E_HEADLESS'] === '1'
+  // `DSH_E2E_LOCALE=fr-FR` runs the browser in another language, so the panel's other dictionary
+  // is exercised on a machine whose own Chrome speaks English.
+  const locale = process.env['DSH_E2E_LOCALE']
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless,
     ...(headless ? { channel: 'chromium' as const } : {}),
+    ...(locale ? { locale } : {}),
     args: [
       `--disable-extensions-except=${extensionDir}`,
       `--load-extension=${extensionDir}`,
