@@ -12,7 +12,11 @@
  * user attaching anything again.
  *
  * Nothing here imports from `companion/src/`. The agent client, the tool layer and the credentials
- * reader are loaded from the installation directory, by file URL.
+ * reader are loaded from the installation directory, by file URL, and their `@deepseek-ai/*`
+ * imports resolve to the packages of the very DeepSeek Harness under test — the way that DeepSeek
+ * Harness resolves them for a running profile: before 0.2 through the links a profile launch
+ * creates beside the profile, from 0.2 on through its in-process runtime resolution, which this
+ * suite reproduces with a resolve hook (see {@link resolveLikeTheHarness}).
  *
  * Needs `dist/` built by `scripts/package.mjs` and a real `dsh`: `DSH_BIN_DIR` names the directory
  * holding it, or the first `~/dsh-int/<lane>/node_modules/.bin/dsh` is used. Without either the
@@ -23,6 +27,7 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -76,6 +81,48 @@ const tools = new Map<string, RegisteredTool>()
 let tarball: string
 let zip: string
 let manifest: { version: string, commit: string, artifacts: { name: string, sha256: string }[] }
+/** The version the real `dsh` reports, read in the first case. */
+let dshVersion = ''
+
+/**
+ * Whether a DeepSeek Harness version is on the 0.2 line or later, where a profile launch no longer
+ * links the runtime's packages beside the profile.
+ * @param version - as `dsh --version` prints it.
+ * @returns whether the in-process resolution applies.
+ */
+function resolvesInProcess(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\./.exec(version)
+  return match !== null && (Number(match[1]) > 0 || Number(match[2]) >= 2)
+}
+
+/**
+ * Resolve the installed connector's `@deepseek-ai/*` imports as DeepSeek Harness 0.2 does.
+ *
+ * A profile's packages are installed with `autoInstallPeers: false`, so the connector's DeepSeek
+ * Harness peers are not in the profile's `node_modules`; a running DeepSeek Harness 0.2 answers
+ * them from its own installation through a runtime resolution installed into Node's resolvers
+ * ("Startup creates no shared or profile-owned fallback links"). This test process is not that
+ * runtime, so it installs the same answer for the same requests: a bare `@deepseek-ai/*` specifier
+ * imported from inside the installed connector, which Node cannot resolve where it stands, is
+ * resolved from the DeepSeek Harness installation under test. Everything else, and everything Node
+ * can already resolve — the 0.1 links included — is untouched.
+ * @param installedDir - the installed connector's directory.
+ * @param dshBinDir - the `.bin` directory of the DeepSeek Harness under test.
+ */
+function resolveLikeTheHarness(installedDir: string, dshBinDir: string): void {
+  const installedPrefix = pathToFileURL(installedDir + '/').href
+  const harness = pathToFileURL(join(dshBinDir, '..', '@deepseek-ai', 'dsh', 'package.json')).href
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      try {
+        return nextResolve(specifier, context)
+      } catch (cause) {
+        if (!specifier.startsWith('@deepseek-ai/') || !(context.parentURL ?? '').startsWith(installedPrefix)) throw cause
+        return nextResolve(specifier, { ...context, parentURL: harness })
+      }
+    },
+  })
+}
 
 /** @returns the directory holding a real `dsh`, or null with the reason. */
 function findDsh(): string | null {
@@ -247,7 +294,8 @@ after(async () => {
 describe('the released pair, installed as a user installs it', () => {
   it('installs the tarball into a real DeepSeek Harness with dsh plugin add, and the profile composes it', { timeout: 180000, skip: skipReason }, () => {
     const version = dsh(['--version'])
-    process.stdout.write(`dsh --version: ${version.out.trim()}\n`)
+    dshVersion = version.out.trim().split('\n').pop() ?? ''
+    process.stdout.write(`dsh --version: ${dshVersion}\n`)
 
     const added = dsh(['plugin', '--profile', 'headless', 'add', tarball])
     assert.equal(added.status, 0, `dsh plugin add failed:\n${added.out}`)
@@ -269,6 +317,33 @@ describe('the released pair, installed as a user installs it', () => {
     ].join('\n'))
   })
 
+  it('is judged by DeepSeek Harness’s own compatibility rule exactly as the connector judges itself', { timeout: 60000, skip: skipReason }, async (t) => {
+    // From 0.2.1 DeepSeek Harness refuses, at installation and at profile startup, a plugin whose
+    // `engines.dsh` its version does not satisfy. Its own evaluator and the connector's own gate,
+    // both taken from what was just installed, must agree version by version (ADR 0010).
+    type Evaluate = (manifest: object, exemptions: object, runtimeVersion: string) => { requirements: Record<string, string> } | undefined
+    const appBoot = join(dshBin as string, '..', '@deepseek-ai', 'dsh-app-boot', 'lib', 'index.js')
+    const harness: { evaluatePluginCompatibility?: Evaluate } = existsSync(appBoot)
+      ? await import(pathToFileURL(appBoot).href) as { evaluatePluginCompatibility?: Evaluate }
+      : {}
+    const evaluate = harness.evaluatePluginCompatibility
+    if (typeof evaluate !== 'function') {
+      t.skip(`DeepSeek Harness ${dshVersion} has no plugin-compatibility rule (it predates engines.dsh); the connector's own gate is the only one`)
+      return
+    }
+    const packaged = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8')) as { engines?: Record<string, string> }
+    assert.ok(packaged.engines?.['dsh'], 'the packaged manifest must declare engines.dsh')
+    const gate = await import(pathToFileURL(join(installed, 'lib', 'dsh', 'version.js')).href) as {
+      classifyDshVersion: (value: string) => { status: string }
+    }
+    for (const version of [dshVersion, '0.1.1', '0.1.2-rc.1', '0.1.5-rc.2', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.9', '0.3.0-0', '0.3.0-alpha.1', '0.3.0', '1.0.0']) {
+      const accepted: boolean = evaluate(packaged, {}, version) === undefined
+      const loads: boolean = gate.classifyDshVersion(version).status !== 'incompatible'
+      assert.equal(accepted, loads, `DeepSeek Harness ${version}: its rule ${accepted ? 'accepts' : 'refuses'} the package, the connector ${loads ? 'loads' : 'refuses'}`)
+    }
+    assert.equal(evaluate(packaged, {}, dshVersion), undefined, `the DeepSeek Harness under test (${dshVersion}) must accept the package`)
+  })
+
   it('applies the installed plugin in a real DeepSeek Harness process, which starts the broker it found missing; the only failure left is the missing API key', { timeout: 180000, skip: skipReason }, async () => {
     assert.equal(await brokerAnswers(), 0, 'nothing must listen on the port before the launch')
     // A real profile launch: DeepSeek Harness composes the tree, applies every plugin, and stops at
@@ -277,9 +352,12 @@ describe('the released pair, installed as a user installs it', () => {
     const launched = dsh(['--profile', 'headless', 'say hi'])
     assert.doesNotMatch(launched.out, /corsen-browser-connector/, `the connector complained while applying:\n${launched.out}`)
     assert.match(launched.out, /MISSING_CREDENTIAL|API key/, `expected only the missing credential; got:\n${launched.out}`)
-    // The launch is also what makes the installation resolvable: DeepSeek Harness links its own
-    // packages beside the profile so the installed connector can import the real `defineTool`.
-    assert.ok(existsSync(join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-tools')), 'DeepSeek Harness must have linked dsh-tools for the profile')
+    // Before 0.2 the launch is also what makes the installation resolvable outside the process:
+    // DeepSeek Harness links its own packages beside the profile. From 0.2 on it resolves them in
+    // process and links nothing; the plugin having applied above is the proof that it resolved.
+    if (!resolvesInProcess(dshVersion)) {
+      assert.ok(existsSync(join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-tools')), 'DeepSeek Harness must have linked dsh-tools for the profile')
+    }
 
     // The plugin found nothing listening and started the packaged broker, detached: the dsh
     // process has exited and the broker is still there, its pid recorded by itself.
@@ -318,6 +396,7 @@ describe('the released pair, installed as a user installs it', () => {
   })
 
   it('performs one action end to end through the installed tool layer, with nothing imported from the source tree', { timeout: 120000, skip: skipReason }, async () => {
+    resolveLikeTheHarness(installed, dshBin as string)
     const libUrl = pathToFileURL(join(installed, 'lib') + '/')
     const [agentModule, toolsModule, authModule, pathsModule] = await Promise.all([
       import(new URL('agent-client.js', libUrl).href),

@@ -81,6 +81,8 @@ let installed: string
 let brokerPort: number
 let broker: ReturnType<typeof spawn> | null = null
 let startMock: (options: Record<string, unknown>) => Promise<MockLlm>
+/** The version the real `dsh` reports. */
+let dshVersion = ''
 let files: FixtureServer
 let browser: LaunchedBrowser
 let code: string
@@ -92,6 +94,22 @@ interface Turn {
   readonly status: number | null
   readonly stdout: string
   readonly stderr: string
+}
+
+/**
+ * Two catalogue models of the DeepSeek Harness under test: one catalogued with image input, one
+ * text-only. The catalogue changed between lines: the 0.1 line lists `deepseek-v4-flash-vision-exp`
+ * with images and `deepseek-v4-flash` without; the 0.2 line lists `deepseek-flash`
+ * (DeepSeek-V4.1-Flash) with images and `deepseek-v4-pro` without, and neither 0.1 name.
+ * @param version - as `dsh --version` prints it.
+ * @returns the two model ids.
+ */
+function catalogueModels(version: string): { vision: string, textOnly: string } {
+  const match = /^(\d+)\.(\d+)\./.exec(version)
+  const twoLineOrLater = match !== null && (Number(match[1]) > 0 || Number(match[2]) >= 2)
+  return twoLineOrLater
+    ? { vision: 'deepseek-flash', textOnly: 'deepseek-v4-pro' }
+    : { vision: 'deepseek-v4-flash-vision-exp', textOnly: 'deepseek-v4-flash' }
 }
 
 const TASK = 'Read the page in the attached tab and tell me its title.'
@@ -136,8 +154,9 @@ before(async () => {
   installed = join(home, 'profiles', 'headless', 'node_modules', '@corsen-ai', 'dsh-browser-connector')
   brokerPort = await freePort()
 
-  // The released pair, installed as a user installs it, plus the profile launch that links the
-  // runtime's packages beside the profile (see the released-pair suite).
+  dshVersion = dsh(['--version']).out.trim().split('\n').pop() ?? ''
+  process.stdout.write(`live turn: dsh ${dshVersion}, models ${JSON.stringify(catalogueModels(dshVersion))}\n`)
+  // The released pair, installed as a user installs it.
   const added = dsh(['plugin', '--profile', 'headless', 'add', join(DIST, tgzName)])
   assert.equal(added.status, 0, `dsh plugin add failed:\n${added.out}`)
 
@@ -260,32 +279,96 @@ after(async () => {
   for (const dir of [home, unpacked, profile]) if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 })
 
-/** A wire message of the chat-completions request, as the adapter serialises it. */
+/**
+ * One message of the provider request, in either wire protocol DeepSeek Harness has spoken: the
+ * chat-completions shape of the 0.1 line (`tool_calls`, a `tool` role, `image_url` parts) and the
+ * Messages shape of the 0.2 line (`tool_use` and `tool_result` blocks, `image` blocks with a
+ * base64 source).
+ */
 interface WireMessage {
   role: string
-  content?: string | { type: string, text?: string, image_url?: { url: string } }[]
+  content?: string | WirePart[]
   tool_calls?: { function?: { name?: string } }[]
+}
+
+/** One content part or block, in either protocol. */
+interface WirePart {
+  type: string
+  text?: string
+  name?: string
+  image_url?: { url: string }
+  source?: { type: string, media_type?: string, data?: string }
+  content?: string | WirePart[]
+}
+
+/** One image as it crossed the wire to the provider. */
+interface WireImage {
+  readonly mediaType: string
+  readonly bytes: Buffer
+}
+
+/**
+ * The names of the tools a request offered, in either protocol.
+ * @param body - the request body.
+ * @returns the tool names.
+ */
+function offeredTools(body: unknown): string[] {
+  const tools = (body as { tools?: { name?: string, function?: { name?: string } }[] }).tools ?? []
+  return tools.map((tool) => tool.function?.name ?? tool.name ?? '')
+}
+
+/**
+ * Decode an image part, whichever protocol carried it.
+ * @param part - an `image_url` part or an `image` block.
+ * @returns the image, or null when the part is not an inline image.
+ */
+function inlineImage(part: WirePart): WireImage | null {
+  if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
+    const match = /^data:([^;,]+);base64,(.*)$/s.exec(part.image_url.url)
+    return match ? { mediaType: match[1]!, bytes: Buffer.from(match[2]!, 'base64') } : null
+  }
+  if (part.type === 'image' && part.source?.type === 'base64' && typeof part.source.data === 'string') {
+    return { mediaType: part.source.media_type ?? '', bytes: Buffer.from(part.source.data, 'base64') }
+  }
+  return null
 }
 
 /**
  * The final request of a turn is the whole conversation: system prompt, task, the model's tool
- * call, the tool result, and — for a model that accepts images — the user message the adapter
- * appends to carry a tool result's images.
+ * call, and the tool result as DeepSeek Harness rendered it for the provider — its text, and, for a
+ * model that accepts images, the pixels. The chat-completions adapter of the 0.1 line sends a tool
+ * result's images in a user message it appends right after the `tool` message; the Messages
+ * adapter of the 0.2 line sends them inside the `tool_result` block, each after a handle text.
  * @param turn - a finished turn.
  * @param toolName - the tool the scripted model called.
  * @returns the conversation, checked to hold that tool call and exactly one tool result.
  */
-function finalConversation(turn: Turn, toolName: string): { messages: WireMessage[], toolResult: string } {
+function finalConversation(turn: Turn, toolName: string): { messages: WireMessage[], toolResult: string, images: WireImage[] } {
   const behaviors = turn.mock.requests.map((request) => request.behavior)
   assert.deepEqual(behaviors, ['rate_limit', 'tool_call_success', 'success'], `unexpected provider traffic: ${JSON.stringify(behaviors)}`)
   const messages = (turn.mock.requests[2]!.body as { messages: WireMessage[] }).messages
-  const call = messages.find((message) => message.role === 'assistant' && Array.isArray(message.tool_calls))
-  assert.ok(call, `no assistant tool call in the final request; roles were ${JSON.stringify(messages.map((message) => message.role))}`)
-  assert.equal(call.tool_calls?.[0]?.function?.name, toolName)
+  const parts = (message: WireMessage): WirePart[] => Array.isArray(message.content) ? message.content : []
+  const calls = messages.flatMap((message) => message.role !== 'assistant'
+    ? []
+    : [...(message.tool_calls ?? []).map((call) => call.function?.name ?? ''), ...parts(message).filter((part) => part.type === 'tool_use').map((part) => part.name ?? '')])
+  assert.deepEqual(calls, [toolName], `expected one assistant call of ${toolName}; roles were ${JSON.stringify(messages.map((message) => message.role))}`)
+
   const toolMessages = messages.filter((message) => message.role === 'tool')
-  assert.equal(toolMessages.length, 1, `expected one tool result in the final request; messages were ${JSON.stringify(messages).slice(0, 6000)}`)
-  const content = toolMessages[0]!.content
-  return { messages, toolResult: typeof content === 'string' ? content : JSON.stringify(content) }
+  const resultBlocks = messages.flatMap((message) => message.role === 'user' ? parts(message).filter((part) => part.type === 'tool_result') : [])
+  assert.equal(toolMessages.length + resultBlocks.length, 1, `expected one tool result in the final request; messages were ${JSON.stringify(messages).slice(0, 6000)}`)
+
+  if (toolMessages.length === 1) {
+    const content = toolMessages[0]!.content
+    const toolResult = typeof content === 'string' ? content : (content ?? []).map((part) => part.text ?? '').join('')
+    const carrier = messages[messages.indexOf(toolMessages[0]!) + 1]
+    const images = carrier && carrier.role === 'user' ? parts(carrier).map(inlineImage).filter((image): image is WireImage => image !== null) : []
+    return { messages, toolResult, images }
+  }
+  const content = resultBlocks[0]!.content
+  const blocks: WirePart[] = typeof content === 'string' ? [{ type: 'text', text: content }] : (content ?? [])
+  const toolResult = blocks.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('')
+  const images = blocks.map(inlineImage).filter((image): image is WireImage => image !== null)
+  return { messages, toolResult, images }
 }
 
 /**
@@ -309,8 +392,7 @@ describe('a live DeepSeek Harness turn through the released pair', () => {
 
     // Every agent request offered the browser tools beside DeepSeek Harness's own.
     for (const [index, request] of turn.mock.requests.entries()) {
-      const tools = (request.body as { tools?: { function?: { name?: string } }[] }).tools ?? []
-      const browserTools = tools.map((tool) => tool.function?.name ?? '').filter((name) => name.startsWith('browser_'))
+      const browserTools = offeredTools(request.body).filter((name) => name.startsWith('browser_'))
       assert.equal(browserTools.length, 21, `request ${index} offered ${browserTools.length} browser tools`)
     }
 
@@ -332,31 +414,26 @@ describe('a live DeepSeek Harness turn through the released pair', () => {
   })
 
   it('sends a browser_screenshot to a model that accepts images as the pixels themselves', { timeout: 180000, skip: skipReason }, async () => {
-    // deepseek-v4-flash-vision-exp is catalogued with image input at every tested DeepSeek
-    // Harness version. The adapter tries the provider's files API first; the mock has none, so
-    // the image travels inline, base64 in a data URL — which is what the assertion decodes.
-    const turn = await runTurn('browser_screenshot', 'I can see the page.', 'deepseek-v4-flash-vision-exp')
+    // A model catalogued with image input on this line (see catalogueModels). The adapter tries the
+    // provider's files API first; the mock has none, so the image travels inline, base64 — which
+    // is what the assertion decodes.
+    const turn = await runTurn('browser_screenshot', 'I can see the page.', catalogueModels(dshVersion).vision)
     assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
-    const { messages, toolResult } = finalConversation(turn, 'browser_screenshot')
+    const { toolResult, images } = finalConversation(turn, 'browser_screenshot')
     assert.doesNotMatch(toolResult, /no attachment service|No screenshot was taken|could not capture|image omitted/, 'the capture must have been taken, saved and sent')
     assert.match(toolResult, /Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), 1280×720 pixels/, 'the text beside the image names the page')
     assert.match(toolResult, /sha256:[0-9a-f]{8}/, 'DeepSeek Harness names the durable attachment in the text it sends')
 
-    // The adapter carries a tool result's images in a user message right after the tool message.
-    const toolIndex = messages.findIndex((message) => message.role === 'tool')
-    const carrier = messages[toolIndex + 1]
-    assert.ok(carrier && carrier.role === 'user' && Array.isArray(carrier.content), `no image carrier after the tool result; messages were ${JSON.stringify(messages.slice(toolIndex)).slice(0, 1500)}`)
-    const images = carrier.content.filter((part) => part.type === 'image_url')
-    assert.equal(images.length, 1, `expected one image part; the carrier was ${JSON.stringify(carrier).slice(0, 1500)}`)
-    const url = images[0]!.image_url?.url ?? ''
-    assert.match(url, /^data:image\/jpeg;base64,/, `the image is inline JPEG; the URL began ${url.slice(0, 40)}`)
-    // DeepSeek Harness fits the request copy to its per-request pixel budget (1280×720 came
-    // through as 1066×600 here) and says so in the handle text; the bytes on the wire must be
-    // exactly the preview it announced, and the same picture.
-    const bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')
+    // Exactly one image reached the provider for this tool result, inline (the mock has no files
+    // API), as JPEG.
+    assert.equal(images.length, 1, `expected one image with the tool result; got ${images.length}`)
+    const image = images[0]!
+    assert.equal(image.mediaType, 'image/jpeg', 'the image is inline JPEG')
+    // DeepSeek Harness fits the request copy to its per-request budget and says so in the handle
+    // text; the bytes on the wire must be exactly the preview it announced, and the same picture.
     const preview = /request preview (\d+)x(\d+)px/.exec(toolResult)
     assert.ok(preview, `no request preview in the handle text: ${toolResult}`)
-    const wireSize = jpegDimensions(bytes)
+    const wireSize = jpegDimensions(image.bytes)
     assert.deepEqual(wireSize, { width: Number(preview[1]), height: Number(preview[2]) }, 'the pixels the provider received are the preview the text announced')
     assert.ok(Math.abs(wireSize.width / wireSize.height - 1280 / 720) < 0.01, `the preview keeps the capture's proportions; got ${wireSize.width}×${wireSize.height}`)
 
@@ -368,14 +445,15 @@ describe('a live DeepSeek Harness turn through the released pair', () => {
   })
 
   it('sends a browser_screenshot to a text-only model as DeepSeek Harness’s placeholder naming the saved image', { timeout: 180000, skip: skipReason }, async () => {
-    // deepseek-v4-flash is catalogued text-only at every tested version. The capture is still
-    // taken and saved; DeepSeek Harness substitutes its placeholder for the pixels and keeps the
+    // A model catalogued text-only on this line (see catalogueModels). The capture is still taken
+    // and saved; DeepSeek Harness substitutes its placeholder for the pixels and keeps the
     // connector's caption, so the model learns what was captured and where it is kept.
-    const turn = await runTurn('browser_screenshot', 'I cannot see, but I know a screenshot was taken.', 'deepseek-v4-flash')
+    const turn = await runTurn('browser_screenshot', 'I cannot see, but I know a screenshot was taken.', catalogueModels(dshVersion).textOnly)
     assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
-    const { messages, toolResult } = finalConversation(turn, 'browser_screenshot')
+    const { messages, toolResult, images } = finalConversation(turn, 'browser_screenshot')
     assert.match(toolResult, /^\[image omitted because this model accepts text only; attachment sha256:[0-9a-f]{8}\]Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), 1280×720 pixels\.$/)
-    assert.equal(messages.filter((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url')).length, 0, 'no pixels reach a text-only model')
+    assert.equal(images.length, 0, 'no pixels reach a text-only model with the tool result')
+    assert.doesNotMatch(JSON.stringify(messages), /"type":"image(_url)?"/, 'and none anywhere else in the request')
     const digest = /sha256:([0-9a-f]{8})/.exec(toolResult)![1]!
     assert.deepEqual(jpegDimensions(storedAttachment(digest)), { width: 1280, height: 720 }, 'the image was saved even though this model cannot see it')
     assert.match(turn.stdout, /I cannot see/, `stdout was:\n${turn.stdout}`)
