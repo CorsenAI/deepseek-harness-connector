@@ -16,12 +16,27 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      # A major version is a migration, made on purpose with the lanes re-run, not a weekly bump.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /companion
     schedule:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      # A major version is a migration, made on purpose with the lanes re-run, not a weekly bump.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # The Node types follow the oldest Node the package supports (engines: ^22.19 || >=24), so the
+      # typecheck refuses what Node 22 lacks; newer types would let it through.
+      - dependency-name: "@types/node"
+        versions: [">=23"]
+      # A 0.x minor is a breaking change: 0.3 retyped the APIs the extension's checkJs relies on.
+      - dependency-name: "@types/chrome"
+        versions: [">=0.3.0"]
     groups:
       deepseek-harness:
         patterns:
