@@ -35,7 +35,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { after, before, describe, it } from 'node:test'
 import { readZip } from '../../scripts/package.mjs'
 import {
-  attachTab, extensionConnected, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
+  attachTab, closeWithin, extensionConnected, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
   type FixtureServer, type LaunchedBrowser,
 } from './browser.ts'
 
@@ -287,12 +287,12 @@ after(async () => {
   // A broker the installed plugin started on its own is detached from everything but its pid file.
   const recorded = home ? recordedBrokerPid() : null
   if (recorded !== null) { try { process.kill(recorded, 'SIGKILL') } catch { /* already gone */ } }
-  await browser?.context.close()
+  await closeWithin(browser?.context)
   await files?.close()
   for (const dir of [home, unpacked, profile]) {
     if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
-})
+}, { timeout: 120000 })
 
 describe('the released pair, installed as a user installs it', () => {
   it('installs the tarball into a real DeepSeek Harness with dsh plugin add, and the profile composes it', { timeout: 180000, skip: skipReason }, () => {

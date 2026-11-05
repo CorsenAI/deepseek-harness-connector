@@ -32,7 +32,7 @@ import { after, before, describe, it } from 'node:test'
 import { readZip } from '../../scripts/package.mjs'
 import { jpegDimensions } from './jpeg.ts'
 import {
-  attachTab, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
+  attachTab, closeWithin, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
   type FixtureServer, type LaunchedBrowser,
 } from './browser.ts'
 
@@ -274,10 +274,10 @@ async function runTurn(toolName: string, finalText: string, model?: string): Pro
 
 after(async () => {
   if (broker) { broker.kill('SIGKILL'); broker = null }
-  await browser?.context.close()
+  await closeWithin(browser?.context)
   await files?.close()
   for (const dir of [home, unpacked, profile]) if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
-})
+}, { timeout: 120000 })
 
 /**
  * One message of the provider request, in either wire protocol DeepSeek Harness has spoken: the

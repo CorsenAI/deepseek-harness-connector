@@ -13,7 +13,7 @@
     "test": "npm run test:unit && npm run test:page && npm run test:e2e",
     "test:unit": "node --test --experimental-strip-types \"companion/tests/*.test.ts\"",
     "test:page": "node --test --test-concurrency=1 --experimental-strip-types \"tests/page/*.test.ts\"",
-    "test:e2e": "node --test --test-concurrency=1 --experimental-strip-types \"tests/e2e/*.test.ts\"",
+    "test:e2e": "node --test --test-concurrency=1 --test-force-exit --experimental-strip-types \"tests/e2e/*.test.ts\"",
     "typecheck": "npm run typecheck:companion && npm run typecheck:extension && npm run typecheck:tests",
     "typecheck:companion": "node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.json --noEmit",
     "typecheck:extension": "node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit",

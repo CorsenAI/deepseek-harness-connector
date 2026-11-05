@@ -169,7 +169,7 @@ jobs:
       # its own process from the installation, killed and restarted. Nothing from companion/src/.
       # Gate Y: one live turn of a real dsh process, its model answered by DeepSeek Harness's own
       # scripted mock provider, the tool call executed through the released pair.
-      - run: DSH_BIN_DIR="$RUNNER_TEMP/dsh-pair/node_modules/.bin" xvfb-run --auto-servernum -- node --test --test-concurrency=1 --experimental-strip-types tests/e2e/released-pair.test.ts tests/e2e/live-turn.test.ts
+      - run: DSH_BIN_DIR="$RUNNER_TEMP/dsh-pair/node_modules/.bin" xvfb-run --auto-servernum -- node --test --test-concurrency=1 --test-force-exit --experimental-strip-types tests/e2e/released-pair.test.ts tests/e2e/live-turn.test.ts
 
   provenance:
     name: provenance audit

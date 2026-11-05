@@ -101,6 +101,29 @@ export async function launchBrowser(userDataDir: string, extensionDir: string): 
   return { context, worker, extensionId, panel }
 }
 
+/**
+ * Close a browser context without ever waiting on it forever.
+ *
+ * On the Windows lane of 2026-11-05 (an ARM64 VM running the x64 Chrome for Testing under
+ * emulation) one suite's seven cases passed and its process then stayed open for 33 minutes in
+ * teardown. A wedged `close()` must not hold a finished run: the teardown goes on after a bound,
+ * says so, and the runner's `--test-force-exit` ends the file.
+ * @param context - the context, if one was launched.
+ * @param ms - how long to wait.
+ * @returns whether it closed in time.
+ */
+export async function closeWithin(context: BrowserContext | undefined, ms = 20000): Promise<boolean> {
+  if (!context) return true
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const closed = await Promise.race([
+    context.close().then(() => true, () => true),
+    new Promise<boolean>((resolve) => { timer = setTimeout(() => { resolve(false) }, ms) }),
+  ])
+  clearTimeout(timer)
+  if (!closed) process.stdout.write(`teardown: the browser context did not close within ${ms} ms; continuing\n`)
+  return closed
+}
+
 /** A loopback server for the HTML fixtures. */
 export interface FixtureServer {
   /** @returns the URL of one fixture by file name. */
