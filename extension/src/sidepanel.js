@@ -11,6 +11,9 @@
 import { dictionary, t } from "./i18n.js";
 import { PANEL_STATES, classifyProbe, onboardingFor, resolvePanelState } from "./panel-state.js";
 
+/** This extension's version; the companion the setup card names must be the same one. */
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
+
 const dict = dictionary();
 
 /**
@@ -346,8 +349,10 @@ function renderCard(state) {
     el.routeBrowser.textContent = snapshot?.identity?.browserName ?? "Chrome";
     el.routeTabs.textContent = t(dict, "routeTabs", { count });
   }
-  el.cardDetail.textContent = state.name === "update-required" && snapshot?.updateNotice?.reason
-    ? snapshot.updateNotice.reason
+  // The update state says why (the broker's own reason when it gave one) and then the one command
+  // that fixes it: the install command of this extension's version (ADR 0011).
+  el.cardDetail.textContent = state.name === "update-required"
+    ? `${snapshot?.updateNotice?.reason || t(dict, state.detailKey, state.values)} ${t(dict, "stateUpdateFix", state.values)}`
     : state.name === "ready"
       ? t(dict, "cardReadyHint")
       : t(dict, state.detailKey, state.values);
@@ -376,7 +381,7 @@ async function probeBroker(url) {
 
 /** Probe now and redraw the setup sheet with the verdict. */
 async function runProbe() {
-  const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot?.settings?.brokerUrl ?? "" });
+  const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot?.settings?.brokerUrl ?? "", version: EXTENSION_VERSION });
   if (card.probeUrl === null) { probe = "none"; renderOnboarding(); return; }
   probedUrl = card.probeUrl;
   const status = await probeBroker(card.probeUrl);
@@ -388,7 +393,7 @@ async function runProbe() {
 
 /** Render the setup sheet from what is known now. */
 function renderOnboarding() {
-  const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot?.settings?.brokerUrl ?? "" });
+  const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot?.settings?.brokerUrl ?? "", version: EXTENSION_VERSION });
   const values = { url: card.probeUrl ? new URL(card.probeUrl).host : String(snapshot?.settings?.brokerUrl ?? ""), os: t(dict, card.osKey) };
   el.onboardingDetection.dataset.tone = card.tone;
   el.onboardingDetection.textContent = t(dict, card.detectionKey, values);
@@ -434,7 +439,7 @@ async function refresh() {
 
   if (panel.showOnboarding) {
     // A changed address is probed at once rather than described by an old verdict.
-    const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot.settings?.brokerUrl ?? "" });
+    const card = onboardingFor({ platformOs, probe, brokerUrl: snapshot.settings?.brokerUrl ?? "", version: EXTENSION_VERSION });
     const changed = card.probeUrl !== probedUrl;
     if (changed) probe = "checking";
     renderOnboarding();

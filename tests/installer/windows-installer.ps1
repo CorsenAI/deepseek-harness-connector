@@ -106,6 +106,36 @@ Expect "broker stopped" (Alive $pid2) "false"
 Expect "credentials kept for re-pair" (Test-Path (Join-Path $env:DSH_HOME "connector\credentials.json")) $true
 Write-Output ""
 
+Write-Output "=== install from the release URL (a loopback stand-in for github.com, with its redirect) ==="
+# The setup card and the installer's default name the companion by its GitHub release URL, which
+# `dsh plugin add` hands to pnpm; github.com answers with a redirect to its asset store. The stand-in
+# in tarball-server.mjs plays both hops on loopback, so this is the real `dsh` installing from a URL.
+$urlPort = [int]$port + 100
+$tag = "v" + (([System.IO.Path]::GetFileNameWithoutExtension($Tarball)) -replace '^.*-', '')
+$serverOut = Join-Path $env:DSH_HOME "tarball-server.log"
+$server = Start-Process -FilePath node -ArgumentList @((Join-Path $here "tarball-server.mjs"), $Tarball, "$urlPort", $tag) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOut -RedirectStandardError (Join-Path $env:DSH_HOME "tarball-server.err")
+$listening = $false
+for ($i = 0; $i -lt 50 -and -not $listening; $i++) {
+  Start-Sleep -Milliseconds 200
+  if ((Test-Path $serverOut) -and ((Get-Content $serverOut -ErrorAction SilentlyContinue) -match '^listening')) { $listening = $true }
+}
+Expect "release stand-in listening" $listening "True"
+$url = "http://127.0.0.1:$urlPort/releases/download/$tag/$(Split-Path -Leaf $Tarball)"
+$log6 = RunInstaller @("-Profile", "headless", "-Package", $url)
+Expect "install exit code from the release URL" $LASTEXITCODE "0"
+($log6 | Select-Object -Last 3) | ForEach-Object { "  | $_" }
+Expect "broker present after the URL install" (Test-Path $broker) "True"
+$dependency = (Get-Content $manifest | ConvertFrom-Json).dependencies.'@corsen-ai/dsh-browser-connector'
+Expect "the profile records the URL as the dependency" $dependency $url
+Write-Output ("  | stand-in served: " + ((Get-Content $serverOut -ErrorAction SilentlyContinue | Where-Object { $_ -match '^GET ' }) -join ' '))
+$pidUrl = Get-Content (Join-Path $env:DSH_HOME "connector\broker.pid") -ErrorAction SilentlyContinue
+$null = RunInstaller @("-Uninstall", "-Profile", "headless")
+Expect "uninstall exit code after the URL install" $LASTEXITCODE "0"
+Start-Sleep -Seconds 1
+Expect "broker stopped after the URL install" (Alive $pidUrl) "false"
+Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+Write-Output ""
+
 Write-Output "=== the default home: DSH_HOME unset ==="
 # What a user's machine looks like: no DSH_HOME, so DeepSeek Harness uses ~\.dsh in the user
 # profile, the directory Node reports as the home. USERPROFILE is pointed at a scratch directory so

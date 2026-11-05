@@ -7,15 +7,21 @@
 # to the profile is the dependency `dsh plugin` adds, which `dsh plugin remove` takes away.
 #
 # Usage:
-#   ./install.sh [--profile web] [--package @corsen-ai/dsh-browser-connector | --package ./x.tgz]
+#   ./install.sh [--profile web] [--package <tarball URL or path>]
 #   ./install.sh --uninstall [--profile web]
+#
+# Without --package it installs the companion of this installer's version from the project's GitHub
+# release — the same tarball the extension's setup card names. --package takes any tarball
+# `dsh plugin add` accepts: another URL, or a local .tgz.
 #
 # This is an unofficial community project by Corsen AI, not affiliated with DeepSeek.
 
 set -euo pipefail
 
 PROFILE="web"
-PACKAGE="@corsen-ai/dsh-browser-connector"
+# Kept equal to the extension's and the companion's version (a unit test checks the three).
+VERSION="0.1.0"
+PACKAGE="https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v$VERSION/corsen-ai-dsh-browser-connector-$VERSION.tgz"
 UNINSTALL=0
 BROKER_PORT="${DSH_CONNECTOR_PORT:-8781}"
 
@@ -25,7 +31,7 @@ while [ $# -gt 0 ]; do
     --package) PACKAGE="$2"; shift 2 ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help)
-      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -86,12 +92,12 @@ if [ "$UNINSTALL" -eq 1 ]; then
   exit 0
 fi
 
-# Absolute-ize a local path: `dsh plugin` runs pnpm with cwd = the profile directory, where a
-# relative path would resolve to nothing — and pnpm reads a bare `dir/file.tgz` as a GitHub
-# shorthand and goes looking for a repository. A path that names nothing here is refused now,
-# with a reason, rather than by pnpm with a git error.
+# A URL or a registry name goes to `dsh plugin add` as it is. Absolute-ize a local path: `dsh plugin`
+# runs pnpm with cwd = the profile directory, where a relative path would resolve to nothing — and
+# pnpm reads a bare `dir/file.tgz` as a GitHub shorthand and goes looking for a repository. A path
+# that names nothing here is refused now, with a reason, rather than by pnpm with a git error.
 case "$PACKAGE" in
-  /*|@*) ;;
+  http://*|https://*|/*|@*) ;;
   *)
     if [ -e "$PACKAGE" ]; then
       PACKAGE="$(cd "$(dirname "$PACKAGE")" && pwd)/$(basename "$PACKAGE")"

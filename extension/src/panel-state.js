@@ -11,6 +11,7 @@
  * @property {{brokerUrl: string, pairingCode: string}} settings The user's settings.
  * @property {{pairedAt: string}|null} paired When this browser last paired.
  * @property {{required: boolean, reason?: string}|null} updateNotice A refusal that retrying cannot fix.
+ * @property {string} [extensionVersion] This extension's version, which the companion must match.
  * @property {{brokerVersion: string|null, sessions: object[]}|null} brokerState The broker's last projection.
  * @property {object[]} bindings This browser's bindings.
  * @property {{profileId: string, sessionId: string}|null} selectedScope The session the user picked.
@@ -60,7 +61,9 @@ export function resolvePanelState(snapshot) {
   });
 
   if (snapshot?.updateNotice?.required === true) {
-    return state("update-required", "bad", "stateUpdateTitle", "stateUpdateDetail", {}, { showPairing: false });
+    // A companion from a release is pinned to its URL, so moving on is the install command of this
+    // extension's version again, not a package manager's update: the state says which command.
+    return state("update-required", "bad", "stateUpdateTitle", "stateUpdateDetail", { command: installCommandFor(snapshot.extensionVersion ?? "") }, { showPairing: false });
   }
 
   if (!hasCode) {
@@ -176,11 +179,42 @@ export function classifyProbe(status) {
 }
 
 /**
+ * Where a release's companion is published: the project's own GitHub release of that version. The
+ * companion is not on a package registry; `dsh plugin add` downloads the tarball from here, as it
+ * downloads any tarball URL (ADR 0011).
+ */
+export const RELEASE_DOWNLOADS = "https://github.com/CorsenAI/deepseek-harness-connector/releases/download";
+
+/**
+ * The companion tarball of one version, as `dsh plugin add` fetches it.
+ *
+ * The extension and the companion must be the same version (ADR 0004), so the command the panel
+ * shows is built from the extension's own version: whatever release the user has, the command
+ * names its pair.
+ * @param {string} version The extension's version, `major.minor.patch`.
+ * @returns {string} The tarball's URL on the release of that version.
+ */
+export function companionTarballUrl(version) {
+  return `${RELEASE_DOWNLOADS}/v${version}/corsen-ai-dsh-browser-connector-${version}.tgz`;
+}
+
+/**
+ * The one command that installs the companion of this extension's version into a profile.
+ * @param {string} version The extension's version.
+ * @param {string} [profile] The DeepSeek Harness profile, `web` by default.
+ * @returns {string} The command, as the user types it.
+ */
+export function installCommandFor(version, profile = "web") {
+  return `dsh plugin --profile ${profile} add ${companionTarballUrl(version)}`;
+}
+
+/**
  * Everything the setup card shows, decided without touching the DOM.
  * @param {object} input What is known.
  * @param {string|undefined} input.platformOs Chrome's platform name.
  * @param {"checking"|"running"|"other"|"none"} input.probe The last probe's verdict.
  * @param {string} input.brokerUrl The connector address setting.
+ * @param {string} input.version The extension's own version; the companion must be the same one.
  * @returns {{
  *   os: "windows"|"mac"|"linux"|"other",
  *   osKey: string,
@@ -192,7 +226,7 @@ export function classifyProbe(status) {
  *   probeUrl: string|null,
  * }} What to render.
  */
-export function onboardingFor({ platformOs, probe, brokerUrl }) {
+export function onboardingFor({ platformOs, probe, brokerUrl, version }) {
   const os = osFamily(platformOs);
   const detection = {
     checking: ["onboardingChecking", "busy"],
@@ -205,7 +239,7 @@ export function onboardingFor({ platformOs, probe, brokerUrl }) {
     osKey: { windows: "osWindows", mac: "osMac", linux: "osLinux", other: "osOther" }[os],
     detectionKey: detection[0],
     tone: /** @type {"ok"|"warn"|"busy"|"idle"} */ (detection[1]),
-    installCommand: "dsh plugin --profile web add @corsen-ai/dsh-browser-connector",
+    installCommand: installCommandFor(version),
     codeCommand: "dsh plugin --profile web exec dsh-connector-broker --pairing-code",
     installerKey: os === "windows" ? "onboardingInstallerWindows" : "onboardingInstallerPosix",
     probeUrl: probeUrlFor(brokerUrl),

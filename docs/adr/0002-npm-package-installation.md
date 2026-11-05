@@ -1,6 +1,8 @@
 # ADR 0002 — Ship as one `dsh plugin`-installable npm bundle
 
-Status: accepted (2026-09-04)
+Status: accepted (2026-09-04); the distribution channel amended by [ADR 0011](0011-release-tarball-distribution.md)
+(2026-11-05) — the same one package, installed by the same `dsh plugin add`, served from the project's
+GitHub release instead of the npm registry
 
 ## Context
 

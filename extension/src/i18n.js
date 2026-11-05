@@ -47,6 +47,7 @@ const en = {
   stateReadyDetail: "{session} controls {count} tab(s) in this Chrome profile.",
   stateUpdateTitle: "Update required",
   stateUpdateDetail: "The extension and the local connector speak different protocol versions.",
+  stateUpdateFix: "Install the companion of this extension's version, then start DeepSeek Harness again: {command}",
 
   noneYet: "Nothing here yet.",
 
@@ -133,6 +134,7 @@ const fr = {
   stateReadyDetail: "{session} contrôle {count} onglet(s) dans ce profil Chrome.",
   stateUpdateTitle: "Mise à jour requise",
   stateUpdateDetail: "L'extension et le connecteur local ne parlent pas la même version de protocole.",
+  stateUpdateFix: "Installez le compagnon de la version de cette extension, puis redémarrez DeepSeek Harness : {command}",
 
   noneYet: "Rien pour l'instant.",
 

@@ -10,10 +10,12 @@
  */
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { after, before, describe, it } from 'node:test'
 import { pairingCode } from '../../companion/src/auth.ts'
 import { dictionary, t } from '../../extension/src/i18n.js'
+import { companionTarballUrl } from '../../extension/src/panel-state.js'
 import { extensionConnected, settle, startHarness, waitFor, type Harness } from './harness.ts'
 
 let harness: Harness
@@ -120,7 +122,10 @@ describe('the setup card', () => {
     const labelled = await card()
     assert.equal(labelled.stepInstall, t(dict, 'onboardingStepInstall', { os: osName }), 'the step names this system')
     assert.ok(osName !== '' && labelled.stepInstall.includes(osName))
-    assert.equal(labelled.installCommand, 'dsh plugin --profile web add @corsen-ai/dsh-browser-connector')
+    // The command names the companion of this very extension's version, on the project's release.
+    const version = (JSON.parse(readFileSync(new URL('../../extension/manifest.json', import.meta.url), 'utf8')) as { version: string }).version
+    assert.equal(labelled.installCommand, `dsh plugin --profile web add ${companionTarballUrl(version)}`)
+    assert.match(labelled.installCommand, /^dsh plugin --profile web add https:\/\/github\.com\/CorsenAI\/deepseek-harness-connector\/releases\/download\/v\d+\.\d+\.\d+\/corsen-ai-dsh-browser-connector-\d+\.\d+\.\d+\.tgz$/)
     assert.equal(labelled.codeCommand, 'dsh plugin --profile web exec dsh-connector-broker --pairing-code')
     assert.equal(labelled.installer, t(dict, expectedOs === 'windows' ? 'onboardingInstallerWindows' : 'onboardingInstallerPosix'))
     assert.match(labelled.installer, expectedOs === 'windows' ? /Install Connector\.cmd/ : /install\.sh/)

@@ -88,6 +88,31 @@ expect "broker stopped" "$(alive "$PID2")" "false"
 expect "credentials kept for re-pair" "$(exists "$DSH_HOME/connector/credentials.json")" "true"
 echo
 
+echo "=== install from the release URL (a loopback stand-in for github.com, with its redirect) ==="
+# The setup card and the installer's default name the companion by its GitHub release URL, which
+# `dsh plugin add` hands to pnpm; github.com answers with a redirect to its asset store. The stand-in
+# in tarball-server.mjs plays both hops on loopback, so this is the real `dsh` installing from a URL.
+URL_PORT=$((DSH_CONNECTOR_PORT + 100))
+TAG="v$(basename "$TGZ" .tgz | sed 's/.*-//')"
+node "$HERE/tarball-server.mjs" "$TGZ" "$URL_PORT" "$TAG" > "$DSH_HOME/tarball-server.log" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 50); do grep -q '^listening' "$DSH_HOME/tarball-server.log" 2>/dev/null && break; sleep 0.2; done
+expect "release stand-in listening" "$(grep -c '^listening' "$DSH_HOME/tarball-server.log")" "1"
+URL="http://127.0.0.1:$URL_PORT/releases/download/$TAG/$(basename "$TGZ")"
+bash "$INSTALLER" --profile headless --package "$URL" > "$DSH_HOME/install-url.log" 2>&1
+expect "install exit code from the release URL" "$?" "0"
+sed "s/^/  | /" "$DSH_HOME/install-url.log" | tail -3
+expect "broker present after the URL install" "$(exists "$BROKER")" "true"
+expect "the profile records the URL as the dependency" "$(node -e "console.log(JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')).dependencies['@corsen-ai/dsh-browser-connector'])" "$MANIFEST")" "$URL"
+echo "  | stand-in served: $(grep -E '^GET ' "$DSH_HOME/tarball-server.log" | tr '\n' ' ')"
+PID_URL="$(cat "$DSH_HOME/connector/broker.pid" 2>/dev/null)"
+bash "$INSTALLER" --uninstall --profile headless > "$DSH_HOME/uninstall-url.log" 2>&1
+expect "uninstall exit code after the URL install" "$?" "0"
+sleep 1
+expect "broker stopped after the URL install" "$(alive "$PID_URL")" "false"
+kill "$SERVER_PID" 2>/dev/null || true
+echo
+
 echo "=== the default home: DSH_HOME unset ==="
 # What a user's machine looks like: no DSH_HOME, so DeepSeek Harness uses ~/.dsh. The operating-system
 # home is pointed at a scratch directory so this never touches the real one. The installer must find

@@ -14,7 +14,8 @@
   The DeepSeek Harness profile to install into. Default: web.
 
 .PARAMETER Package
-  The npm package name, or a path to a local .tgz. Default: @corsen-ai/dsh-browser-connector.
+  The companion tarball: a URL or a path to a local .tgz. Default: the tarball of this installer's
+  version on the project's GitHub release — the same one the extension's setup card names.
 
 .PARAMETER Uninstall
   Remove the connector from the profile and stop the broker.
@@ -27,11 +28,16 @@
 [CmdletBinding()]
 param(
   [string]$Profile = "web",
-  [string]$Package = "@corsen-ai/dsh-browser-connector",
+  [string]$Package = "",
   [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
+# Kept equal to the extension's and the companion's version (a unit test checks the three).
+$Version = "0.1.0"
+if (-not $Package) {
+  $Package = "https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v$Version/corsen-ai-dsh-browser-connector-$Version.tgz"
+}
 $brokerPort = if ($env:DSH_CONNECTOR_PORT) { [int]$env:DSH_CONNECTOR_PORT } else { 8781 }
 
 function Fail([string]$message) { Write-Error $message; exit 1 }
@@ -111,10 +117,12 @@ if ($Uninstall) {
   exit 0
 }
 
-# Absolute-ize a local path: `dsh plugin` runs pnpm with cwd = the profile directory, where a
-# relative path means nothing — and pnpm reads a bare `dir\file.tgz` as a GitHub shorthand and
-# goes looking for a repository. A path that names nothing here is refused now, with a reason.
-if (-not $Package.StartsWith('@') -and -not [System.IO.Path]::IsPathRooted($Package)) {
+# A URL or a registry name goes to `dsh plugin add` as it is. Absolute-ize a local path: `dsh plugin`
+# runs pnpm with cwd = the profile directory, where a relative path means nothing — and pnpm reads a
+# bare `dir\file.tgz` as a GitHub shorthand and goes looking for a repository. A path that names
+# nothing here is refused now, with a reason.
+$isUrl = $Package -match '^https?://'
+if (-not $isUrl -and -not $Package.StartsWith('@') -and -not [System.IO.Path]::IsPathRooted($Package)) {
   if (Test-Path -LiteralPath $Package) {
     $Package = (Resolve-Path -LiteralPath $Package).Path
   }

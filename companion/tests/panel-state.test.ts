@@ -93,8 +93,11 @@ describe('panel state', () => {
   it('lets an update requirement outrank every other state', () => {
     // A version mismatch makes the rest moot: sessions listed under an incompatible protocol are
     // not actionable, so showing "ready" would invite the user to try something that cannot work.
-    const snapshot = { ...ready(), updateNotice: { required: true } }
+    const snapshot = { ...ready(), updateNotice: { required: true }, extensionVersion: '0.1.0' }
     assert.equal(nameOf(snapshot), 'update-required')
+    // The way out is the install command of this extension's version: a release tarball is pinned
+    // to its URL, so there is no `dsh plugin update` that moves it (ADR 0011).
+    assert.equal(resolvePanelState(snapshot as unknown as Parameters<typeof resolvePanelState>[0]).values['command'], 'dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz')
   })
 
   it('is defensive about a snapshot that is missing everything', () => {
@@ -156,28 +159,30 @@ describe('the setup card', () => {
   })
 
   it('decides the whole card from the platform, the probe and the address', () => {
-    const card = onboardingFor({ platformOs: 'win', probe: 'running', brokerUrl: 'ws://127.0.0.1:8781' })
+    const card = onboardingFor({ platformOs: 'win', probe: 'running', brokerUrl: 'ws://127.0.0.1:8781', version: '0.1.0' })
     assert.equal(card.os, 'windows')
     assert.equal(card.osKey, 'osWindows')
     assert.equal(card.detectionKey, 'onboardingDetected')
     assert.equal(card.tone, 'ok')
     assert.equal(card.installerKey, 'onboardingInstallerWindows')
     assert.equal(card.probeUrl, 'http://127.0.0.1:8781/')
-    assert.equal(card.installCommand, 'dsh plugin --profile web add @corsen-ai/dsh-browser-connector')
+    // The companion of the same version, from the project's release (ADR 0011): no registry.
+    assert.equal(card.installCommand, 'dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz')
+    assert.equal(onboardingFor({ platformOs: 'win', probe: 'running', brokerUrl: 'ws://127.0.0.1:8781', version: '0.2.3' }).installCommand, 'dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.2.3/corsen-ai-dsh-browser-connector-0.2.3.tgz')
     assert.equal(card.codeCommand, 'dsh plugin --profile web exec dsh-connector-broker --pairing-code')
 
-    const mac = onboardingFor({ platformOs: 'mac', probe: 'none', brokerUrl: 'ws://127.0.0.1:8781' })
+    const mac = onboardingFor({ platformOs: 'mac', probe: 'none', brokerUrl: 'ws://127.0.0.1:8781', version: '0.1.0' })
     assert.equal(mac.installerKey, 'onboardingInstallerPosix')
     assert.equal(mac.detectionKey, 'onboardingNotDetected')
     assert.equal(mac.tone, 'idle')
-    assert.equal(onboardingFor({ platformOs: 'linux', probe: 'other', brokerUrl: 'ws://127.0.0.1:8781' }).tone, 'warn')
-    assert.equal(onboardingFor({ platformOs: 'linux', probe: 'checking', brokerUrl: 'ws://127.0.0.1:8781' }).tone, 'busy')
+    assert.equal(onboardingFor({ platformOs: 'linux', probe: 'other', brokerUrl: 'ws://127.0.0.1:8781', version: '0.1.0' }).tone, 'warn')
+    assert.equal(onboardingFor({ platformOs: 'linux', probe: 'checking', brokerUrl: 'ws://127.0.0.1:8781', version: '0.1.0' }).tone, 'busy')
   })
 
   it('has every key the card uses, in every locale, with the placeholders filled', () => {
     for (const [locale, dict] of Object.entries(LOCALES as Record<string, Record<string, string>>)) {
       for (const probe of ['checking', 'running', 'other', 'none'] as const) {
-        const card = onboardingFor({ platformOs: 'mac', probe, brokerUrl: 'ws://127.0.0.1:8781' })
+        const card = onboardingFor({ platformOs: 'mac', probe, brokerUrl: 'ws://127.0.0.1:8781', version: '0.1.0' })
         const line = t(dict, card.detectionKey, { url: '127.0.0.1:8781', os: t(dict, card.osKey) })
         assert.doesNotMatch(line, /\{|\}|^onboarding/, `${locale} ${probe}: ${line}`)
         assert.ok(dict[card.installerKey], `${locale}: ${card.installerKey}`)
