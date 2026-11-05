@@ -88,5 +88,26 @@ expect "broker stopped" "$(alive "$PID2")" "false"
 expect "credentials kept for re-pair" "$(exists "$DSH_HOME/connector/credentials.json")" "true"
 echo
 
+echo "=== the default home: DSH_HOME unset ==="
+# What a user's machine looks like: no DSH_HOME, so DeepSeek Harness uses ~/.dsh. The operating-system
+# home is pointed at a scratch directory so this never touches the real one. The installer must find
+# the package where `dsh plugin add` put it and keep the connector's state beside it.
+OS_HOME="${TMPDIR:-/tmp}/dsh-installer-home-$$"
+mkdir -p "$OS_HOME"
+DEFAULT_HOME="$OS_HOME/.dsh"
+env -u DSH_HOME HOME="$OS_HOME" bash "$INSTALLER" --profile headless --package "$TGZ" > "$DSH_HOME/install-default.log" 2>&1
+expect "install exit code with DSH_HOME unset" "$?" "0"
+sed "s/^/  | /" "$DSH_HOME/install-default.log" | tail -4
+expect "installed under ~/.dsh, where dsh plugin add puts it" "$(exists "$DEFAULT_HOME/profiles/headless/node_modules/@corsen-ai/dsh-browser-connector/lib/broker-main.js")" "true"
+expect "connector state under ~/.dsh" "$(exists "$DEFAULT_HOME/connector/credentials.json")" "true"
+PID3="$(cat "$DEFAULT_HOME/connector/broker.pid" 2>/dev/null)"
+expect "broker alive for the default home" "$(alive "$PID3")" "true"
+env -u DSH_HOME HOME="$OS_HOME" bash "$INSTALLER" --uninstall --profile headless > "$DSH_HOME/uninstall-default.log" 2>&1
+expect "uninstall exit code with DSH_HOME unset" "$?" "0"
+sleep 1
+expect "broker for the default home stopped" "$(alive "$PID3")" "false"
+rm -rf "$OS_HOME"
+echo
+
 if [ "$failures" -eq 0 ]; then echo "all installer expectations met"; else echo "$failures installer expectation(s) failed"; fi
 exit "$failures"

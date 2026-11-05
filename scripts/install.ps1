@@ -70,16 +70,17 @@ function Invoke-Dsh([string[]]$arguments) {
   & $dshExe @all
 }
 
-# Resolve the Harness home the way the connector does. A DSH_HOME pointing at a profile directory
-# means its grandparent.
-if ($env:DSH_HOME) {
-  $homeDir = $env:DSH_HOME
-  if ($homeDir -match '[\\/]profiles[\\/][^\\/]+[\\/]?$') {
-    $homeDir = (Resolve-Path (Join-Path $homeDir "..\..")).Path
-  }
-} else {
-  $homeDir = Join-Path $env:LOCALAPPDATA "dsh"
-}
+# Resolve the Harness home exactly as DeepSeek Harness does (`resolveDshHome` in
+# @deepseek-ai/dsh-home-paths): a DSH_HOME that is not blank, else ~\.dsh in the user profile — the
+# directory Node reports as the home — with a leading ~ expanded and a relative path made absolute
+# against this location. `dsh plugin add` installs there; looking anywhere else (an earlier version
+# of this script used %LOCALAPPDATA%\dsh) finds nothing on a machine without DSH_HOME.
+$osHome = $env:USERPROFILE
+if ($env:DSH_HOME -and $env:DSH_HOME.Trim().Length -gt 0) { $homeDir = $env:DSH_HOME }
+else { $homeDir = Join-Path $osHome ".dsh" }
+if ($homeDir -eq "~") { $homeDir = $osHome }
+elseif ($homeDir.StartsWith("~/") -or $homeDir.StartsWith("~\")) { $homeDir = Join-Path $osHome $homeDir.Substring(2) }
+$homeDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($homeDir)
 $profileDir = Join-Path (Join-Path $homeDir "profiles") $Profile
 $connectorDir = Join-Path $homeDir "connector"
 $pidFile = Join-Path $connectorDir "broker.pid"

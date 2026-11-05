@@ -55,16 +55,22 @@ if [ "$UNINSTALL" -eq 0 ] && ! command -v pnpm >/dev/null 2>&1; then
   fail "pnpm is required by DeepSeek Harness's plugin command and was not found on PATH. Install it with: npm install -g pnpm"
 fi
 
-# Resolve the Harness home the same way the connector does, so the pairing secret lands where the
-# plugin will look for it. A DSH_HOME that points at a profile directory means its grandparent.
-if [ -n "${DSH_HOME:-}" ]; then
-  HOME_DIR="$DSH_HOME"
-  case "$HOME_DIR" in
-    */profiles/*) HOME_DIR="$(cd "$HOME_DIR/../.." && pwd)" ;;
-  esac
-else
-  HOME_DIR="$HOME/.dsh"
-fi
+# Resolve the Harness home exactly as DeepSeek Harness does (`resolveDshHome` in
+# @deepseek-ai/dsh-home-paths), so the pairing secret lands where the plugin will look for it and the
+# installed package is looked for where `dsh plugin add` put it: a DSH_HOME that is not blank, else
+# ~/.dsh; a leading ~ or ~/ expanded; a relative path made absolute against this directory.
+case "${DSH_HOME:-}" in
+  *[![:space:]]*) HOME_DIR="$DSH_HOME" ;;
+  *) HOME_DIR="$HOME/.dsh" ;;
+esac
+case "$HOME_DIR" in
+  "~") HOME_DIR="$HOME" ;;
+  "~/"*) HOME_DIR="$HOME/${HOME_DIR#\~/}" ;;
+esac
+case "$HOME_DIR" in
+  /*) ;;
+  *) HOME_DIR="$PWD/$HOME_DIR" ;;
+esac
 PROFILE_DIR="$HOME_DIR/profiles/$PROFILE"
 
 if [ "$UNINSTALL" -eq 1 ]; then

@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import { homedir, hostname } from 'node:os'
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join, sep } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 /** Where this plugin instance runs, as the connector identifies it. */
 export interface ProfileIdentity {
@@ -30,27 +30,37 @@ const PROFILES_DIR = 'profiles'
 /** Profile name assumed when the plugin cannot tell which profile loaded it. */
 const UNKNOWN_PROFILE = 'unknown'
 
+/** The default Harness home's directory name under the operating-system home, on every platform. */
+const DSH_HOME_DIR_NAME = '.dsh'
+
 /**
- * Resolve the DeepSeek Harness home.
+ * Expand the tilde prefixes DeepSeek Harness expands: `~`, `~/` and `~\`.
+ * @param path - a configured path.
+ * @param osHome - the operating-system home.
+ * @returns the expanded path, or the path unchanged.
+ */
+function expandHomePath(path: string, osHome: string): string {
+  if (path === '~') return osHome
+  if (path.startsWith('~/') || path.startsWith('~\\')) return join(osHome, path.slice(2))
+  return path
+}
+
+/**
+ * Resolve the DeepSeek Harness home exactly as DeepSeek Harness resolves it.
  *
- * `DSH_HOME` may legitimately point at a profile directory rather than the root; in that case the
- * root is its grandparent, matching how DeepSeek Harness itself resolves a single Harness home.
+ * The rule is `resolveDshHome` in `@deepseek-ai/dsh-home-paths` (unchanged from 0.1.3 through
+ * 0.2.2): a non-blank `DSH_HOME`, else `~/.dsh` — on Windows too, where the operating-system home
+ * is the user profile directory — with its tilde prefix expanded and the result made absolute. A
+ * connector that resolves any other directory keeps its pairing secret and ownership somewhere the
+ * profile it serves is not, and an installer that looks there for the installed package fails.
  * @param environment - the environment to read, for tests.
+ * @param osHome - the operating-system home, for tests.
  * @returns the absolute Harness home.
  */
-export function resolveDshHome(environment: NodeJS.ProcessEnv = process.env): string {
+export function resolveDshHome(environment: NodeJS.ProcessEnv = process.env, osHome: string = homedir()): string {
   const configured = environment['DSH_HOME']
-  if (typeof configured === 'string' && configured.trim() !== '') {
-    const path = configured.trim()
-    const parts = path.split(/[\/]+/).filter((part) => part !== '')
-    if (parts.length >= 2 && parts[parts.length - 2] === PROFILES_DIR) {
-      return path.slice(0, path.length - (parts[parts.length - 2] as string).length - (parts[parts.length - 1] as string).length - 2)
-    }
-    return path
-  }
-  return process.platform === 'win32'
-    ? join(environment['LOCALAPPDATA'] ?? homedir(), 'dsh')
-    : join(homedir(), '.dsh')
+  const selected = configured !== undefined && configured.trim().length > 0 ? configured : join(osHome, DSH_HOME_DIR_NAME)
+  return resolve(expandHomePath(selected, osHome))
 }
 
 /**

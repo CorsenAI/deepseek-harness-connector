@@ -106,5 +106,33 @@ Expect "broker stopped" (Alive $pid2) "false"
 Expect "credentials kept for re-pair" (Test-Path (Join-Path $env:DSH_HOME "connector\credentials.json")) $true
 Write-Output ""
 
+Write-Output "=== the default home: DSH_HOME unset ==="
+# What a user's machine looks like: no DSH_HOME, so DeepSeek Harness uses ~\.dsh in the user
+# profile, the directory Node reports as the home. USERPROFILE is pointed at a scratch directory so
+# this never touches the real profile. Until 2026-11-05 the installer looked in %LOCALAPPDATA%\dsh
+# and failed here; every earlier lane had set DSH_HOME.
+$osHome = Join-Path $env:TEMP ("dsh-installer-home-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+New-Item -ItemType Directory -Force -Path $osHome | Out-Null
+$savedHome = $env:DSH_HOME
+$savedProfile = $env:USERPROFILE
+Remove-Item Env:DSH_HOME
+$env:USERPROFILE = $osHome
+$defaultHome = Join-Path $osHome ".dsh"
+$log5 = RunInstaller @("-Profile", "headless", "-Package", $Tarball)
+Expect "install exit code with DSH_HOME unset" $LASTEXITCODE 0
+$log5 | Select-Object -Last 4 | ForEach-Object { "  | $_" }
+Expect "installed under ~\.dsh, where dsh plugin add puts it" (Test-Path (Join-Path $defaultHome "profiles\headless\node_modules\@corsen-ai\dsh-browser-connector\lib\broker-main.js")) $true
+Expect "connector state under ~\.dsh" (Test-Path (Join-Path $defaultHome "connector\credentials.json")) $true
+$pid3 = Get-Content (Join-Path $defaultHome "connector\broker.pid") -ErrorAction SilentlyContinue
+Expect "broker alive for the default home" (Alive $pid3) "true"
+$log6 = RunInstaller @("-Uninstall", "-Profile", "headless")
+Expect "uninstall exit code with DSH_HOME unset" $LASTEXITCODE 0
+Start-Sleep -Seconds 1
+Expect "broker for the default home stopped" (Alive $pid3) "false"
+$env:USERPROFILE = $savedProfile
+$env:DSH_HOME = $savedHome
+Remove-Item -Recurse -Force $osHome -ErrorAction SilentlyContinue
+Write-Output ""
+
 if ($script:failures -eq 0) { Write-Output "all installer expectations met" } else { Write-Output "$($script:failures) installer expectation(s) failed" }
 exit $script:failures
