@@ -1,7 +1,7 @@
 # DeepSeek Harness Connector 0.1.0 — release notes
 
 The text for the GitHub release `v0.1.0`, ready to paste. Hashes are those of the artifacts built
-from the closing commit of 2026-09-12 (`docs/TEST-EVIDENCE.md`); they hold for any later commit
+from the closing commit of 2026-11-05 (`docs/TEST-EVIDENCE.md`); they hold for any later commit
 that leaves `extension/` and `companion/` untouched, and `scripts/verify-package.mjs` refuses a
 build whose manifest does not match the tree it was built from.
 
@@ -16,7 +16,7 @@ you are already signed in to. Two parts, released together at the same version:
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
 | `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `9e2c08ed4e9deab95679cbbc40b86797d0581b872a35dc6afa2d560d6984857a` | 58647 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `bd1557365ca8b60b97b08c0a75dead38e397e22d77bb7b69dfee2dce810861ef` | 65751 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `18522051bcb0f8baa00ff276dce2c0e4b0fafe19c48e81a2c83aa1206e27200e` | 69342 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows. `SHA256SUMS` and
 `release-manifest.json` accompany them.
@@ -40,12 +40,14 @@ print the code: `scripts/install.sh` (macOS, Linux) and `scripts/Install Connect
 
 | DeepSeek Harness | State |
 |---|---|
-| `@deepseek-ai/dsh` 0.1.2-rc.1, 0.1.5-rc.1 (`latest`), 0.1.5-rc.2 (`next`) | tested |
-| newer, below 0.2.0 | loads, with a notice that it is untested |
-| 0.2.0 and above | refused until tested |
+| `@deepseek-ai/dsh` 0.1.2-rc.1, 0.1.5-rc.2, 0.2.1-rc.5 (`latest` on 2026-11-05), 0.2.2-rc.1 (`next`) | tested |
+| later 0.2 releases | loads, with a notice that it is untested |
+| the 0.3 line, its prereleases included | refused until tested — by DeepSeek Harness itself at installation from 0.2.1 (`engines.dsh`), and by the connector at load |
 
 Chrome 120 or newer on Windows, macOS and Linux. Protocol version 1; the extension and the
-companion must be the same version, and a mismatch is shown as "Update required".
+companion must be the same version, and a mismatch is shown as "Update required". In DeepSeek
+Harness 0.2's Web and Desktop clients the plugin appears under its own name, description and icon,
+and every browser call is shown as a titled card.
 
 ### What a session can do in its tabs
 
@@ -69,7 +71,7 @@ naming the stored file.
 
 ### Evidence
 
-362 tests: 270 unit and protocol, 17 on the shipped page module in a real Chrome, 75 real-browser
+387 tests: 293 unit and protocol, 17 on the shipped page module in a real Chrome, 77 real-browser
 end-to-end — multi-session isolation, a page built to leak hidden content, a page built to give a
 model instructions, web components read and clicked through open shadow roots, an attached tab
 that changes site mid-task, recovery from a killed worker, a restarted broker, a replaced agent, a
@@ -78,8 +80,9 @@ and another program, the released pair installed into a real `dsh` — which sta
 broker it finds missing — with that broker killed and restarted as a process, and three live
 turns of a real `dsh` process (its model being DeepSeek Harness's own scripted mock provider):
 a text snapshot, a screenshot delivered to a vision model as pixels, and a screenshot delivered to
-a text-only model as the placeholder. Run on Ubuntu 26.04, macOS 26.6 and Windows 11 against the
-three DeepSeek Harness versions above.
+a text-only model as the placeholder — plus DeepSeek Harness's own compatibility rule and
+display-metadata reader run against the installed package. Run on Ubuntu 26.04, macOS and Windows
+11 against the four DeepSeek Harness versions above.
 `docs/TEST-MATRIX.md` and `docs/TEST-EVIDENCE.md` in the repository say exactly what was run and
 what is not proven.
 
@@ -87,8 +90,9 @@ what is not proven.
 
 - Pages Chrome protects (`chrome://`, the Web Store) cannot be attached.
 - Sites that require trusted input events may ignore synthetic clicks; the failure is reported.
-- On Windows, `dsh plugin add` splits a path containing a space (an upstream limitation); the
-  installer works around it.
+- On Windows, `dsh plugin add` 0.1.x splits a path containing a space (an upstream limitation);
+  the installer works around it.
+- DeepSeek Harness Desktop's own `desktop` profile has not been tested.
 - Content inside iframes is not read or acted on in this version: the page code runs in the tab's
   top document and does not descend into frames. Open shadow DOM is read and acted on as rendered;
   a closed shadow root cannot be reached by any script and is not claimed.
