@@ -18,6 +18,28 @@ every release artifact by `.gitignore`.
 The Hermes baseline was re-cloned from GitHub rather than read from a local working copy; the fresh
 clone's `HEAD` matched the local checkout, confirming the reference was current.
 
+### Added on 2026-11-05, for the DeepSeek Harness 0.2 line
+
+| Repository | Role | Baseline commit | Tag | Commit date |
+|---|---|---|---|---|
+| `deepseek-ai/deepseek-harness` | Official integration authority, 0.2 line | `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db` | `dsh-v0.2.2-rc.1` | 2026-11-04 |
+| `Lum1104/dsh-browser` | Behavioral reference only; second audit target | `23895d7292495f665e5676d2f174d022bb3c3605` | `main` | 2026-10-01 |
+| `CorsenAI/hermes-connector` | Corsen-owned; the bar for repository hygiene | `4f2e344` (branch `release/0.2.6`) | `v0.2.6` | 2026-10-20 |
+
+The 0.2 source was read, not copied, for what the connector integrates with: the tool contract
+(`defineTool`, `ToolRunContext`, `presentCall`), the serial `agent/created` event, the
+plugin-compatibility rule (`engines.dsh`), the home resolver, the plugin display-metadata reader,
+the `browser-use` registration service, and the Messages serializer. The connector refers to them
+by behaviour and tests them by running DeepSeek Harness's own code (`evaluatePluginCompatibility`,
+`readPluginMeta`, `resolveDshHome`). The repository-hygiene files — `.github/dependabot.yml`,
+`.github/CODEOWNERS`, the pull request template, the CodeQL workflow — follow the shape of Hermes
+Connector v0.2.6's own.
+
+The provenance audit was run against both `dsh-browser` baselines on 2026-11-05: at `e60e6e3` the
+gate passes as before; at `23895d7` the longest exact shared run is 22 tokens (CSS declarations)
+and exact runs of 16 tokens or more cover 1.09 % of the subject, under the ceilings of 32 tokens
+and 2 %.
+
 ## Implementation authority
 
 Design and implementation decisions follow this order. A lower rank never overrides a higher one.

@@ -79,6 +79,25 @@ New headless mode (`DSH_E2E_HEADLESS=1`), same machine and commit:
 
 Deadline clock: 73.0 ns per read, 8.6 µs per snapshot at most.
 
+### 2026-11-05 — the same machine (Ubuntu 26.04.1, Intel Core Ultra 9 285K, Node v26.8.1, Chrome for Testing 153.0.8010.12), commit `e127d3b`
+
+Headed, under Xvfb, after the DeepSeek Harness 0.2 work. The page code is unchanged since the
+measurement above, and so is every byte on the wire; the times are the same within run-to-run noise.
+
+| Task | Runs | Median ms | p95 ms | Min ms | Max ms | Result frame (median B) | Response frame (median B) | Truncated runs |
+|---|---|---|---|---|---|---|---|---|
+| page-a snapshot | 30 | 1.9 | 3.7 | 1.3 | 4.0 | 832 | 834 | 0 |
+| page-a read_text | 30 | 2.1 | 4.3 | 1.1 | 5.6 | 299 | 301 | 0 |
+| page-a click | 30 | 1.1 | 1.7 | 0.8 | 1.8 | 148 | 150 | 0 |
+| page-a current_url | 30 | 0.9 | 1.3 | 0.8 | 1.7 | 128 | 130 | 0 |
+| page-c snapshot | 30 | 3.8 | 5.1 | 2.5 | 6.0 | 1013 | 1015 | 0 |
+| page-c find | 30 | 1.7 | 3.5 | 1.2 | 3.7 | 186 | 188 | 0 |
+| page-large snapshot | 30 | 21.1 | 31.7 | 18.3 | 44.6 | 64567 | 64569 | 30 |
+| page-large read_text | 30 | 3.1 | 4.5 | 2.7 | 11.7 | 40469 | 40471 | 30 |
+| page-large find (last paragraph) | 30 | 9.8 | 18.0 | 9.2 | 23.8 | 172 | 174 | 0 |
+
+Deadline clock: 73.9 ns per read, 8.7 µs per snapshot at most.
+
 ### 2026-09-12 — same machine, Chrome for Testing 153, after the flat-tree walk (open shadow DOM)
 
 The walkers now cross open shadow roots and follow slots (`walkFlatTree` in `page-actions.js`),
