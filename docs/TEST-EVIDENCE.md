@@ -1669,3 +1669,19 @@ The listing will be `https://chromewebstore.google.com/detail/ijhbmlkdfafhemdadh
 
 Z passes: every lane has run by hand on three platforms and on GitHub's hosted runners. BA's real
 github.com URL is checked (above). What remains is Google's review.
+
+### After the first hosted run, the same day
+
+- CodeQL's first analysis raised four warnings, none in shipped code: a regular expression built
+  from a version with only the dot escaped (two tests, three places) and HTML comments stripped in
+  one pass (`scripts/provenance-audit.mjs`). Fixed at `d1cefb5`; CodeQL on `main` afterwards: 0 open
+  alerts, the four marked fixed. Dependabot vulnerability alerts turned on: 0 open.
+- Dependabot's pull requests for `@types/node` 26, `@types/chrome` 0.3 and `typescript` 7
+  failed the gating jobs and were closed with the reason; `.github/dependabot.yml` ignores majors and
+  holds the two type packages on their lines (`6de689b`). The `ws` and `playwright` bumps pass and stay open.
+- The `upstream` lane had failed on every run with `npm error git dep preparation failed`: it
+  installed DeepSeek Harness from its git repository, a pnpm monorepo npm cannot prepare, and never
+  reached the connector. It reads the npm `alpha` channel since `0f65ccc`; by hand against
+  0.2.2-alpha.3 on Ubuntu: installed, the packaged tarball added, one configuration row naming the
+  connector, the turn's only failure `MISSING_CREDENTIAL`. The hosted run on `main` at
+  `0f65ccc`: **16 of 16 jobs passed**, that lane included.
