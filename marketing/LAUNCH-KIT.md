@@ -72,8 +72,12 @@ would install nothing useful.
 - HackSing/dsh-plugins — https://github.com/HackSing/dsh-plugins/issues/356
 - awesome-deepseek-harness (wiki table) — https://github.com/awesome-deepseekharness/awesome-deepseek-harness/issues/223
 - `0xsline/awesome-deepseek-harness` — indexes the `dsh-plugin` topic by itself (set on the repository)
-- Still the owner's: dshplugins.com (Google sign-in), the Discussions post (their voice);
-  `Fishsb/awesome-dsh-plugin` takes pull requests only (issues are off)
+- dshplugins.com — submitted through its form once the owner had signed in with Google: the
+  release-tarball command as detected from the README, type "Package / GitHub spec", profile `web`;
+  the site answered "Submission received" (its review queue; not public until an administrator
+  verifies the listing)
+- Still the owner's: the Discussions post (their voice); `Fishsb/awesome-dsh-plugin` takes pull
+  requests only (issues are off)
 
 ### dsh-plugin.org issue, filled
 

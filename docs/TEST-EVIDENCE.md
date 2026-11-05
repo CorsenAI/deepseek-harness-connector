@@ -1695,3 +1695,6 @@ github.com URL is checked (above). What remains is Google's review.
   maintainer — and `required_status_checks` on the sixteen gating checks, CodeQL included; bypass:
   the repository administrator role, always). `GET repos/…/rules/branches/main` lists the four
   rules as applying to `main`.
+- dshplugins.com: submitted through its form in the owner's browser, on the owner's Google sign-in
+  (installation command as detected from the README, type "Package / GitHub spec", profile `web`);
+  the site answered "Submission received".
