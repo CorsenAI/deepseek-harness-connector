@@ -13,8 +13,8 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 
@@ -228,6 +228,35 @@ export function buildExtensionZip() {
 }
 
 /**
+ * Find npm's own entry file, to run it under this process's Node.
+ *
+ * Where npm lives depends on how Node was installed: beside `node.exe` on Windows, in
+ * `<prefix>/lib/node_modules` for the official POSIX builds, and elsewhere again for a package
+ * manager — Homebrew keeps Node in its Cellar and npm in `<homebrew>/lib/node_modules`, so nothing
+ * next to the running binary names it (seen on a Mac lane on 2026-11-05). The `npm` command on the
+ * PATH is then followed to its real file, which for a POSIX install is `npm-cli.js` itself.
+ * @returns {string | undefined} The path, or undefined when no candidate exists.
+ */
+function findNpmCli() {
+  const beside = [
+    process.env.npm_execpath,
+    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    join(dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+  ];
+  const onPath = [];
+  if (process.platform !== "win32") {
+    for (const directory of (process.env.PATH ?? "").split(delimiter)) {
+      if (directory === "") continue;
+      const command = join(directory, "npm");
+      if (!existsSync(command)) continue;
+      const real = realpathSync(command);
+      onPath.push(real.endsWith("npm-cli.js") ? real : join(dirname(real), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"));
+    }
+  }
+  return [...beside, ...onPath].find((candidate) => typeof candidate === "string" && candidate !== "" && /npm-cli\.js$/.test(candidate) && existsSync(candidate));
+}
+
+/**
  * Build the companion's `lib/` from source and pack it with npm, under this process's own Node.
  *
  * `lib/` is removed first so nothing from an earlier build can ride along, then compiled with the
@@ -246,13 +275,8 @@ export function buildCompanionTarball(outDir) {
     "-p", join(companionDir, "tsconfig.build.json"),
   ], { cwd: companionDir, stdio: "inherit" });
 
-  const candidates = [
-    process.env.npm_execpath,
-    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
-    join(dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
-  ].filter((candidate) => typeof candidate === "string" && candidate !== "" && existsSync(candidate));
-  const npmCli = candidates[0];
-  if (!npmCli) throw new Error("npm-cli.js was not found next to the running Node; the companion cannot be packed");
+  const npmCli = findNpmCli();
+  if (!npmCli) throw new Error("npm-cli.js was not found beside the running Node or behind the npm on PATH; the companion cannot be packed");
 
   const report = execFileSync(process.execPath, [
     npmCli, "pack", "--pack-destination", outDir, "--json", "--loglevel", "error",
