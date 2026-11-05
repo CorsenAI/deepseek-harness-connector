@@ -34,7 +34,7 @@ silent port and another program, and web components read and clicked through ope
 **Tested with DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.2, 0.2.1-rc.5 (npm `latest`) and 0.2.2-rc.1
 (npm `next`)**, on Linux, macOS and Windows; see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
 for the evidence per version and platform. The release artifacts build byte-identically on the
-three platforms. The Store listing, screenshots and privacy page are in `store/`.
+three platforms with the official Node.js builds. The Store listing, screenshots and privacy page are in `store/`.
 
 `docs/TEST-MATRIX.md` lists every release gate and its honest state. What remains needs the owner:
 a GitHub remote for the CI lanes and the privacy page's public URL, the npm publication, and the
