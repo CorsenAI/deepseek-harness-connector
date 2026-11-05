@@ -36,8 +36,9 @@ silent port and another program, and web components read and clicked through ope
 for the evidence per version and platform. The release artifacts build byte-identically on the
 three platforms with the official Node.js builds. The Store listing, screenshots and privacy page are in `store/`.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state. What remains needs the owner:
-a GitHub remote for the CI lanes and the privacy page's public URL, the npm publication, and the
+`docs/TEST-MATRIX.md` lists every release gate and its honest state. The privacy policy is live at
+[corsen.ai/privacy/deepseek-harness-connector](https://corsen.ai/privacy/deepseek-harness-connector/).
+What remains needs the owner: a GitHub remote for the CI lanes, the npm publication, and the
 Store submission itself. A turn with a real provider key instead of the scripted one is a one-line
 change of the provider endpoint.
 

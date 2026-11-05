@@ -55,7 +55,7 @@ Unofficial community project by Corsen AI. Not affiliated with, endorsed by, or 
 **Language:** English (the panel also ships French)
 **Homepage:** https://github.com/CorsenAI/deepseek-harness-connector
 **Support:** https://github.com/CorsenAI/deepseek-harness-connector/issues
-**Privacy policy:** `https://corsenai.github.io/deepseek-harness-connector/privacy/` — `docs/privacy/index.html`, byte-identical to `store/privacy.html` (the verifier checks), live once GitHub Pages is enabled from `/docs` on `main`
+**Privacy policy:** `https://corsen.ai/privacy/deepseek-harness-connector/` — live since 2026-11-05 on Corsen AI's own site, beside Hermes Connector's; the same text is `docs/privacy/index.html`, byte-identical to `store/privacy.html` (the verifier checks), which GitHub Pages will also serve once the owner enables it
 
 ## Français
 

@@ -116,8 +116,10 @@ owner authorization**. This repository prepares everything for them and performs
 
 - The GitHub release carries the ZIP, the tarball, `SHA256SUMS`, and `release-manifest.json`; its
   text is `docs/RELEASE-NOTES-<version>.md`.
-- GitHub Pages serves `docs/` (`index.html`, `privacy/`, `support/`); the privacy page there is
-  byte-identical to `store/privacy.html`, which the verifier checks.
+- The privacy policy the Store links to is `https://corsen.ai/privacy/deepseek-harness-connector/`
+  (Corsen AI's own site, published 2026-11-05). GitHub Pages serves `docs/` (`index.html`,
+  `privacy/`, `support/`); the privacy page there is the same text, byte-identical to
+  `store/privacy.html`, which the verifier checks.
 - `docs/COMPATIBILITY.md` is updated if the supported range changed.
 
 ## Rolling back

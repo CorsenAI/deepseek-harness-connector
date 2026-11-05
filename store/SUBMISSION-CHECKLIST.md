@@ -23,7 +23,7 @@ explicit owner authorization** — this repository prepares it and does not perf
 | Single purpose statement | done | `store/SINGLE-PURPOSE.md` |
 | Permission justification per permission | done | `store/PERMISSION-JUSTIFICATIONS.md` |
 | Data-use disclosures | done | `store/DATA-DISCLOSURES.md` |
-| Privacy policy page | done, **not yet hosted** | `docs/privacy/index.html` (byte-identical to `store/privacy.html`, checked by the verifier), served at `https://corsenai.github.io/deepseek-harness-connector/privacy/` once the owner enables GitHub Pages from `/docs` on `main`; `docs/index.html` and `docs/support/` come with it |
+| Privacy policy page | done, **live** | `https://corsen.ai/privacy/deepseek-harness-connector/` (2026-11-05, same template and place as Hermes Connector's; linked from `https://corsen.ai/privacy/`); the same text is `docs/privacy/index.html`, byte-identical to `store/privacy.html` (checked by the verifier), which GitHub Pages will also serve once the owner enables it from `/docs` on `main` |
 | Reviewer instructions | done | `store/REVIEWER-INSTRUCTIONS.md` |
 | Review stand-in script | done | `scripts/review-session.mjs` |
 
