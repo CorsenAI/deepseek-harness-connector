@@ -15,8 +15,8 @@ you are already signed in to. Two parts, released together at the same version:
 
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
-| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `9e2c08ed4e9deab95679cbbc40b86797d0581b872a35dc6afa2d560d6984857a` | 58647 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `dd161a400eaae55999503f0bc3b65ad641fadbff16b5743da83a7e5a1090259c` | 69674 |
+| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `2f5cf8e81600e4acb4444edf6bd6a80968227ee7e08d91543cef9f32d1f988e1` | 71319 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `9243ae53fbcaad4e44329da738e6dd5ab614992b470befb75b1068f872428da7` | 79882 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows. `SHA256SUMS` and
 `release-manifest.json` accompany them.
