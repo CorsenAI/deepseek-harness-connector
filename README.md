@@ -18,20 +18,23 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
 Chrome extension with all twenty-one browser actions, the installers, and the release packaging work
-end to end and are covered by 362 tests: 270 unit and protocol tests, 17 cases running the shipped
-page module in a real Chrome, and 75 real-browser end-to-end cases — multi-session isolation, a
+end to end and are covered by 383 tests: 289 unit and protocol tests, 17 cases running the shipped
+page module in a real Chrome, and 77 real-browser end-to-end cases — multi-session isolation, a
 page built to leak hidden content, a page built to give a model instructions, an attached tab that
 changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
 agent connection, a closed tab and a relaunched Chrome, the released pair installed into a real
-`dsh` with its broker killed and restarted as a process, and three live turns of a real `dsh`
-process whose model — DeepSeek Harness's own scripted mock provider — calls `browser_snapshot`
-and `browser_screenshot` on the attached tab (the screenshot reaching a vision model as pixels and
-a text-only model as DeepSeek Harness's placeholder), a real `dsh` process starting the packaged
-broker it found missing, the panel's setup card against a real broker, a silent port and another
-program, and web components read and clicked through open shadow roots. Every suite has run on Linux, macOS and
-Windows on real machines, against DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.5-rc.2, and the
-release artifacts built on the three platforms are byte-identical. The Store listing, screenshots
-and privacy page are in `store/`.
+`dsh` with its broker killed and restarted as a process, DeepSeek Harness's own compatibility rule
+and display-metadata reader run against the installed package, and three live turns of a real
+`dsh` process whose model — DeepSeek Harness's own scripted mock provider — calls
+`browser_snapshot` and `browser_screenshot` on the attached tab (the screenshot reaching a vision
+model as pixels and a text-only model as DeepSeek Harness's placeholder), a real `dsh` process
+starting the packaged broker it found missing, the panel's setup card against a real broker, a
+silent port and another program, and web components read and clicked through open shadow roots.
+
+**Tested with DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.2, 0.2.1-rc.5 (npm `latest`) and 0.2.2-rc.1
+(npm `next`)**, on Linux, macOS and Windows; see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
+for the evidence per version and platform. The release artifacts build byte-identically on the
+three platforms. The Store listing, screenshots and privacy page are in `store/`.
 
 `docs/TEST-MATRIX.md` lists every release gate and its honest state. What remains needs the owner:
 a GitHub remote for the CI lanes and the privacy page's public URL, the npm publication, and the
@@ -42,7 +45,7 @@ change of the provider endpoint.
 
 | | |
 |---|---|
-| **Reads a page** | `browser_snapshot` returns the page as structured text: title, URL, visible text, and a numbered inventory of controls the model can address. Text-first — no screenshots, no vision required. |
+| **Reads a page** | `browser_snapshot` returns the page as structured text: title, URL, visible text, and a numbered inventory of controls the model can address. Text-first — no vision required — and `browser_screenshot` adds the pixels, through DeepSeek Harness's own attachment service, when the model can see. |
 | **Acts on a page** | Click, type, press keys, scroll, hover, choose options, drag, find text, and navigate in the tab you attached, addressed by references from the latest snapshot. A session can also open, list, switch, and close its own tabs — and only its own. |
 | **Keeps sessions apart** | Each DeepSeek Harness session owns its own set of tabs. Two sessions running at once never see each other's pages. |
 | **Fails closed** | A session with no attached tab gets a clear refusal and nothing happens. There is no fallback to "whatever tab is active". |
@@ -76,7 +79,10 @@ dsh plugin --profile web add @corsen-ai/dsh-browser-connector
 ```
 
 That is the whole local installation. The package declares `dsh.bundle.patch`, so DeepSeek Harness
-adds it to the profile's layer stack by itself — no YAML to edit.
+adds it to the profile's layer stack by itself — no YAML to edit. It also declares the DeepSeek
+Harness versions it supports (`engines.dsh`), so DeepSeek Harness 0.2.1 and later refuse an
+incompatible pairing at this step, with their own message, instead of failing later; and it shows in
+DeepSeek Harness's Plugins page under its own name, description and icon.
 
 **2. Start DeepSeek Harness** (`dsh web`, or any profile the connector is installed in). The
 connector starts its local broker by itself when nothing is listening on the port, as a detached
@@ -135,6 +141,10 @@ connector unreachable, versions mismatched. You should never have to guess what 
 
 ## What it does not do yet
 
+DeepSeek Harness Desktop keeps its own `desktop` profile; installing there
+(`dsh plugin --profile desktop add …`, with Desktop opened once and then quit) has not been tested
+yet, and is not claimed.
+
 Content inside iframes is neither read nor acted on: the page code runs in the tab's top document
 and does not descend into frames. (Open shadow DOM — web components, most design systems — is
 read and acted on as the user sees it, through slots and nested roots; a closed shadow root cannot
@@ -192,9 +202,9 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 270 tests, no browser needed
+npm run test:unit    # 289 tests, no browser needed
 npm run test:page    # 17 tests, the shipped page module in a real Chrome for Testing
-npm run test:e2e     # 75 tests, real Chrome with the extension loaded
+npm run test:e2e     # 77 tests, real Chrome with the extension loaded
 ```
 
 The browser suites need Playwright's Chrome for Testing (`npx playwright install chromium`). The
@@ -203,8 +213,9 @@ no display, `DSH_E2E_HEADLESS=1` runs the full browser in its new headless mode 
 `xvfb-run --auto-servernum -- npm run test:e2e` keeps them headed. The released-pair suite needs
 `dist/` from `node scripts/package.mjs --out dist` and a real `dsh` (`DSH_BIN_DIR` names its
 bin directory; otherwise the first `~/dsh-int/<lane>/node_modules/.bin/dsh` is used); without
-them it skips and says so. The live-turn suite also needs `@deepseek-ai/dsh-llm-mock-server@next`
-installed beside that `dsh`.
+them it skips and says so. The live-turn suite also needs `@deepseek-ai/dsh-llm-mock-server`, at
+the same version as that `dsh`, installed beside it. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the
+commands.
 
 `node --experimental-strip-types tests/perf/measure.ts` measures what each action costs
 (`docs/PERFORMANCE.md`), and `node --experimental-strip-types scripts/capture-screenshots.ts`
@@ -212,19 +223,34 @@ regenerates the Store screenshots from the real extension.
 
 ## Contributing
 
-Start with the invariants that must never be violated, chiefly
-that routing is exact and failure is closed. A change that could let one session reach another
-session's tab is not a bug report, it is a release blocker.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first: it states the
+invariants that must never be violated, chiefly that routing is exact and failure is closed. A
+change that could let one session reach another session's tab is not a bug report, it is a release
+blocker. Security reports go through a private advisory ([`SECURITY.md`](SECURITY.md)).
 
 Do not copy code from other DeepSeek Harness browser projects into this one.
 [`docs/PROVENANCE.md`](docs/PROVENANCE.md) explains why and what the rules are.
 
-## Related work
+## How it compares
 
-[`Lum1104/dsh-browser`](https://github.com/Lum1104/dsh-browser) is another open-source project
-connecting DeepSeek Harness to a browser, and it got there first. This project is an independent
-implementation with different priorities — per-session tab ownership, Chrome Web Store distribution,
-and a compatibility layer for DeepSeek Harness's pre-stable APIs. If it suits you better, use it.
+Several projects connect DeepSeek Harness to a browser; they make different choices, and the right
+one depends on what you need. As of 2026-11-05, from each project's own public listing or README:
+
+| | This connector | [`Lum1104/dsh-browser`](https://github.com/Lum1104/dsh-browser) | "Deepseek Harness APP" ([Store listing](https://chromewebstore.google.com/detail/kgjjicancjnedmappjhefngdjaommpop)) | "DSH Browser Extension (All Platforms)" ([Store listing](https://chromewebstore.google.com/detail/agpipnjijkpomaannkijkilggoffdiaf)) |
+|---|---|---|---|---|
+| How it drives Chrome | scripts in the tabs you attach; no `debugger` | scripts in the tab it controls | the Chrome DevTools Protocol | not stated; page text and numbered controls |
+| Which tab a session acts in | only tabs you attached to that exact session; one owner per tab; a call without a session fails | binds to the active tab when work begins; pauses and asks when you switch tabs | the tabs you direct it to | the tab you selected |
+| DeepSeek Harness surfaces | any profile it is installed in — `web`, `headless`, `sdk`, `acp` — through its own local broker (live turns tested with the one-shot `headless`) | `dsh web` (the bridge rides the Web host) | `dsh web` with its companion plugin | the DeepSeek Harness desktop app |
+| Installation | `dsh plugin add` from npm; DeepSeek Harness checks `engines.dsh` | an installer script that builds the repository | a separate DeepSeek Harness plugin, then the Store extension | the full GitHub project, then the extension |
+| Chat in the browser | no — you talk to DeepSeek Harness where you run it | yes, side panel | yes, side panel | yes, side panel |
+| Approving actions | attaching a tab to a session is the consent; no per-action prompt of its own | per action, with per-origin trust | not stated | optional ("act directly" is on by default) |
+| Screenshots | yes, to a vision model, through DeepSeek Harness's attachment service | no, text only | yes | no, text only |
+| Firefox | no | yes, from a source build | not stated | yes |
+
+`Lum1104/dsh-browser` got there first and is a good fit if you want a chat panel in the browser or
+Firefox. This connector is for keeping several sessions — or several DeepSeek Harness processes —
+strictly apart, from any DeepSeek Harness surface, with the permission set and the provenance a
+Chrome Web Store item needs. If another one suits you better, use it.
 
 ## Licence
 
