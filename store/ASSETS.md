@@ -27,10 +27,13 @@ if the password field's real value appears anywhere in that result.
 ## How the promotional tiles are made
 
 HTML and SVG rendered by the same Chrome at the Store's exact sizes, in the style of Corsen's
-Hermes Connector: the Corsen AI mark glowing on black (`store/brand/corsen-mark.png`, Corsen's own
-artwork, the one bitmap involved), the product name, the line "Your session. Your tabs.", the
-words "Unofficial · by Corsen AI", and — on the marquee — one session's link fanning out to four
-tab windows. No third-party marks (no DeepSeek logo), no people, no fake interface.
+Hermes Connector and by the Store's rules for promotional images (developer.chrome.com, "Supplying
+images": mostly brand, avoid text, legible at half size, the whole area filled, well-defined
+edges). The Corsen AI mark glows on black (`store/brand/corsen-mark.png`, Corsen's own artwork, the
+one bitmap involved) beside the product name; the marquee adds "by Corsen AI" and one session
+fanning out to four tab windows. Every element sits on one horizontal axis inside margins of 12 to
+13 % of the height, and the name is shrunk until it fits its column. No third-party marks (no
+DeepSeek logo), no people, no fake interface.
 
 ## The icons
 
@@ -65,8 +68,8 @@ fixture server's port. The promotional tiles were redrawn on 2026-11-05 in the C
 | `screenshots/03-ready.png` | 1280×800 | 110822 | `ac10fb91bf31a1121b1d1a4d9fbee0344da52dc3b955925ba90e9fc871dda213` |
 | `screenshots/04-snapshot.png` | 1280×800 | 107854 | `73289d7875a2dd960ff8c91db05a81c65e2aa0f94a0aaa11f3ce72561a333137` |
 | `screenshots/05-update-required.png` | 1280×800 | 106072 | `525dfa514ae74328bdc19dd27a95d5221128c113ce35b3775e8c4e3f76723840` |
-| `promo-small-440x280.png` | 440×280 | 112261 | `369eaa8ccd1482ed48f4bf820631501f89623902c116f694a743c7120b4b83eb` |
-| `promo-marquee-1400x560.png` | 1400×560 | 480557 | `d037593026c257094b116509eca8127f7ccb8c47b4e7daecf818487cf3f42d2d` |
+| `promo-small-440x280.png` | 440×280 | 118459 | `c6af9801f033a2cccc41c99547eb1896b1716aaf0249b17362c07835bfcfa133` |
+| `promo-marquee-1400x560.png` | 1400×560 | 507787 | `96c720e387c9e558a217764dcc1b20a38a4a78a878dcd518202fc7e77f8b6926` |
 | `../extension/assets/icon-128.png` (the extension's icon) | 128×128 | 8327 | `6650826310ccf7703d0f97fa95b0d46f5572037f9407c3d78d96f2473d7e994e` |
 | `store-icon-128.png` (Store icon) | 128×128 | 15492 | `50d498c65573e7fa74b638858dd300f685d5bfdbd20ad346a807a2d2cc14ebbf` |
 | `brand/corsen-mark.png` (source of the tiles) | 344×373 | 146349 | `dc328f34079643ad2ff76ebd98aeab5299ac9d20dc6305ffd7b953164a191854` |

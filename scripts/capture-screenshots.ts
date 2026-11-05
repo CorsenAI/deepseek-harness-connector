@@ -163,60 +163,90 @@ await panel.evaluate(async () => { await chrome.storage.local.remove('updateNoti
 // HTML and SVG at capture time; the only bitmap is the Corsen mark itself (store/brand).
 const corsenMark = `data:image/png;base64,${readFileSync(new URL('../store/brand/corsen-mark.png', import.meta.url)).toString('base64')}`
 
+/**
+ * One promotional image, laid out on a grid by the Store's own rules for them: mostly brand, little
+ * text, legible at half size, the whole area filled, well-defined edges (developer.chrome.com,
+ * "Supplying images"). The marquee has three columns — the mark, the name, and one session fanning
+ * out to its tabs — sharing one horizontal axis; the small tile keeps only the mark and the name.
+ * Margins are a fixed fraction of the height, and the name is shrunk until it fits its column, so
+ * nothing touches an edge or another element.
+ * @param name - the output file.
+ * @param width - the image width.
+ * @param height - the image height.
+ */
 async function tile(name: string, width: number, height: number): Promise<void> {
-  // The marquee carries the fan from one session to its tabs; the small tile is the mark and the
-  // name alone, which is all 440 pixels can say cleanly.
-  const compact = width < 800
-  const unit = height / 560
-  const px = (value: number): string => `${Math.round(value * unit)}px`
-  const tabs = [0.2, 0.4, 0.6, 0.8].map((y) => y * height)
-  const fromX = width * 0.62
-  const fromY = height * 0.76
-  const tabX = width - 150 * unit
-  const curves = compact ? '' : `<circle cx="${fromX}" cy="${fromY}" r="${6 * unit}" fill="#bfe8ff" filter="url(#glow)"/>` + tabs.map((y, index) => {
-    const tone = ['#1fb7ff', '#3d7bff', '#9b5cff', '#ff4fd8'][index]
-    return `<path d="M ${fromX} ${fromY} C ${fromX + 260 * unit} ${fromY}, ${tabX - 150 * unit} ${y}, ${tabX} ${y}" stroke="${tone}" stroke-width="${2.6 * unit}" fill="none" filter="url(#glow)"/>`
-      + `<circle cx="${tabX}" cy="${y}" r="${5 * unit}" fill="#fff" filter="url(#glow)"/>`
-      + `<g transform="translate(${tabX} ${y - 34 * unit})" filter="url(#soft)">`
-      + `<rect width="${126 * unit}" height="${78 * unit}" rx="${10 * unit}" fill="rgba(20,28,60,.55)" stroke="${tone}" stroke-width="${2 * unit}"/>`
-      + `<path d="M 0 ${20 * unit} H ${126 * unit}" stroke="${tone}" stroke-width="${1.5 * unit}"/>`
-      + [12, 24, 36].map((dx) => `<circle cx="${dx * unit}" cy="${10 * unit}" r="${3 * unit}" fill="${tone}"/>`).join('')
-      + '</g>'
-  }).join('')
-  const layout = compact
-    ? { markLeft: '16px', markHeight: '206px', textLeft: '212px', title: '25px', tagline: '12.5px', taglineGap: '12px', by: '8.5px', byGap: '13px' }
-    : { markLeft: px(70), markHeight: px(400), textLeft: px(470), title: px(52), tagline: px(27), taglineGap: px(22), by: px(16), byGap: px(24) }
+  const marquee = width >= 1000
+  const margin = Math.round(height * (marquee ? 0.12 : 0.13))
+  const markHeight = height - 2 * margin
+  const markWidth = Math.round(markHeight * 344 / 373)
+  const textLeft = margin + markWidth + Math.round(height * (marquee ? 0.12 : 0.07))
+  const textRight = marquee ? Math.round(width * 0.66) : width - margin
+  const centreY = height / 2
+
+  // The fan: one node just right of the text column, four tab windows stacked against the right
+  // margin, evenly spaced and centred on the same axis as everything else.
+  let fan = ''
+  if (marquee) {
+    const tabW = 136
+    const tabH = 82
+    const gap = 26
+    const stack = 4 * tabH + 3 * gap
+    const tabX = width - margin - tabW
+    const nodeX = textRight + 36
+    const tones = ['#1fb7ff', '#3d7bff', '#9b5cff', '#ff4fd8']
+    fan = `<circle cx="${nodeX}" cy="${centreY}" r="7" fill="#d6f1ff" filter="url(#glow)"/>`
+    tones.forEach((tone, index) => {
+      const top = centreY - stack / 2 + index * (tabH + gap)
+      const y = top + tabH / 2
+      fan += `<path d="M ${nodeX} ${centreY} C ${nodeX + 130} ${centreY}, ${tabX - 130} ${y}, ${tabX} ${y}" stroke="${tone}" stroke-width="2.6" fill="none" filter="url(#glow)"/>`
+        + `<g transform="translate(${tabX} ${top})" filter="url(#soft)">`
+        + `<rect width="${tabW}" height="${tabH}" rx="10" fill="rgba(18,26,58,.72)" stroke="${tone}" stroke-width="2"/>`
+        + `<path d="M 0 22 H ${tabW}" stroke="${tone}" stroke-width="1.5"/>`
+        + [14, 27, 40].map((dx) => `<circle cx="${dx}" cy="11" r="3.2" fill="${tone}"/>`).join('')
+        + `<rect x="14" y="36" width="${tabW - 46}" height="6" rx="3" fill="${tone}" opacity=".35"/>`
+        + `<rect x="14" y="52" width="${tabW - 70}" height="6" rx="3" fill="${tone}" opacity=".22"/>`
+        + '</g>'
+    })
+  }
+
   const page = await harness.context.newPage()
   await page.setViewportSize({ width, height })
   await page.setContent(`<!doctype html><meta charset="utf-8"><title>tile</title>
 <style>
   body { margin: 0; width: ${width}px; height: ${height}px; overflow: hidden; position: relative;
-    background: radial-gradient(60% 90% at 18% 55%, rgba(61,123,255,.20), transparent 70%),
-                radial-gradient(40% 60% at 60% 85%, rgba(155,92,255,.16), transparent 70%), #04050a;
+    background: radial-gradient(55% 85% at ${Math.round((margin + markWidth / 2) / width * 100)}% 50%, rgba(56,118,255,.26), transparent 70%),
+                radial-gradient(45% 70% at 70% 60%, rgba(150,80,255,.18), transparent 72%), #05060c;
     font-family: Montserrat, "Ubuntu Sans", "Segoe UI", sans-serif; color: #f4f6ff; }
-  .mark { position: absolute; left: ${layout.markLeft}; top: 50%; height: ${layout.markHeight}; transform: translateY(-50%);
-    filter: drop-shadow(0 0 ${px(18)} rgba(64,170,255,.55)) drop-shadow(0 0 ${px(42)} rgba(170,90,255,.35)); }
-  .text { position: absolute; left: ${layout.textLeft}; top: 50%; transform: translateY(-${compact ? 50 : 62}%); }
-  h1 { margin: 0; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; line-height: 1.04;
-    font-size: ${layout.title}; text-shadow: 0 0 ${px(18)} rgba(120,160,255,.35); }
-  .tagline { margin: ${layout.taglineGap} 0 0; font-weight: 700; letter-spacing: .08em; font-size: ${layout.tagline}; text-transform: uppercase;
-    background: linear-gradient(90deg, #22c7ff, #8c6bff 55%, #ff5bd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .by { margin: ${layout.byGap} 0 0; font-weight: 600; letter-spacing: .2em; font-size: ${layout.by}; color: #6ea8ff; text-transform: uppercase; }
+  .mark { position: absolute; left: ${margin}px; top: ${margin}px; height: ${markHeight}px;
+    filter: drop-shadow(0 0 ${Math.round(height * 0.03)}px rgba(64,170,255,.55)) drop-shadow(0 0 ${Math.round(height * 0.07)}px rgba(170,90,255,.30)); }
+  .text { position: absolute; left: ${textLeft}px; width: ${textRight - textLeft}px; top: 50%; transform: translateY(-50%); }
+  h1 { margin: 0; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; line-height: 1.02; white-space: nowrap;
+    font-size: ${marquee ? 68 : 34}px; text-shadow: 0 0 ${Math.round(height * 0.03)}px rgba(120,160,255,.35); }
+  .rule { margin-top: ${marquee ? 26 : 14}px; height: ${marquee ? 6 : 4}px; width: ${marquee ? 120 : 64}px; border-radius: 3px;
+    background: linear-gradient(90deg, #22c7ff, #8c6bff 55%, #ff5bd6); box-shadow: 0 0 12px rgba(140,107,255,.6); }
+  .by { margin: ${marquee ? 22 : 0}px 0 0; font-weight: 600; letter-spacing: .24em; font-size: 18px; color: #7fb2ff; text-transform: uppercase; }
   svg { position: absolute; inset: 0; }
 </style>
 <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true">
   <defs>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${3 * unit}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${1.2 * unit}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
-  ${curves}
+  ${fan}
 </svg>
 <img class="mark" src="${corsenMark}" alt="">
 <div class="text">
-  <h1>${compact ? 'DeepSeek<br>Harness<br>Connector' : 'DeepSeek Harness<br>Connector'}</h1>
-  <p class="tagline">Your session.${compact ? '<br>' : ' '}Your tabs.</p>
-  <p class="by">Unofficial &middot; by Corsen AI</p>
+  <h1>DeepSeek<br>Harness<br>Connector</h1>
+  <div class="rule"></div>
+  ${marquee ? '<p class="by">by Corsen AI</p>' : ''}
 </div>`)
+  // Shrink the name until its widest line fits the column; never let it run into the fan or an edge.
+  await page.evaluate(() => {
+    const heading = document.querySelector('h1') as HTMLElement
+    const column = (document.querySelector('.text') as HTMLElement).clientWidth
+    let size = parseFloat(getComputedStyle(heading).fontSize)
+    while (heading.scrollWidth > column && size > 10) { size -= 1; heading.style.fontSize = `${size}px` }
+  })
   await settle(300)
   save(name, await page.screenshot({ type: 'png' }))
   await page.close()
