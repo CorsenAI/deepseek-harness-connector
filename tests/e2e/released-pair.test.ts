@@ -26,7 +26,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
@@ -110,14 +110,17 @@ function resolvesInProcess(version: string): boolean {
  * @param dshBinDir - the `.bin` directory of the DeepSeek Harness under test.
  */
 function resolveLikeTheHarness(installedDir: string, dshBinDir: string): void {
-  const installedPrefix = pathToFileURL(installedDir + '/').href
+  // Node names a module by its real path: on macOS the temporary directory under /var is reached
+  // through /private/var, so the installed connector's importer URLs carry the resolved form.
+  const installedPrefixes = [...new Set([installedDir, realpathSync(installedDir)])].map((dir) => pathToFileURL(dir + '/').href)
   const harness = pathToFileURL(join(dshBinDir, '..', '@deepseek-ai', 'dsh', 'package.json')).href
   registerHooks({
     resolve(specifier, context, nextResolve) {
       try {
         return nextResolve(specifier, context)
       } catch (cause) {
-        if (!specifier.startsWith('@deepseek-ai/') || !(context.parentURL ?? '').startsWith(installedPrefix)) throw cause
+        const parent = context.parentURL ?? ''
+        if (!specifier.startsWith('@deepseek-ai/') || !installedPrefixes.some((prefix) => parent.startsWith(prefix))) throw cause
         return nextResolve(specifier, { ...context, parentURL: harness })
       }
     },
