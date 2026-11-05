@@ -15,6 +15,12 @@ by runs, not assumptions.
 | `@deepseek-ai/dsh` 0.1.2-rc.1 with `@deepseek-ai/dsh-tools` 0.1.2-rc.1, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | `docs/TEST-EVIDENCE.md`, 2026-09-04 (Windows 11): packaged tarball installed with `dsh plugin add`, composed into the Cordis tree, plugin applied; `tools.test.ts` against the real `defineTool`. 2026-09-11 (Ubuntu 26.04): gate AQ, `tests/e2e/released-pair.test.ts` 5/5 — the released pair, a real `dsh` process applying the plugin, the installed tool layer driving a real Chromium through the packaged broker process | A live turn ran on 2026-09-11 with DeepSeek Harness's own scripted mock provider (`tests/e2e/live-turn.test.ts`); a real provider key was not used |
 | `@deepseek-ai/dsh` 0.1.5-rc.1 (npm `latest` on 2026-09-11) with `@deepseek-ai/dsh-tools` 0.1.5-rc.2, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | `docs/TEST-EVIDENCE.md`, 2026-09-11 (Ubuntu 26.04): the released lane — `dsh plugin add` of the packaged tarball, `--dump-config`, plugin applied in a real `dsh` process; gate AQ 5/5 with `DSH_BIN_DIR` at this installation; companion typecheck and the 240-case unit suite (the real `defineTool` included) against `dsh-tools` 0.1.5-rc.2; a live turn with the scripted mock provider | Same: no real provider key |
 | `@deepseek-ai/dsh` 0.1.5-rc.2 (npm `next` on 2026-09-11) with `@deepseek-ai/dsh-tools` 0.1.5-rc.2, `@deepseek-ai/cordis` 4.0.2 | 0.1.0 | 1 | **tested** | Same runs as the row above, on the `next` installation | Same: no real provider key |
+| `@deepseek-ai/dsh` 0.2.1-rc.5 (npm `latest` on 2026-11-05) with `@deepseek-ai/dsh-tools` 0.2.1-rc.5, `@deepseek-ai/cordis` 4.0.5 | 0.1.0 | 1 | **tested** | `docs/TEST-EVIDENCE.md`, 2026-11-05 (Ubuntu 26.04): gate AQ 6/6 and the live turns 3/3 against this installation — the packaged tarball installed with `dsh plugin add` and accepted by DeepSeek Harness's own `engines.dsh` rule, the plugin applied in a real `dsh` process, its broker started, three turns through DeepSeek Harness's own mock provider; the installer suite including the default-home phase | No real provider key |
+| `@deepseek-ai/dsh` 0.2.2-rc.1 (npm `next` on 2026-11-05) with `@deepseek-ai/dsh-tools` 0.2.2-rc.1, `@deepseek-ai/cordis` 4.1.0 | 0.1.0 | 1 | **tested** | Same runs as the row above, on the `next` installation; the companion's typecheck and unit suite run against these packages (its dev dependencies) | Same: no real provider key |
+
+The two 0.1 rows were run again on 2026-11-05 at the code that adds the 0.2 rows, against
+`@deepseek-ai/dsh` 0.1.2-rc.1 and 0.1.5-rc.2: gate AQ 5/5 plus the `engines.dsh` case skipped
+(those versions read no such field), the live turns 3/3, the installer suite.
 
 What changed in `@deepseek-ai/dsh-tools` between 0.1.2-rc.1 and 0.1.5-rc.2, read from the published
 type declarations: the programmatic-tool-calling events were renamed (`tool/code-dispatch` →
@@ -24,15 +30,35 @@ type declarations: the programmatic-tool-calling events were renamed (`tool/code
 the two ends (0.1.3-alpha.2, 0.1.5-alpha.x, 0.1.5-rc.1 of `dsh-tools`) are alphas and release
 candidates of the same line and are declared on the strength of both ends, not of their own row.
 
+### What changed on the 0.2 line, and what it meant here
+
+Read from the 0.2.2-rc.1 source and confirmed by the runs above:
+
+| Change in DeepSeek Harness | Effect on the connector |
+|---|---|
+| `defineTool`, `ToolRunContext.agent` / `.signal`, `tools.register` and the output `{ schema, render }` contract are unchanged; an object schema must now state `additionalProperties`, which every connector schema already did | none |
+| `agent/created` became a **serial** event: every listener is awaited before a session's creation or resume completes, and a listener that throws rolls the creation back | the session observer can no longer throw out to DeepSeek Harness, and answers `undefined` at once (`companion/src/dsh/session-api.ts`) |
+| A profile launch no longer links the runtime's packages beside the profile (`profiles/node_modules`); a plugin's DeepSeek Harness peers are resolved in process | none for the plugin; the released-pair suite, which loads the installed package by file URL, resolves those imports the same way with a resolve hook |
+| The DeepSeek adapter speaks the Messages protocol: a tool result's images travel inside its `tool_result` block | none for the plugin; the live-turn suite reads either protocol |
+| The model catalogue: `deepseek-flash` (DeepSeek-V4.1-Flash) accepts images, `deepseek-v4-pro` is text-only; the 0.1 names are gone | none for the plugin; the live-turn suite picks the line's models |
+| Plugin compatibility: from 0.2.1, installation and profile startup refuse a plugin whose `engines.dsh` the running version does not satisfy, prereleases included, and offer an exact-version exemption (`dsh plugin allow-version … --accept-risk`) | the package declares `engines.dsh` equal to its own gate (ADR 0010) |
+| A new `browser-use` registration service (`@deepseek-ai/dsh-browser-use`), one browser provider per composition, with experimental Playwright MCP, Chrome DevTools MCP and Stagehand providers, none mounted by default | none today; see "Other browser tools in the same profile" below |
+| The DeepSeek Harness home is unchanged: a non-blank `DSH_HOME`, else `~/.dsh` on every platform | the connector and both installers had used `%LOCALAPPDATA%\dsh` on Windows; fixed on 2026-11-05, on both lines |
+
 ## Declared range
 
 `companion/src/dsh/version.ts`:
 
 ```
 minimum:       0.1.2-rc.1   (inclusive; below this the connector refuses to load)
-maximumTested: 0.1.5-rc.2   (inclusive; the highest version with a passing row above)
-refuseFrom:    0.2.0        (at or above this the connector refuses to load)
+maximumTested: 0.2.2-rc.1   (inclusive; the highest version with a passing row above)
+refuseFrom:    0.3.0-0      (the first prerelease of the 0.3 line; from there on it refuses to load)
 ```
+
+The same range is declared to DeepSeek Harness as `engines.dsh` in `companion/package.json`:
+`>=0.1.2-rc.1 <0.3.0-0`. DeepSeek Harness 0.2.1 and later evaluate it at installation and at profile
+startup, before any of the connector's code runs; the released-pair suite checks, version by
+version, that DeepSeek Harness's own evaluator and the connector's gate agree (ADR 0010).
 
 Three states, not two:
 
@@ -57,7 +83,7 @@ and the upstream lane below exists to find out before a user does.
 |---|---|
 | `@deepseek-ai/dsh-tools` 0.0.1-rc.x (npm `latest` at baseline) | Older tool-registry API; untested. Refused at load. |
 | Anything before 0.1.2-rc.1 | Untested. Refused at load. |
-| Anything at or above 0.2.0 | A new pre-stable minor line may change the APIs this connector depends on. Refused at load until a row above says otherwise. |
+| Anything from 0.3.0-0 on (the 0.3 line's prereleases included) | A new pre-stable minor line changes what this connector depends on — the 0.2 prereleases did. Refused at installation by DeepSeek Harness (`engines.dsh`, from 0.2.1) and at load by the connector, until a row above says otherwise. |
 
 ## Known upstream limitations
 
@@ -79,7 +105,10 @@ spaces and needs no copy, and stops with an explanation when short names are dis
 volume. A user calling `dsh plugin add` by hand on Windows must supply a space-free path.
 
 **Status.** Worth reporting upstream: quoting each argument, or spawning `pnpm.cmd` without a
-shell, would remove the limitation. Until then this row stays.
+shell, would remove the limitation. Until then this row stays. On the 0.2 line the plugin manager
+runs pnpm through `execa` and anchors a relative path to the invoking directory itself; whether a
+spaced path now survives on Windows is checked by the Windows installer lane, which still passes
+the short name.
 
 ## Version detection
 
@@ -107,18 +136,34 @@ image content block; the harness stores the durable copy, fits a request copy to
 budget, and sends it only to a model whose catalogue entry accepts images (`inputModalities`), a
 text-only model receiving a placeholder that names the file. The peer is declared optional: the
 service is looked up at call time (`ctx.get('attachments', false)`), and when a profile has none the
-tool refuses before capturing anything and says to use `browser_snapshot`. Verified against all
-three tested versions by `tests/e2e/live-turn.test.ts` (gate AS). Models catalogued with image
-input across the three: `deepseek-v4-flash-vision-exp` (all), `deepseek-flash` (0.1.5-rc.1 and
-0.1.5-rc.2, where it is the headless profile's default); `deepseek-v4-flash`, the default at
-0.1.2-rc.1, is text-only.
+tool refuses before capturing anything and says to use `browser_snapshot`. Verified against every
+tested version by `tests/e2e/live-turn.test.ts` (gate AS). Models catalogued with image input: on
+the 0.1 line `deepseek-v4-flash-vision-exp` (all) and `deepseek-flash` (0.1.5-rc.1 and 0.1.5-rc.2,
+where it is the headless profile's default), `deepseek-v4-flash` (the default at 0.1.2-rc.1) being
+text-only; on the 0.2 line `deepseek-flash` (DeepSeek-V4.1-Flash) takes images and `deepseek-v4-pro`
+is text-only. The chat-completions adapter of the 0.1 line carries a tool result's images in a user
+message after the `tool` message; the Messages adapter of the 0.2 line carries them inside the
+`tool_result` block, after a handle text naming the stored file and the request preview size.
+
+## Other browser tools in the same profile
+
+DeepSeek Harness 0.2 adds `@deepseek-ai/dsh-browser-use`, a registration service that admits one
+browser provider per composition, and three experimental providers that launch a browser or attach
+to one through the Chrome DevTools Protocol. None is mounted by the shipped profiles. The connector
+does not register with that service today: its tools reach the user's own signed-in Chrome through
+the extension, not a launched or debug-port browser, and the service is opt-in and experimental.
+A profile that mounts one of those providers beside the connector gets both tool sets, under names
+that never collide: DeepSeek Harness names an MCP server's tools `mcp__<server>__<tool>` and the
+Stagehand provider's `stagehand_<method>`, the connector's are `browser_<action>`. The connector's
+tools act only on tabs attached to the calling session, so they cannot reach a browser the other
+provider launched, and the reverse holds too.
 
 ## Source baseline
 
 Development was done against `deepseek-ai/deepseek-harness` at
-`d347e703908d0406b7a7ef80e3a0e594d86b2215` (`dsh-v0.1.3-alpha.1`, 2026-09-04). The source tree is
-ahead of the published packages; the table above records what was *run*, which is the published
-`0.1.2-rc.1`.
+`d347e703908d0406b7a7ef80e3a0e594d86b2215` (`dsh-v0.1.3-alpha.1`, 2026-09-04), and the 0.2 work
+against `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db` (`dsh-v0.2.2-rc.1`, 2026-11-04). The table above
+records what was *run*: the published packages.
 
 ## CI lanes
 
@@ -126,10 +171,11 @@ ahead of the published packages; the table above records what was *run*, which i
 |---|---|---|---|
 | **released** | npm `latest` | release blocker | `.github/workflows/ci.yml`, jobs `dsh-integration` and `released-pair` |
 | **next** | npm `next` dist-tag | release blocker | same jobs |
+| **minimum** | `@deepseek-ai/dsh@0.1.2-rc.1`, the lowest declared version | release blocker | `released-pair` |
 | **upstream** | `deepseek-ai/deepseek-harness` `master`, scheduled | advisory — may fail without blocking a release; exists to discover a breaking change before users report it | `dsh-integration` |
 
-The lanes are configured and have been **run locally, by hand, on 2026-09-11** with the same
-commands the jobs run (`.scratch/compat-lane.sh` on this machine; the rows above). They have never
+The lanes are configured and have been **run locally, by hand** — on 2026-09-11, and on 2026-11-05
+for the 0.2 rows — with the same commands the jobs run (the rows above). They have never
 run on GitHub, because the repository has no remote yet (`TEST-MATRIX.md` gate Z stays partial
 until the first hosted run writes its row).
 
