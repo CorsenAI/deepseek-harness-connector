@@ -15,8 +15,8 @@ you are already signed in to. Two parts, released together at the same version:
 
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
-| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `6da42e5736d6de7f50c6f612182fda17a1c89a676ddd443bebf6d4938d6b4f23` | 71418 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, the package `@corsen-ai/dsh-browser-connector` — served by this release, not by a package registry (ADR 0011) | `9243ae53fbcaad4e44329da738e6dd5ab614992b470befb75b1068f872428da7` | 79882 |
+| `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `00a5b09e76466374983bfb0fb8d03bae8024371619c55b00173fba1be335a464` | 72311 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, the package `@corsen-ai/dsh-browser-connector` — served by this release, not by a package registry (ADR 0011) | `6592b040e07602c0219a3a18e03417eca94b8e5ae5b1a7fa7dad11003b8ef9bd` | 80015 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows with the official Node.js builds. `SHA256SUMS` and
 `release-manifest.json` accompany them.
