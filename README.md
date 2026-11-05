@@ -211,7 +211,9 @@ npm run test:e2e     # 77 tests, real Chrome with the extension loaded
 The browser suites need Playwright's Chrome for Testing (`npx playwright install chromium`). The
 end-to-end suites run headed by default, which is how users run the extension; on a machine with
 no display, `DSH_E2E_HEADLESS=1` runs the full browser in its new headless mode instead, or
-`xvfb-run --auto-servernum -- npm run test:e2e` keeps them headed. The released-pair suite needs
+`xvfb-run --auto-servernum -- npm run test:e2e` keeps them headed. On Linux a headed run asks
+Chrome for X11 whenever `DISPLAY` is set, so under `xvfb-run` its windows stay on the virtual
+display even inside a Wayland desktop session. The released-pair suite needs
 `dist/` from `node scripts/package.mjs --out dist` and a real `dsh` (`DSH_BIN_DIR` names its
 bin directory; otherwise the first `~/dsh-int/<lane>/node_modules/.bin/dsh` is used); without
 them it skips and says so. The live-turn suite also needs `@deepseek-ai/dsh-llm-mock-server`, at
