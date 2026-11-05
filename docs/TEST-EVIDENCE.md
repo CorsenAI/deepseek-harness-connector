@@ -1685,3 +1685,9 @@ github.com URL is checked (above). What remains is Google's review.
   0.2.2-alpha.3 on Ubuntu: installed, the packaged tarball added, one configuration row naming the
   connector, the turn's only failure `MISSING_CREDENTIAL`. The hosted run on `main` at
   `0f65ccc`: **16 of 16 jobs passed**, that lane included.
+- `main` is protected by two rulesets (`gh api -X POST repos/…/rulesets`):
+  "main: no force-push, no deletion" (`deletion`, `non_fast_forward`; no bypass actor) and
+  "main: pull requests and CI checks" (`pull_request` with no required approval — a single
+  maintainer — and `required_status_checks` on the sixteen gating checks, CodeQL included; bypass:
+  the repository administrator role, always). `GET repos/…/rules/branches/main` lists the four
+  rules as applying to `main`.
