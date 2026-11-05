@@ -130,16 +130,25 @@ describe('pairing secret', () => {
   })
 
   it('draws every alphabet character, so no entropy is lost to a modulo bias', () => {
+    // 2000 secrets of 20 characters: 40 000 draws over 25 symbols, 1600 expected per symbol with a
+    // standard deviation of about 39. A reduction of a byte modulo 25 would favour the first six
+    // symbols of the alphabet (256 = 10 × 25 + 6: they get 11 bytes each, the others 10), making
+    // each of them 1.10× as likely as the rest. The statistic below is the mean count of those six
+    // over the mean of the other nineteen: 1.00 ± 0.01 for an unbiased draw, 1.10 under the bias, so
+    // a bound at 1.05 is more than five standard deviations from both. (The former bound on the
+    // spread between the rarest and the commonest single symbol was crossed by chance about once in
+    // fifty runs — on the Windows lane of 2026-11-05 — and would not have caught the 1.10 either.)
+    const alphabet = '34679ACDEFGHJKMNPQRTUVWXY'
     const counts = new Map<string, number>()
     for (let attempt = 0; attempt < 2000; attempt += 1) {
       for (const character of createSecret()) counts.set(character, (counts.get(character) ?? 0) + 1)
     }
-    assert.equal(counts.size, 25, 'every alphabet character must be reachable')
-    const frequencies = [...counts.values()]
-    const lowest = Math.min(...frequencies)
-    const highest = Math.max(...frequencies)
-    // A modulo bias over 25 symbols would make the first six characters about 1.2x more likely.
-    assert.ok(highest / lowest < 1.15, `character frequency is uneven: ${lowest} to ${highest}`)
+    assert.equal(counts.size, alphabet.length, 'every alphabet character must be reachable')
+    const mean = (symbols: string) => [...symbols].reduce((sum, symbol) => sum + (counts.get(symbol) ?? 0), 0) / symbols.length
+    const ratio = mean(alphabet.slice(0, 6)) / mean(alphabet.slice(6))
+    assert.ok(Math.abs(ratio - 1) < 0.05, `the first six symbols are ${ratio.toFixed(3)}× as frequent as the rest; a modulo bias would make that 1.10`)
+    // And no single symbol is broken: each within 25 % of its expectation, ten standard deviations.
+    for (const [symbol, count] of counts) assert.ok(count > 1200 && count < 2000, `${symbol} was drawn ${count} times of 1600 expected`)
   })
 
   it('does not repeat across generations', () => {
