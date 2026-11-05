@@ -1298,3 +1298,304 @@ the ZIP at `e5678ad` (the panel) and `573389f` (the page code).
 
 AS, AT, AU and AV pass; AQ covers the broker the plugin starts. Z stays partial (no GitHub
 remote). The three gaps named against Hermes Connector v0.2.4 on 2026-09-11 are closed.
+
+## 2026-11-05 — DeepSeek Harness 0.2, the Windows home and profile bugs, the Corsen look, the GitHub bar (commits `8878a6d` → `3864389`)
+
+**Why.** The owner asked for the connector "at the highest level", ahead of every other DeepSeek
+Harness browser extension, open source. Checked against the world rather than the repository, the
+release candidate of 2026-09-12 was no longer usable: DeepSeek Harness's npm `latest` was
+0.2.1-rc.5 and `next` 0.2.2-rc.1, and the connector refused every version from 0.2.0 on.
+
+**Environment.**
+
+| | |
+|---|---|
+| Linux | Ubuntu 26.04.1, Linux 7.0.0-38, Node v26.8.1, pnpm 12.4.1, Playwright 1.63.0, Chrome for Testing 153.0.8010.12 |
+| macOS | macOS 27.2 (arm64), Homebrew Node 26.0.0, npm 11.12.1, pnpm 10.30.3 — the `mac` peer |
+| Windows | Windows 11 Home (Famille) 10.0.26200, **ARM64**, in UTM on the Mac (`winvm`), Node 24.22.0 win-arm64, Windows PowerShell 5.1.26100, Chrome for Testing x64 under emulation |
+| DeepSeek Harness | `@deepseek-ai/dsh` 0.1.2-rc.1, 0.1.5-rc.2, 0.2.1-rc.5 (`latest`), 0.2.2-rc.1 (`next`), each with `@deepseek-ai/dsh-llm-mock-server` at the same version, in `~/dsh-int/<lane>` |
+| DeepSeek Harness source read | `deepseek-ai/deepseek-harness` at `dsh-v0.2.2-rc.1` (`66491b0`) |
+
+### What was found, and what proves each fix
+
+| Finding | Fix | Proof |
+|---|---|---|
+| Every DeepSeek Harness 0.2 version refused (`refuseFrom: 0.2.0`) | supported range 0.1.2-rc.1 → 0.2.2-rc.1 tested, refused from `0.3.0-0`; declared as `engines.dsh` (ADR 0010) | released-pair 7 cases and live turns 3/3 on 0.2.1-rc.5 and 0.2.2-rc.1; `version.test.ts`; DeepSeek Harness's own `evaluatePluginCompatibility` agreeing with the gate on eleven versions |
+| `agent/created` became an awaited event on 0.2; a throwing listener would roll the user's session back | listeners contain their failures | `session-api.test.ts`, 6 cases |
+| On Windows the connector and `install.ps1` used `%LOCALAPPDATA%\dsh`; DeepSeek Harness uses `~\.dsh`, so the installer failed on any machine without `DSH_HOME` | the home resolved exactly as `@deepseek-ai/dsh-home-paths` resolves it, in the plugin and both installers | `profile.test.ts` (case by case, and against DeepSeek Harness's own resolver); each installer suite's new phase with `DSH_HOME` unset — Linux ×4 lanes, macOS ×2, Windows ×2 |
+| On Windows `profileNameFromPath` split on `/` only: every instance was `unknown`, two profiles shared a name | split on both separators | found by the Windows lane; a Windows-path case that fails without the fix |
+| `package.mjs` could not find npm under a Homebrew Node | it follows the `npm` on PATH | the macOS lane packages, byte-identical to Linux |
+| The released-pair suite assumed 0.1's profile links and a non-symlinked temporary directory | a resolve hook answering `@deepseek-ai/*` from the installation under test, matching real paths | released-pair on 0.2 and on macOS |
+| The live-turn suite read only the chat-completions wire and 0.1's model names, and assumed a 1280×720 capture | either wire protocol; the line's catalogue models; the caption held to the stored JPEG's own size | live turns 3/3 on four versions, headed and headless |
+| The package showed in DeepSeek Harness 0.2's Plugins page as a bare name, and its calls as raw JSON | `locale/*.json` meta, `icon`, `presentCall` cards | DeepSeek Harness's own `readPluginMeta` on the installed package; `package-meta.test.ts`; 4 `presentCall` cases |
+| `RELEASE.md` called `RemoteSigned` Windows' default policy | Microsoft documents `Restricted` for clients; both cases recorded | the Windows 11 Home lane: `install.ps1` refused before and after `Unblock-File`; `Install Connector.cmd` installs |
+| The panel stacked three cards and said things up to three times; the icon and tiles looked like nothing else Corsen ships (the owner's review) | the Hermes Connector layout (ADR 0008 amendment); the Corsen AI mark as the icon, as Hermes has it (the owner's choice); promotional images on a grid by the Store's rules | unit (every markup key in both dictionaries), end-to-end and the French onboarding suite on the new panel; the screenshots and tiles in `store/` with their hashes; the small tile checked at half size on the Store's grey |
+| At 320 pixels the attached tab's chip shrank to "Northwind…" and commands broke mid-word | "Attach" as the visible label (the accessible name unchanged), the target at least 42 % of its row, commands wrapping at spaces, less padding below 360 pixels | the panel captured at 320 pixels before and after (`35da0d0`) |
+| The Mac built different hashes at the same commit | Homebrew's Node links zlib 1.2.12; the official builds bundle Chromium's; the toolchain is recorded and a non-official zlib warned about | built with the Mac's official Node (24.12, zlib 1.3.1) the artifacts at `14ad11e` were identical to Linux's (26.8, zlib 1.3.2.1) |
+
+### Linux, at `8e50c3e` (clean tree)
+
+```
+commit 8e50c3e (clean tree), 2026-11-05T07:06:47Z → 07:10:39Z
+npm run typecheck                                       # clean, against dsh 0.2.2-rc.1 types
+npm run build                                           # clean
+npm run test:unit                                       # 295/295
+npm run test:page                                       # 17/17
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist   # all 641 checks
+xvfb-run --auto-servernum -- npm run test:e2e           # 75 pass, 2 skipped (first lane 0.1.2-rc.1 reads no engines.dsh, has no metadata reader)
+DSH_E2E_HEADLESS=1 npm run test:e2e                     # 75 pass, 2 skipped (same)
+DSH_BIN_DIR=~/dsh-int/<lane>/node_modules/.bin DSH_E2E_HEADLESS=1 node --test --test-concurrency=1 --test-force-exit … released-pair + live-turn
+   0.1.2-rc.1  8 pass, 2 skipped      0.1.5-rc.2  8 pass, 2 skipped
+   0.2.1-rc.5  10/10                  0.2.2-rc.1  10/10
+DSH_CONNECTOR_PORT=… bash tests/installer/linux-installer.sh "$PWD/dist/…tgz" ~/dsh-int/<lane>/node_modules/.bin
+   29/29 against each of the four (the phase with DSH_HOME unset included)
+DSH_E2E_LOCALE=fr-FR DSH_E2E_HEADLESS=1 node --test … tests/e2e/onboarding.test.ts   # 6/6, the new panel in French
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # passed
+```
+
+No teardown reached its bound (`closeWithin` says so in the log when it does). The same campaign ran
+at `35da0d0` (before the bound), at `f80a440` (the new panel and the Corsen mark, before the
+narrow-panel fix) and at `c69c175` (before the panel and the brand): identical results, with 294
+unit tests at `c69c175`. Earlier, at `e127d3b`, two headed live turns failed — the screenshot's size assertion
+(1264×739 headed against an asserted 1280×720); fixed in the test at `5f0f903`.
+
+### macOS
+
+At `35da0d0`, and identically at `f80a440` (macOS 27.2 arm64; tests under Homebrew Node 26.0.0,
+packaging under the official Node 24.12.0): typecheck and build clean; unit **295/295**; page **17/17**; the vertical slice
+headed **9/9**; end-to-end new headless **77/77** against `dsh` 0.2.1-rc.5 — the released pair (7
+cases, `engines.dsh` parity and the Plugins-page metadata included) and the three live turns in it;
+released pair and live turns against `dsh` 0.2.2-rc.1 **10/10**; installer **29/29** against each,
+the phase with `DSH_HOME` unset included; the quarantined `install.sh` ran through `bash` and
+directly; packaged artifacts **identical to Linux's**.
+
+At `c69c175` the same lane, all passing (294 unit), packaged under Homebrew's Node and so with other
+hashes (`68d44737…`, `df1cedf1…`): the finding that led to `abcca2f`. At `1f44029` the released
+pair failed on the Mac in 7 ms (the resolve hook and `/private/var`), fixed at `a71937c`, and the
+release build stopped (no npm-cli.js beside Homebrew's Node), fixed at `d2a7edc`.
+
+### Windows
+
+Windows 11 Home (Famille) 10.0.26200, ARM64, in UTM on the Mac (`winvm`); Node 24.22.0 win-arm64,
+npm 11.19.1, Windows PowerShell 5.1.26100.9711; Playwright's Chrome for Testing is x64 and runs
+under emulation. The lane (`.scratch/lanes/winvm-lane.ps1`, gitignored) unpacks a `git archive` of
+the commit with the Linux-built `dist/` under `%USERPROFILE%\dshc-lane`, runs with
+`-ExecutionPolicy Bypass` for its own process only, installs each `dsh` beside its mock provider at
+the same version and pnpm inside the lane (nothing global), and removes everything at the end.
+
+**At `d8d8bc1`** — the first run on this machine. Unit: 284 pass, **1 fail**, the POSIX case
+skipped: `profile.test.ts`, "reads the profile from a dsh plugin installation path" —
+`profileNameFromPath` split on `/` only, so every Windows instance named itself `unknown`; fixed at
+`03d59b8`, with a Windows-path case that fails without the fix. Page 17/17. Without pnpm,
+`install.ps1` stopped with 0 entries created under `DSH_HOME`. Installer acceptance 27/27 against
+0.2.1-rc.5 and against 0.2.2-rc.1, the tarball from a spaced path, the phase with `DSH_HOME` unset
+included (the home fix of `792667e` was already in). Released pair + live turns 9/9 against each
+(the display-metadata case came later). Full end-to-end headless against 0.2.1-rc.5: 76/76. Arrival
+rehearsal as below. Package: identical to Linux at that commit.
+
+**At `f80a440`** (the new panel and the Corsen mark). Typecheck and build clean. Unit 294, the POSIX
+case skipped; page 17/17; without pnpm 0 entries; installer 27/27 ×2, `DSH_HOME` unset included.
+Released pair + live turns **10/10 against 0.2.1-rc.5 and 10/10 against 0.2.2-rc.1** (live turns on
+`deepseek-flash` and `deepseek-v4-pro`). Full end-to-end headless against 0.2.1-rc.5: **77 cases
+passed, and one failure on top**: the released pair's file, its seven cases passed, then held its
+process open for 33 minutes in teardown, until the run was stopped; the runner reported the file
+itself as a 78th, failed test. Arrival rehearsal: `install.ps1` marked zone 3 (from the web) and
+run directly — refused, the effective policy in a fresh child being `Restricted`, 0 entries created;
+`Install Connector.cmd`, marked the same way, ran and left a running broker; after `Unblock-File`
+the direct run is still refused (`Restricted` refuses every script). Package identical to Linux:
+`2f5cf8e8…` (the ZIP at that commit) and `9243ae53…`.
+
+**The teardown.** Before the next run, two Chrome for Testing processes were still alive on the VM:
+a GPU process started during that end-to-end run with the released pair's profile
+(`--user-data-dir=…\dsh-connector-pair-profile-…`), and a renderer from an earlier launch. Both
+`Stop-Process -Force` and `taskkill /T /F` answered that no such process was running while
+`Get-Process` went on listing them: processes stuck in their exit under the x64 emulation, which is
+what the browser's close was waiting on. The product is not involved — this is the test's browser —
+but a wedged close must not hold a finished run: `7318c92` bounds it (`closeWithin`, 20 s, said in
+the log), gives the after hooks a 120 s limit, and runs the suites with `--test-force-exit`, which
+Node's runner hands to each test file's own process; `3864389` puts the shared harness, which every
+other suite closes through, behind the same bound.
+
+**At `8e50c3e`** (the confirmation, `.scratch/lanes/winvm-confirm2.ps1`, each long run under a
+watchdog of 50 and 20 minutes, every attempt recorded; 2026-11-05T07:06Z → 07:18Z):
+
+```
+npm ci, npm ci --prefix companion, npx playwright install chromium   # exit 0
+npm run typecheck && npm run build                                   # exit 0
+npm run test:unit                                                    # 294 pass, the POSIX case skipped
+npm run test:page                                                    # 17/17
+dsh 0.2.1-rc.5 and 0.2.2-rc.1, each with its mock provider; pnpm 12.16.1 inside the lane
+node --test --test-concurrency=1 --test-force-exit … tests/e2e/*.test.ts   (DSH_BIN_DIR = 0.2.1-rc.5, headless)
+                                                                     # attempt 1: 77/77 in 138 s; no teardown reached its bound
+node --test --test-concurrency=1 --test-force-exit … released-pair + live-turn   (0.2.2-rc.1)
+                                                                     # attempt 1: 10/10 in 41 s
+node scripts/package.mjs --out …\dist-win                            # 6da42e57…, 9243ae53… — identical to Linux
+                                                                     # (Node 24.22.0, zlib 1.3.2.1-motley-285e94b, npm 11.19.1)
+```
+
+A run at `c69c175` was stopped during its page step for the run at `f80a440`; its unit step had
+passed (293, the POSIX case skipped).
+
+### Also run
+
+```
+npm audit (root)                        # 0 vulnerabilities
+npm audit --omit=dev (companion)        # 0 vulnerabilities
+npm audit (companion, dev tree)         # 1 high: zod 4.4.3, pinned exactly by DeepSeek Harness 0.2.2-rc.1's own packages (GHSA-mrhx-c7xc-m3w5); dev only
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # passed; and against dsh-browser 23895d7: longest run 22 tokens, 1.09 %
+xvfb-run --auto-servernum -- node --experimental-strip-types tests/perf/measure.ts   # docs/PERFORMANCE.md, 2026-11-05: unchanged
+xvfb-run --auto-servernum -- node --experimental-strip-types scripts/capture-screenshots.ts   # same content; only the random port differs; the committed assets kept
+```
+
+### Release artifacts, from clean commit `8e50c3e` (identical at `35da0d0`)
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `6da42e5736d6de7f50c6f612182fda17a1c89a676ddd443bebf6d4938d6b4f23` | 71418 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `9243ae53fbcaad4e44329da738e6dd5ab614992b470befb75b1068f872428da7` | 79882 |
+
+Built with Node v26.8.1, zlib 1.3.2.1-motley-8002e91, npm 11.19.0 (recorded in
+`release-manifest.json`). `node scripts/verify-package.mjs`: all 641 checks.
+
+### Gates after this section
+
+AW, AX, AY and AZ pass. Y, AQ and AS pass on four DeepSeek Harness versions. AE holds with the official Node.js builds. Z stays partial: no
+GitHub remote, so no hosted run.
+
+### What this does not prove
+
+- A turn with a real model: the provider is DeepSeek Harness's scripted mock.
+- The cards' rendering in a DeepSeek Harness client: `presentCall` runs through the real
+  `defineTool`, but no client was looked at.
+- The new panel on a real screen of a person: it was looked at in the captured screenshots only.
+- DeepSeek Harness Desktop's own profile.
+- A native x64 Windows machine: the Windows runs are on an ARM64 VM with Chrome for Testing x64
+  under emulation, headless only.
+- A hosted CI run.
+
+## 2026-11-05, later — the virtual display, the privacy page, the release tarball, publication (commits `7318c92` → the commit tagged `v0.1.0`)
+
+**Why.** The owner's session was cut and resumed. Three things came out of the resumption: the
+headed test runs had been drawing on the owner's screen; the owner asked for the privacy policy on
+corsen.ai as for Hermes Connector, and why npm was needed at all; and the owner decided to
+publish — the GitHub repository, the release, the Chrome Web Store submission, the directories.
+
+**Environment.** As the section above (Ubuntu 26.04.1 and Node 26.8.1 here; macOS 27.2 arm64 as
+`mac`; Windows 11 Home ARM64 in UTM as `winvm`; DeepSeek Harness 0.1.2-rc.1, 0.1.5-rc.2, 0.2.1-rc.5
+`latest`, 0.2.2-rc.1 `next`, each with its mock provider at the same version).
+
+### What was found, and what proves each fix
+
+| Finding | Fix | Proof |
+|---|---|---|
+| Every "headed under Xvfb" run on the development machine had drawn on the desktop: Chrome for Testing 153 picks its window system from `XDG_SESSION_TYPE` (`ui/linux/display_server_utils.cc`), Wayland here, and ignored `xvfb-run`'s `DISPLAY`; the owner saw the windows, the browser log named `ozone/platform/wayland` | a headed Linux run with `DISPLAY` set asks for `--ozone-platform=x11` (`5cbfba6`) | during the onboarding suite `xwininfo` lists three Chromium windows on `:100`, no Wayland line in the log, 6/6; then ten full headed runs on the virtual display, 75 + 2 skipped each, 16 X11 launches and 0 Wayland lines per run; the one earlier headed failure (the setup card's browser closed mid-test, 1 of 9 on the desktop) did not recur in those ten |
+| The macOS lane failed one live turn (the screenshot to a vision model) at `3864389`, 76/77 | nothing to fix: two full runs and five `live-turn` runs at the same commit on the Mac passed, 77/77, 77/77, 3/3 ×5; the lane now keeps the failure detail | `.scratch/lanes/mac-liveturn-3864389.log` |
+| The Windows lane's end-to-end run had hung 33 minutes in a browser teardown (previous section) | bounded teardown (`7318c92`, `3864389`) | Windows at `8e50c3e` and at `5cbfba6`: full end-to-end 77/77 in 138 s and 145 s, the released pair and live turns against 0.2.2-rc.1 10/10 |
+| The pairing-secret frequency test failed once on Windows (1476 to 1707): its bound was crossed by chance about once in fifty runs, and would not have caught the modulo bias it named (1.10×) | the statistic is the mean of the six symbols a modulo bias favours over the mean of the rest, bounded at 1.05 — five standard deviations from both outcomes (`e92a312`) | `auth.test.ts`; unit 298/298 on Linux at `605b860`; on Windows at `246781a` the unit suite passed with the POSIX case skipped (see below) |
+| The privacy policy had no public URL (GitHub Pages waited on the remote) | published on corsen.ai beside Hermes Connector's, `https://corsen.ai/privacy/deepseek-harness-connector/`, same template; the repository's copy carries the same text with that canonical URL (`4a94cbb`) | release `privacy-dhc-20261105` on the dedicated server, activation `corsen-privacy-activate-20261105-080914` at 08:09 UTC with backup and the formations lock; origin 200 with the five content checks; edge 200, no redirect, no cookie; linked from `/privacy/`; 1280 px and 390 × 844 without horizontal overflow |
+| The companion's install path assumed npm; the owner chose the GitHub release, as for Hermes Connector | ADR 0011: the companion tarball on the release of the same version is the install spec everywhere — the setup card builds it from the extension's version, the update state names it, both installers default to it, a unit test holds the four to one version (`0bbfb6f`) | the real `dsh` 0.1.2-rc.1 and 0.2.2-rc.1 installed the packaged tarball from a loopback URL with github.com's redirect, recorded the URL as the dependency, reconciled the bundle, removed it; 0.2.2-rc.1 rejected a tarball declaring an incompatible `engines.dsh` after the download, with its own message, the profile restored; installer suites 35/35 on Linux against each of the four DeepSeek Harness versions (the new phase installs through `tarball-server.mjs`, the loopback stand-in); on Windows 33/33 against 0.2.2-rc.1 at `246781a` (`.scratch/lanes/winvm-installer-check-246781a.utf8.log`) |
+| The Windows suite's stand-in did not start on the first run: `Start-Process` quotes nothing and the suite's tarball path has a space on purpose | the paths are quoted (`246781a`) | the suite on the VM at `246781a`: the stand-in listening, the install from the URL, the dependency recorded as the URL, the uninstall — 33/33 |
+
+### Linux, at `605b860` (clean tree)
+
+```
+commit 605b860 (clean tree), 2026-11-05T08:32:46Z → 08:37:26Z, session=wayland
+npm run typecheck && npm run build                      # clean
+npm run test:unit                                       # 298/298
+npm run test:page                                       # 17/17
+node scripts/package.mjs --out dist && node scripts/verify-package.mjs --dist dist   # all checks
+DEBUG=pw:browser xvfb-run --auto-servernum -- npm run test:e2e   # 75 pass, 2 skipped; 16 X11 launches, 0 Wayland lines
+DSH_E2E_HEADLESS=1 npm run test:e2e                     # 75 pass, 2 skipped
+DSH_BIN_DIR=~/dsh-int/<lane>/node_modules/.bin DSH_E2E_HEADLESS=1 node --test … released-pair + live-turn
+   0.1.2-rc.1  8 pass, 2 skipped      0.1.5-rc.2  8 pass, 2 skipped
+   0.2.1-rc.5  10/10                  0.2.2-rc.1  10/10
+   and the same two suites headed on the virtual display: 0.2.1-rc.5 10/10, 0.2.2-rc.1 10/10
+DSH_CONNECTOR_PORT=… bash tests/installer/linux-installer.sh dist/…tgz ~/dsh-int/<lane>/node_modules/.bin
+   35/35 against each of the four — the phase through the release URL included
+DSH_E2E_LOCALE=fr-FR DSH_E2E_HEADLESS=1 node --test … tests/e2e/onboarding.test.ts   # 6/6
+node scripts/provenance-audit.mjs --exact 16 --shape 40 --max-run 32 --max-coverage 2   # passed
+```
+
+Also at `5250f4c` (before the release-tarball change): the same campaign, 295 unit, 29 installer
+checks, all passing, hashes `6da42e57…`/`9243ae53…`. The headed runs of that campaign and of the
+ten-run loop at `5cbfba6` are the first on this machine known to have been on the virtual display.
+
+Performance, headed on the virtual display at `5cbfba6`: `docs/PERFORMANCE.md`. Store screenshots
+and tiles recaptured there at `bf65a37`: `store/ASSETS.md`.
+
+### macOS
+
+At `246781a` (the release commit's code; macOS 27.2 arm64, tests under Homebrew Node 26.0.0,
+packaging under the official Node 24.12.0; `.scratch/lanes/mac-lane-246781a.log`): typecheck and
+build clean; unit **298/298**; page **17/17**; the vertical slice headed **9/9**; end-to-end new
+headless **77/77** against `dsh` 0.2.1-rc.5 — the released pair's seven cases and the three live
+turns included; released pair and live turns against `dsh` 0.2.2-rc.1 **10/10**; installer
+**35/35** against each 0.2 version, the release-URL phase and the phase with `DSH_HOME` unset
+included; the quarantined `install.sh` ran through `bash` and directly; packaged artifacts
+**identical to Linux's** (`00a5b09e…`, `6592b040…`).
+
+At `5cbfba6` (before the release-tarball change): typecheck and build clean; unit 295/295; page
+17/17; the slice headed 9/9; end-to-end new headless 77/77 against 0.2.1-rc.5; released pair and
+live turns against 0.2.2-rc.1 10/10; installers 29/29 ×2; the quarantined installer ran; package
+identical to Linux (`6da42e57…`, `9243ae53…`) with the official Node 24.12.
+
+### Windows
+
+At `246781a` (the release commit's code; Windows 11 Home 10.0.26200 ARM64 in UTM, Node 24.22.0
+win-arm64, Windows PowerShell 5.1, the x64 Chrome for Testing under emulation;
+`.scratch/lanes/winvm-lane.ps1`, log `winvm-lane-246781a.utf8.log`):
+
+```
+npm ci, npm ci --prefix companion, npx playwright install chromium   # exit 0
+npm run typecheck && npm run build                                   # exit 0
+npm run test:unit                                                    # 297 pass, the POSIX case skipped, 0 fail
+npm run test:page                                                    # 17/17
+install.ps1 on a machine with dsh and no pnpm                        # exit 1, 0 entries created under DSH_HOME
+windows-installer.ps1 against dsh 0.2.1-rc.5 and 0.2.2-rc.1          # 33/33 each — the tarball from a spaced path,
+                                                                     # the release URL, DSH_HOME unset included
+released pair + live turns, 0.2.1-rc.5 and 0.2.2-rc.1                # 10/10 each, first attempt
+full end-to-end, new headless, against 0.2.1-rc.5                    # 77/77
+arrival rehearsal (Mark-of-the-Web, zone 3)                          # effective policy Restricted: install.ps1 refused,
+                                                                     # 0 entries; Install Connector.cmd ran (exit 0);
+                                                                     # after Unblock-File the direct run is still refused
+node scripts/package.mjs                                             # 00a5b09e…, 6592b040… — identical to Linux and macOS
+```
+
+No teardown reached its bound. Earlier the same day at `246781a`, the installer suite alone against
+0.2.2-rc.1: 33/33 (`winvm-installer-check-246781a.utf8.log`).
+
+At `5cbfba6` (before the release-tarball change; `.scratch/lanes/winvm-confirm2.ps1`): typecheck
+and build clean; unit 293 pass, 1 skipped (POSIX), **1 failed** — the frequency test above, fixed at
+`e92a312`; page 17/17; full end-to-end new headless against 0.2.1-rc.5 **77/77** in 145 s, no
+teardown reached its bound; released pair and live turns against 0.2.2-rc.1 **10/10**; package
+identical to Linux. At `f562b83` the installer suite ran 29 of its checks and failed the new
+release-URL phase on the suite's own unquoted path (fixed at `246781a`).
+
+### Published
+
+- `https://corsen.ai/privacy/deepseek-harness-connector/` — 2026-11-05 08:09 UTC.
+- GitHub (the repository, Pages, the release with the artifacts) and the Chrome Web Store: recorded in the commit that follows the tag `v0.1.0` — the repository is created from the tagged commit, so this section cannot name what happens after it.
+
+### Release artifacts, from clean commit `605b860` (identical at every later commit of this section)
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| `dsh-browser-connector-extension-0.1.0.zip` | `00a5b09e76466374983bfb0fb8d03bae8024371619c55b00173fba1be335a464` | 72311 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | `6592b040e07602c0219a3a18e03417eca94b8e5ae5b1a7fa7dad11003b8ef9bd` | 80015 |
+
+The ZIP changed at `0bbfb6f` (the panel names the companion by its release URL, the update state
+names the command, the detail wraps) and the tarball at `0bbfb6f` too (the companion README says
+the same). Built with Node v26.8.1; `node scripts/verify-package.mjs`: all checks.
+
+### Gates after this section
+
+AC now covers the release URL (35 checks on Linux and macOS, 33 on Windows). BA (the release
+channel) passes. Z: partial at the tag — the hosted run starts with the first push; its result is recorded in the commit that follows.
+
+### What this does not prove
+
+- A turn with a real model: the provider is DeepSeek Harness's scripted mock.
+- A Store review outcome: the submission is the owner's account's; the review is Google's.
+- DeepSeek Harness Desktop's own profile; a native x64 Windows machine.
+- That github.com serves the tarball exactly as the loopback stand-in does: the stand-in answers
+  the 302 github.com answers; the real URL is checked once the release exists (the commit that follows the tag).
