@@ -1,0 +1,55 @@
+name: Bug report
+description: Something the connector did, or failed to do, that it should not have.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please never paste a pairing code, the content of a signed-in page, or anything from a site you are logged in to: a description and the steps are enough.
+        If one session reached a tab it was not given, or a password, one-time code or payment value left the page, use the private security report instead (see SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected
+      description: The action the model asked for, what the tool answered, and what the page actually did.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+        2. Attach a tab to a session in the panel
+        3. Ask the session to ...
+    validations:
+      required: true
+  - type: input
+    id: connector-version
+    attributes:
+      label: Connector version
+      description: The extension and the package are released together; the panel shows both.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DeepSeek Harness version
+      description: The output of `dsh --version`, and the profile (web, headless, tui, desktop...).
+      placeholder: "0.2.1-rc.5, profile web"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and Chrome version
+      placeholder: "Windows 11 24H2, Chrome 155"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Connector log lines
+      description: Lines starting with `corsen-browser-connector:` from DeepSeek Harness, and `<DSH home>/connector/broker.log`. Remove anything that names a private page.
+      render: text

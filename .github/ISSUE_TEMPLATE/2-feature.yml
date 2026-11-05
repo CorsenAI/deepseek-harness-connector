@@ -1,0 +1,23 @@
+name: Feature request
+description: Something the connector should be able to do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you are trying to do
+      description: The task, and where the connector stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help
+      description: An action, a panel change, a setting. Note that `cookies`, `debugger` and remote code are out of scope by design (ADR 0006).
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariants
+      options:
+        - label: This keeps every action routed to the exact session that owns the tab, and failing closed otherwise.
+          required: true
