@@ -18,7 +18,7 @@ you are already signed in to. Two parts, released together at the same version:
 | `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `2f5cf8e81600e4acb4444edf6bd6a80968227ee7e08d91543cef9f32d1f988e1` | 71319 |
 | `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `9243ae53fbcaad4e44329da738e6dd5ab614992b470befb75b1068f872428da7` | 79882 |
 
-Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows. `SHA256SUMS` and
+Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows with the official Node.js builds. `SHA256SUMS` and
 `release-manifest.json` accompany them.
 
 ### Install

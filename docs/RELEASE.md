@@ -38,10 +38,18 @@ Every one of these, in order. A skipped step is recorded as skipped, not as done
 | `corsen-ai-dsh-browser-connector-<version>.tgz` | `scripts/package.mjs` — removes `lib/`, compiles it with the companion's TypeScript, then runs `npm pack` under the same Node | `lib/`, `cordis.patch.yml`, `package.json`, `README.md` |
 | `dsh-browser-connector-extension-<version>.zip` | `scripts/package.mjs` | `manifest.json`, `src/`, `assets/` — nothing else |
 | `SHA256SUMS` | `scripts/package.mjs` | One line per artifact |
-| `release-manifest.json` | `scripts/package.mjs` | Commit SHA, versions, artifact hashes, build timestamp |
+| `release-manifest.json` | `scripts/package.mjs` | Commit SHA, versions, artifact hashes, build timestamp, the toolchain (Node, zlib, npm) |
 
 The extension ZIP must be **byte-identical** across two builds from the same commit. Entry order
 is sorted, timestamps are fixed, and no build-time value enters the archive.
+
+**Build releases with an official Node.js build.** Both archives are compressed by the zlib the
+running Node links. The official builds bundle Chromium's zlib (a version with a suffix, such as
+`1.3.1-470d3a2` or `1.3.2.1-motley-8002e91`) and produce the same bytes on Linux, macOS and Windows,
+across Node 24 and 26 and npm 11.6 to 11.19 (verified 2026-11-05). Homebrew's Node links the
+system's zlib 1.2.12 and compresses the same files into other bytes: same contents, different
+hashes. `scripts/package.mjs` records the toolchain in `release-manifest.json` and warns when the
+zlib is not an official build's.
 
 The tarball is never picked up from `dist/`: `scripts/package.mjs` builds it from source every time,
 and `scripts/verify-package.mjs` proves that every `lib/` file inside it is byte-identical to the

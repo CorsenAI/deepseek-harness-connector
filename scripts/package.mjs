@@ -317,6 +317,20 @@ function main() {
   const tarball = buildCompanionTarball(outDir);
   const artifacts = [{ name: zipName, bytes: zip }, tarball];
 
+  // The compressed bytes depend on the zlib the running Node links. The official Node.js builds
+  // bundle Chromium's zlib (its version carries a suffix, such as 1.3.1-470d3a2) and agree with one
+  // another across platforms and versions; a Node linked to another zlib — Homebrew's links the
+  // system's 1.2.12 — compresses the same files into other bytes (seen on 2026-11-05). The
+  // toolchain is recorded so a hash can be reproduced, and the case is said out loud.
+  const npmCli = findNpmCli();
+  let npmVersion = "unknown";
+  try {
+    if (npmCli) npmVersion = JSON.parse(readFileSync(join(dirname(npmCli), "..", "package.json"), "utf8")).version;
+  } catch {
+    // The version is a record, not a requirement.
+  }
+  const toolchain = { node: process.version, zlib: process.versions.zlib, npm: npmVersion };
+
   const sums = artifacts.map((artifact) => `${sha256(artifact.bytes)}  ${artifact.name}`).join("\n");
   writeFileSync(join(outDir, "SHA256SUMS"), `${sums}\n`);
 
@@ -328,6 +342,7 @@ function main() {
     commit,
     cleanTree: clean,
     builtAt: new Date().toISOString(),
+    toolchain,
     artifacts: artifacts.map((artifact) => ({
       name: artifact.name,
       sha256: sha256(artifact.bytes),
@@ -340,6 +355,10 @@ function main() {
   process.stdout.write(`sha256 ${sha256(zip)}\n`);
   process.stdout.write(`wrote ${tarball.name} (${tarball.bytes.length} bytes, built from source)\n`);
   process.stdout.write(`sha256 ${sha256(tarball.bytes)}\n`);
+  process.stdout.write(`toolchain node ${toolchain.node}, zlib ${toolchain.zlib}, npm ${toolchain.npm}\n`);
+  if (!/-/.test(String(toolchain.zlib))) {
+    process.stdout.write(`warning: this Node links zlib ${toolchain.zlib}, not the zlib the official Node.js builds bundle; the archives' compressed bytes will differ from an official build's, though not their contents\n`);
+  }
   if (!clean) process.stdout.write("warning: the working tree is not clean; this is not a release build\n");
 }
 
