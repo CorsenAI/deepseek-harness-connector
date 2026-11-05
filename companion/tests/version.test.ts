@@ -11,7 +11,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { classifyDshVersion, SUPPORTED_DSH, supportedRangeText } from '../src/dsh/version.ts'
+import { readFileSync } from 'node:fs'
+import { classifyDshVersion, DSH_ENGINES_RANGE, SUPPORTED_DSH, supportedRangeText } from '../src/dsh/version.ts'
 
 describe('classifying a DeepSeek Harness runtime', () => {
   it('calls the tested versions tested', () => {
@@ -31,7 +32,7 @@ describe('classifying a DeepSeek Harness runtime', () => {
   it('refuses a far-future version instead of calling it supported', () => {
     // The exact case the review ran. A connector that claims to support a release nobody has seen
     // is claiming something it cannot know.
-    for (const future of ['0.2.0', '0.9.0', '1.0.0', '999.0.0']) {
+    for (const future of ['0.3.0-0', '0.3.0-alpha.1', '0.3.0-rc.2', '0.3.0', '0.9.0', '1.0.0', '999.0.0']) {
       const verdict = classifyDshVersion(future)
       assert.equal(verdict.status, 'incompatible', `${future} must not be called supported`)
       assert.match(String(verdict.reason), /has not been tested/)
@@ -39,7 +40,7 @@ describe('classifying a DeepSeek Harness runtime', () => {
   })
 
   it('calls a newer release inside the same line untested, and lets it load', () => {
-    for (const newer of ['0.1.6', '0.1.9', '0.1.6-alpha.1']) {
+    for (const newer of ['0.2.2', '0.2.2-rc.2', '0.2.3-alpha.1', '0.2.9']) {
       const verdict = classifyDshVersion(newer)
       assert.equal(verdict.status, 'untested', `${newer} is newer than tested, not incompatible`)
       assert.match(String(verdict.reason), /nothing has been verified/)
@@ -53,17 +54,32 @@ describe('classifying a DeepSeek Harness runtime', () => {
   })
 
   it('orders prereleases below their release, as semantic versioning requires', () => {
-    // `0.2.0-rc.1` precedes `0.2.0`, so it falls inside the untested band rather than past the
-    // refusal boundary. Getting this backwards would refuse a release candidate of a version we
-    // accept, or accept one past the line.
-    assert.equal(classifyDshVersion('0.2.0-rc.1').status, 'untested')
-    assert.equal(classifyDshVersion('0.2.0').status, 'incompatible')
+    // `0.2.2-rc.1` precedes `0.2.2`, so the release past the tested candidate is untested, not
+    // tested; and every prerelease of the next line sits at or past `0.3.0-0`, so none of them is
+    // let in as merely untested. Getting either backwards would claim what was never run.
+    assert.equal(classifyDshVersion('0.2.2-rc.1').status, 'tested')
+    assert.equal(classifyDshVersion('0.2.2').status, 'untested')
+    assert.equal(classifyDshVersion('0.2.99').status, 'untested')
+    assert.equal(classifyDshVersion('0.3.0-alpha.1').status, 'incompatible')
+    // The lines in between were bracketed by tested lanes.
+    for (const between of ['0.1.5-rc.2', '0.1.7-rc.2', '0.2.0-rc.2', '0.2.1-rc.5']) {
+      assert.equal(classifyDshVersion(between).status, 'tested', between)
+    }
+  })
+
+  it('declares the same range to DeepSeek Harness in engines.dsh', () => {
+    // DeepSeek Harness 0.2.1 and later read `engines.dsh` and refuse the package before running any
+    // of it; the two boundaries must be one boundary.
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { engines?: Record<string, string> }
+    assert.equal(manifest.engines?.['dsh'], DSH_ENGINES_RANGE)
+    assert.equal(DSH_ENGINES_RANGE, `>=${SUPPORTED_DSH.minimum} <${SUPPORTED_DSH.refuseFrom}`)
   })
 
   it('describes the range in terms a user can act on', () => {
     const text = supportedRangeText()
     assert.match(text, new RegExp(SUPPORTED_DSH.minimum.replace(/\./g, '\\.')))
-    assert.match(text, new RegExp(SUPPORTED_DSH.refuseFrom.replace(/\./g, '\\.')))
+    assert.match(text, /0\.3\.0 and its prereleases are refused/)
+    assert.match(text, new RegExp(SUPPORTED_DSH.maximumTested.replace(/\./g, '\\.')))
     assert.match(text, /tested/)
   })
 })

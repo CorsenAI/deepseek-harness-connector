@@ -21,17 +21,34 @@ export const SUPPORTED_DSH = {
   /** Lowest tested `@deepseek-ai/dsh-tools` version, inclusive. Below this the connector refuses. */
   minimum: '0.1.2-rc.1',
   /** Highest version with a passing row in `docs/COMPATIBILITY.md`, inclusive. */
-  maximumTested: '0.1.5-rc.2',
+  maximumTested: '0.2.2-rc.1',
   /**
-   * The first version this connector refuses outright.
+   * The first version this connector refuses outright: the lowest prerelease of the next minor line.
    *
-   * DeepSeek Harness states its APIs are pre-stable, so a new minor line may change them. Between
+   * DeepSeek Harness states its APIs are pre-stable, and its minor lines prove it — 0.2 made
+   * `agent/created` an awaited event, replaced the profile's linked packages with an in-process
+   * resolution, and moved the provider wire to another protocol, all in its prereleases. Between
    * {@link maximumTested} and this bound a runtime is *untested*: it loads, and says so, because
-   * refusing every release the day it ships would break users for no observed reason. At or above
-   * it, nothing is known and the connector fails closed rather than guessing.
+   * refusing every patch release the day it ships would break users for no observed reason. From
+   * the next line's first prerelease on, nothing is known and the connector fails closed rather
+   * than guessing (ADR 0010).
    */
-  refuseFrom: '0.2.0',
+  refuseFrom: '0.3.0-0',
 } as const
+
+/**
+ * The supported range as DeepSeek Harness itself reads it from the package's `engines.dsh`.
+ *
+ * Since DeepSeek Harness 0.2.1, installation and profile startup refuse a plugin whose
+ * `engines.dsh` the running version does not satisfy, prereleases included, before any of its code
+ * runs, and offer the user an exact-version exemption (`dsh plugin allow-version`). This is the
+ * same boundary as {@link classifyDshVersion}, which still guards the runtimes that read no such
+ * field; a unit test keeps `companion/package.json` equal to it (ADR 0010).
+ */
+export const DSH_ENGINES_RANGE = `>=${SUPPORTED_DSH.minimum} <${SUPPORTED_DSH.refuseFrom}`
+
+/** The refused line as a reader names it. */
+const REFUSED_LINE = SUPPORTED_DSH.refuseFrom.replace(/-0$/, '')
 
 /**
  * How a runtime relates to what has actually been tested.
@@ -129,7 +146,7 @@ export function classifyDshVersion(value: string): { status: DshVersionStatus, r
   if (refuseFrom && compare(parsed, refuseFrom) >= 0) {
     return {
       status: 'incompatible',
-      reason: `DeepSeek Harness ${value} is at or beyond ${SUPPORTED_DSH.refuseFrom}, which this connector has not been tested against`,
+      reason: `DeepSeek Harness ${value} belongs to the ${REFUSED_LINE} line or a later one, which this connector has not been tested against`,
     }
   }
 
@@ -186,5 +203,5 @@ export function detectDshVersion(resolveFrom: string = import.meta.url): DshRunt
  */
 export function supportedRangeText(): string {
   return `DeepSeek Harness ${SUPPORTED_DSH.minimum} to ${SUPPORTED_DSH.maximumTested} (tested), `
-    + `up to but not including ${SUPPORTED_DSH.refuseFrom} (untested but accepted)`
+    + `later releases before ${REFUSED_LINE} (untested but accepted); ${REFUSED_LINE} and its prereleases are refused`
 }
