@@ -55,7 +55,9 @@ mv store/screenshots/promo-*.png store/
 
 ## Files, as committed on 2026-11-05 at the commit `git log -1 -- store/screenshots` names
 
-The panel was redrawn on 2026-11-05 in the layout Corsen's Hermes Connector uses: one status
+Recaptured on 2026-11-05 at the release-tarball commit: the setup card (screenshot 1) and the
+"Update required" state (screenshot 5) now show the `dsh plugin add` of the companion's release URL
+(ADR 0011). The panel was redrawn on 2026-11-05 in the layout Corsen's Hermes Connector uses: one status
 strip, one compact strip with the session and the tab it acts in, popovers for the tabs, the
 access notes and the settings, and a single card for the next step. Screenshots 1, 2, 3 and 5 show
 it; screenshot 4, the composed view of what a session receives, differs from 2026-09-12 only in the
@@ -63,21 +65,19 @@ fixture server's port. The promotional tiles were redrawn on 2026-11-05 in the C
 
 | File | Size | Bytes | SHA-256 |
 |---|---|---|---|
-| `screenshots/01-pair.png` | 1280×800 | 127342 | `28716288e63d2dc5cea4ed4f1367ce60b48ac6ab9134956b117eac935017aecc` |
-| `screenshots/02-no-tabs.png` | 1280×800 | 110631 | `9c1b0179881633cb848c63476c87c5263b4682af6af79ccd00626171ff6b8754` |
-| `screenshots/03-ready.png` | 1280×800 | 110616 | `9ffe4c9eb0e6ed82b77ff6b9821b25908fdafd23e37e35c4e9b41fa5c971eb99` |
-| `screenshots/04-snapshot.png` | 1280×800 | 107671 | `eb5eaa139b772e56e5b4f1180c4dae3b7930b2d510e6db4b65f2b489f50bea86` |
-| `screenshots/05-update-required.png` | 1280×800 | 106072 | `525dfa514ae74328bdc19dd27a95d5221128c113ce35b3775e8c4e3f76723840` |
-| `promo-small-440x280.png` | 440×280 | 118459 | `c6af9801f033a2cccc41c99547eb1896b1716aaf0249b17362c07835bfcfa133` |
-| `promo-marquee-1400x560.png` | 1400×560 | 507787 | `96c720e387c9e558a217764dcc1b20a38a4a78a878dcd518202fc7e77f8b6926` |
+| `screenshots/01-pair.png` | 1280×800 | 136164 | `4b8ee82cd6424a0d5ce982777534372829f2bd8394a3bd3970a935bcf345b834` |
+| `screenshots/02-no-tabs.png` | 1280×800 | 115278 | `d7c61a4e7a2eb560ae131b0603f27a7b2b0d406cf4aef0734091f7cba95d6be3` |
+| `screenshots/03-ready.png` | 1280×800 | 114791 | `99f815a2fb108a46f210b73fdec841ef473681083ce024ea89c94bbd53c23a4d` |
+| `screenshots/04-snapshot.png` | 1280×800 | 106066 | `9a51fc6e3b7b598987ac03dc56f831af7aeadf6d2b69e7322142e86a9113e2df` |
+| `screenshots/05-update-required.png` | 1280×800 | 122872 | `166d86a27997865e8fff5fa59e865f7c523c46a255d9de77c6495766cde7c542` |
+| `promo-small-440x280.png` | 440×280 | 120892 | `7edca4fa82afbc93a644199798608b26a7209f8d3b8f4823b11f3774a383f8bf` |
+| `promo-marquee-1400x560.png` | 1400×560 | 542431 | `1f3079a3c83d750819536fca5ce5c5e799b907feace3383dd258e165c477ecb1` |
 | `../extension/assets/icon-128.png` (the extension's icon) | 128×128 | 8327 | `6650826310ccf7703d0f97fa95b0d46f5572037f9407c3d78d96f2473d7e994e` |
 | `store-icon-128.png` (Store icon) | 128×128 | 15492 | `50d498c65573e7fa74b638858dd300f685d5bfdbd20ad346a807a2d2cc14ebbf` |
 | `brand/corsen-mark.png` (source of the tiles) | 344×373 | 146349 | `dc328f34079643ad2ff76ebd98aeab5299ac9d20dc6305ffd7b953164a191854` |
 
 Environment of that capture: Ubuntu 26.04.1, Chrome for Testing 153.0.8010.12 (Playwright 1.63.0),
-Node v26.8.1, headed — on the development machine's own desktop (GNOME on Wayland), not on Xvfb: the
-capture ran through `xvfb-run`, but Chrome for Testing 153 picks its window system from
-`XDG_SESSION_TYPE` and ignored the virtual display until `5cbfba6`. A recapture on the virtual display
-at `5cbfba6` shows the same content with the fonts rasterised differently (software rendering, other
-font fallback) and another fixture port; the committed files, rendered with the desktop's fonts, are
-kept.
+Node v26.8.1, headed on the virtual display (`xvfb-run`, with the browser asking for X11 since `5cbfba6`;
+before that commit a run through `xvfb-run` on this Wayland desktop drew on the desktop itself). The
+capture is deterministic on that display: a second run gives the same bytes for every file but the
+two whose fixture page shows the connector's random port.
