@@ -213,8 +213,11 @@ jobs:
             spec: "@deepseek-ai/dsh@latest"
           - lane: next
             spec: "@deepseek-ai/dsh@next"
+          # The earliest build DeepSeek Harness publishes: its npm `alpha` channel. (Installing the
+          # repository from git cannot work: npm cannot prepare its pnpm monorepo, so that lane
+          # failed on every run without ever reaching the connector.)
           - lane: upstream
-            spec: "github:deepseek-ai/deepseek-harness"
+            spec: "@deepseek-ai/dsh@alpha"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
