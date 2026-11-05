@@ -16,7 +16,7 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 ## Status
 
-**Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
+**0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
 Chrome extension with all twenty-one browser actions, the installers, and the release packaging work
 end to end and are covered by 392 tests: 298 unit and protocol tests, 17 cases running the shipped
 page module in a real Chrome, and 77 real-browser end-to-end cases — multi-session isolation, a
@@ -36,11 +36,14 @@ silent port and another program, and web components read and clicked through ope
 for the evidence per version and platform. The release artifacts build byte-identically on the
 three platforms with the official Node.js builds. The Store listing, screenshots and privacy page are in `store/`.
 
-`docs/TEST-MATRIX.md` lists every release gate and its honest state. The privacy policy is live at
+`docs/TEST-MATRIX.md` lists every release gate and its honest state. The companion is the tarball
+on the GitHub release [`v0.1.0`](https://github.com/CorsenAI/deepseek-harness-connector/releases/tag/v0.1.0)
+(ADR 0011); the privacy policy is at
 [corsen.ai/privacy/deepseek-harness-connector](https://corsen.ai/privacy/deepseek-harness-connector/).
-What remains needs the owner: a GitHub remote for the CI lanes, the GitHub release that serves the
-companion tarball, and the Store submission itself. A turn with a real provider key instead of the scripted one is a one-line
-change of the provider endpoint.
+The extension goes to the Chrome Web Store with the material in `store/`; until its listing is
+public, the release's ZIP, unpacked, loads with "Load unpacked" in `chrome://extensions` (developer
+mode). A turn with a real provider key instead of the scripted one is a one-line change of the
+provider endpoint.
 
 ## What it does
 
