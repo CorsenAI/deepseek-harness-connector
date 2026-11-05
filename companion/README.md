@@ -40,7 +40,7 @@ tested through `0.2.2-rc.1`; the `0.3` line is refused until it is tested. The r
 The plugin registers twenty-one browser tools, one per protocol action: reading a page as text or
 as a screenshot, acting in it, navigating, and managing the session's own tabs. Routing is by
 `(profileId, sessionId)`, so two sessions running at once never reach each other's tabs. DeepSeek
-Harness clients show each call as a titled card ("Open https://…", "Type into e3@2"), and the
+Harness clients show each call as a titled card ("Open" and the address, "Type into e3@2"), and the
 Plugins page shows the package by its own name, description and icon.
 
 It never reads cookies, never uses `chrome.debugger`, and sends nothing to Corsen AI. Passwords,
