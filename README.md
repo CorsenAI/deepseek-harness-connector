@@ -104,7 +104,7 @@ whether the connector is reachable and shows these commands for your system.
 > clone. Note that current Chrome stable refuses `--load-extension` on the command line; use the
 > **Load unpacked** button on `chrome://extensions` with Developer mode on.
 
-**4. Use it.** Open the connector panel, pick a session, click **Attach this tab**. That session can
+**4. Use it.** Open the connector panel, pick a session, click **Attach** on the tab it should use. That session can
 now operate that tab and nothing else.
 
 ## Using it

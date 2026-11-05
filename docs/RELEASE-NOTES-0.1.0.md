@@ -32,7 +32,7 @@ dsh plugin --profile web exec dsh-connector-broker --pairing-code
 
 Start DeepSeek Harness — the connector starts its local broker by itself when nothing is listening
 — install the extension from the Chrome Web Store, open its side panel, type the pairing code once,
-pick your session, and press **Attach this tab**. The panel's setup card says whether the
+pick your session, and press **Attach** on the tab it should use. The panel's setup card says whether the
 connector is reachable and shows the commands for your system. Installers that do all of this and
 print the code: `scripts/install.sh` (macOS, Linux) and `scripts/Install Connector.cmd` (Windows).
 

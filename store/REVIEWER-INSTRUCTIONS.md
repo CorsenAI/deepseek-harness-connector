@@ -52,7 +52,7 @@ This announces a session called "Review session" to the connector. In the side p
 
 1. The session appears under **DeepSeek Harness sessions**. Select it.
 2. Open any ordinary web page in a tab, for example `https://example.com`.
-3. Click **Attach this tab**. The route card now shows the session, this Chrome profile, and one
+3. Click **Attach** (its tooltip: "Attach this tab"). The route card now shows the session, this Chrome profile, and one
    attached tab.
 4. Back in the terminal, the stand-in offers a prompt. Type `snapshot` and press Enter. The
    terminal prints the page as structured text with numbered controls — the same output a DeepSeek

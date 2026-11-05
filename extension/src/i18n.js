@@ -22,6 +22,7 @@ const en = {
 
 
   attachActive: "Attach this tab",
+  attachShort: "Attach",
   attach: "Attach",
   detach: "Detach",
   makeActive: "Make active",
@@ -107,6 +108,7 @@ const fr = {
 
 
   attachActive: "Attacher cet onglet",
+  attachShort: "Attacher",
   attach: "Attacher",
   detach: "Détacher",
   makeActive: "Rendre actif",

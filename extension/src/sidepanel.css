@@ -132,7 +132,7 @@ select {
 .small[disabled] { opacity: .45; cursor: default; }
 .small[aria-expanded="true"] { border-color: var(--busy); }
 
-.target { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.target { flex: 1 1 42%; min-width: 0; display: flex; align-items: center; gap: 4px; font-size: 11px; }
 .target .none { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .target .current {
   min-width: 0;
@@ -277,13 +277,19 @@ input {
   border-radius: 6px;
   font: 11px/1.45 ui-monospace, "Cascadia Mono", Menlo, monospace;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
   color: var(--text);
 }
 
 .pair { display: flex; gap: 5px; }
 .pair[hidden] { display: none; }
 .pair input { flex: 1; min-width: 0; }
+
+/* A narrow side panel (Chrome's can be about 320 pixels): less padding, the same content. */
+@media (max-width: 360px) {
+  .stage { padding: 12px 8px; }
+  .card, .sheet { padding: 12px; }
+}
 
 .foot {
   padding: 6px 10px 8px;

@@ -28,7 +28,7 @@ HOW IT WORKS
 1. Install the companion into a DeepSeek Harness profile: dsh plugin --profile web add @corsen-ai/dsh-browser-connector
 2. Start DeepSeek Harness — the connector starts its local broker by itself — and print the pairing code: dsh plugin --profile web exec dsh-connector-broker --pairing-code
 3. Type that code once into this extension's side panel. Its setup card says whether the connector is reachable and shows these commands for your system.
-4. Pick a session, open the tab you want it to work in, and press "Attach this tab".
+4. Pick a session, open the tab you want it to work in, and press "Attach".
 
 The panel always shows the route in plain words: DeepSeek session → Chrome profile → attached tabs. If an action cannot run, the panel says why — not paired, no session selected, no tab attached, connector unreachable, versions mismatched.
 
@@ -80,7 +80,7 @@ COMMENT ÇA MARCHE
 1. Installez le compagnon dans un profil DeepSeek Harness : dsh plugin --profile web add @corsen-ai/dsh-browser-connector
 2. Démarrez DeepSeek Harness — le connecteur lance son broker local tout seul — puis affichez le code d'appairage : dsh plugin --profile web exec dsh-connector-broker --pairing-code
 3. Saisissez ce code une seule fois dans le panneau latéral de cette extension. Sa carte d'installation indique si le connecteur est joignable et montre ces commandes pour votre système.
-4. Choisissez une session, ouvrez l'onglet où elle doit travailler, puis appuyez sur « Attacher cet onglet ».
+4. Choisissez une session, ouvrez l'onglet où elle doit travailler, puis appuyez sur « Attacher ».
 
 Le panneau montre toujours le chemin en toutes lettres : session DeepSeek → profil Chrome → onglets attachés. Si une action ne peut pas s'exécuter, le panneau dit pourquoi — non appairé, aucune session choisie, aucun onglet attaché, connecteur injoignable, versions incompatibles.
 
