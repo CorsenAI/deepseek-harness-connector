@@ -30,15 +30,18 @@ Until a tab is attached, every browser tool fails with a clear refusal. There is
 whatever tab happens to be active.
 
 Requires Node `^22.19 || >=24`, pnpm on `PATH` (DeepSeek Harness's `dsh plugin` command forwards
-to it and does not install it: `npm install -g pnpm`), and a DeepSeek Harness at or above
-`0.1.2-rc.1`; tested up to `0.1.5-rc.2` (`docs/COMPATIBILITY.md` in the repository lists every
-tested release).
+to it and does not install it: `npm install -g pnpm`), and DeepSeek Harness `0.1.2-rc.1` or later,
+tested through `0.2.2-rc.1`; the `0.3` line is refused until it is tested. The range is declared as
+`engines.dsh`, which DeepSeek Harness 0.2.1 and later check before installing
+(`docs/COMPATIBILITY.md` in the repository lists every tested release).
 
 ## What it does, and what it never does
 
 The plugin registers twenty-one browser tools, one per protocol action: reading a page as text or
 as a screenshot, acting in it, navigating, and managing the session's own tabs. Routing is by
-`(profileId, sessionId)`, so two sessions running at once never reach each other's tabs.
+`(profileId, sessionId)`, so two sessions running at once never reach each other's tabs. DeepSeek
+Harness clients show each call as a titled card ("Open https://…", "Type into e3@2"), and the
+Plugins page shows the package by its own name, description and icon.
 
 It never reads cookies, never uses `chrome.debugger`, and sends nothing to Corsen AI. Passwords,
 one-time codes, payment fields and hidden values are masked inside the page, before anything leaves
