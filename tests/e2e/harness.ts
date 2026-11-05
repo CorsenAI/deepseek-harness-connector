@@ -23,7 +23,7 @@ import { startBroker, type RunningBroker } from '../../companion/src/broker-serv
 import type { StateStore } from '../../companion/src/broker.ts'
 import { fileStateStore } from '../../companion/src/state-store.ts'
 import {
-  attachTab, EXTENSION_DIR, extensionConnected, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
+  attachTab, closeWithin, EXTENSION_DIR, extensionConnected, launchBrowser, pairWith, serveFixtures, settle, tabIdFor, waitFor,
 } from './browser.ts'
 
 // The browser-only helpers are re-exported so every suite keeps one import.
@@ -172,7 +172,10 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
 
     close: async () => {
       for (const client of agents) client.dispose()
-      await harness.context.close()
+      // Bounded: a browser whose close wedges (seen on the Windows ARM64 VM, the x64 Chrome under
+      // emulation) must not hold a finished suite. relaunchChrome keeps the plain close, because
+      // it launches again on the same profile directory.
+      await closeWithin(harness.context)
       await harness.broker.close()
       await files.close()
       // Chrome can hold profile files for a moment after it exits, especially on Windows; a
