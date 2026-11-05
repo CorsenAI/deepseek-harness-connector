@@ -18,7 +18,7 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
 Chrome extension with all twenty-one browser actions, the installers, and the release packaging work
-end to end and are covered by 389 tests: 295 unit and protocol tests, 17 cases running the shipped
+end to end and are covered by 392 tests: 298 unit and protocol tests, 17 cases running the shipped
 page module in a real Chrome, and 77 real-browser end-to-end cases — multi-session isolation, a
 page built to leak hidden content, a page built to give a model instructions, an attached tab that
 changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
@@ -38,8 +38,8 @@ three platforms with the official Node.js builds. The Store listing, screenshots
 
 `docs/TEST-MATRIX.md` lists every release gate and its honest state. The privacy policy is live at
 [corsen.ai/privacy/deepseek-harness-connector](https://corsen.ai/privacy/deepseek-harness-connector/).
-What remains needs the owner: a GitHub remote for the CI lanes, the npm publication, and the
-Store submission itself. A turn with a real provider key instead of the scripted one is a one-line
+What remains needs the owner: a GitHub remote for the CI lanes, the GitHub release that serves the
+companion tarball, and the Store submission itself. A turn with a real provider key instead of the scripted one is a one-line
 change of the provider endpoint.
 
 ## What it does
@@ -76,14 +76,20 @@ installers check for all three before creating anything.
 **1. Install the connector into a DeepSeek Harness profile.**
 
 ```bash
-dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz
 ```
 
-That is the whole local installation. The package declares `dsh.bundle.patch`, so DeepSeek Harness
-adds it to the profile's layer stack by itself — no YAML to edit. It also declares the DeepSeek
-Harness versions it supports (`engines.dsh`), so DeepSeek Harness 0.2.1 and later refuse an
-incompatible pairing at this step, with their own message, instead of failing later; and it shows in
-DeepSeek Harness's Plugins page under its own name, description and icon.
+The companion is a tarball on the project's GitHub release of the same version — not on a package
+registry ([ADR 0011](docs/adr/0011-release-tarball-distribution.md)); `dsh plugin add` downloads it
+as it downloads any tarball URL, and the extension's setup card shows this exact command for its own
+version, with a Copy button. That is the whole local installation. The package declares
+`dsh.bundle.patch`, so DeepSeek Harness adds it to the profile's layer stack by itself — no YAML to
+edit. It also declares the DeepSeek Harness versions it supports (`engines.dsh`), so DeepSeek Harness
+0.2.1 and later refuse an incompatible pairing at this step — once downloaded, with their own
+message, and the profile restored — instead of failing later; and it shows in DeepSeek Harness's
+Plugins page under its own name, description and icon. A newer release is the same command with the
+newer version's URL: a tarball dependency is pinned to its URL, and `dsh plugin update` does not
+move it.
 
 **2. Start DeepSeek Harness** (`dsh web`, or any profile the connector is installed in). The
 connector starts its local broker by itself when nothing is listening on the port, as a detached
@@ -203,7 +209,7 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 295 tests, no browser needed
+npm run test:unit    # 298 tests, no browser needed
 npm run test:page    # 17 tests, the shipped page module in a real Chrome for Testing
 npm run test:e2e     # 77 tests, real Chrome with the extension loaded
 ```
@@ -244,7 +250,7 @@ one depends on what you need. As of 2026-11-05, from each project's own public l
 | How it drives Chrome | scripts in the tabs you attach; no `debugger` | scripts in the tab it controls | the Chrome DevTools Protocol | not stated; page text and numbered controls |
 | Which tab a session acts in | only tabs you attached to that exact session; one owner per tab; a call without a session fails | binds to the active tab when work begins; pauses and asks when you switch tabs | the tabs you direct it to | the tab you selected |
 | DeepSeek Harness surfaces | any profile it is installed in — `web`, `headless`, `sdk`, `acp` — through its own local broker (live turns tested with the one-shot `headless`) | `dsh web` (the bridge rides the Web host) | `dsh web` with its companion plugin | the DeepSeek Harness desktop app |
-| Installation | `dsh plugin add` from npm; DeepSeek Harness checks `engines.dsh` | an installer script that builds the repository | a separate DeepSeek Harness plugin, then the Store extension | the full GitHub project, then the extension |
+| Installation | one `dsh plugin add` of the release tarball; DeepSeek Harness checks `engines.dsh` | an installer script that builds the repository | a separate DeepSeek Harness plugin, then the Store extension | the full GitHub project, then the extension |
 | Chat in the browser | no — you talk to DeepSeek Harness where you run it | yes, side panel | yes, side panel | yes, side panel |
 | Approving actions | attaching a tab to a session is the consent; no per-action prompt of its own | per action, with per-origin trust | not stated | optional ("act directly" is on by default) |
 | Screenshots | yes, to a vision model, through DeepSeek Harness's attachment service | no, text only | yes | no, text only |

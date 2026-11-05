@@ -25,7 +25,7 @@ Let an exact DeepSeek Harness session operate the tabs you choose, in your own s
 DeepSeek Harness Connector lets one exact DeepSeek Harness session — running on your own computer — read and act in the browser tabs you explicitly attach to it, inside the Chrome profile you are already signed in to. No hidden automation browser, no guessing which tab belongs to which task.
 
 HOW IT WORKS
-1. Install the companion into a DeepSeek Harness profile: dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+1. Install the companion into a DeepSeek Harness profile with the one dsh plugin add command the panel shows for your version — it downloads the companion from the project's release page
 2. Start DeepSeek Harness — the connector starts its local broker by itself — and print the pairing code: dsh plugin --profile web exec dsh-connector-broker --pairing-code
 3. Type that code once into this extension's side panel. Its setup card says whether the connector is reachable and shows these commands for your system.
 4. Pick a session, open the tab you want it to work in, and press "Attach".
@@ -77,7 +77,7 @@ Une session DeepSeek Harness précise agit dans les onglets que vous choisissez,
 Le Connecteur DeepSeek Harness permet à une session DeepSeek Harness précise — qui tourne sur votre propre ordinateur — de lire et d'agir dans les onglets que vous lui attachez explicitement, dans le profil Chrome où vous êtes déjà connecté. Pas de navigateur d'automatisation caché, pas de devinette sur l'onglet qui appartient à quelle tâche.
 
 COMMENT ÇA MARCHE
-1. Installez le compagnon dans un profil DeepSeek Harness : dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+1. Installez le compagnon dans un profil DeepSeek Harness avec la commande dsh plugin add que le panneau affiche pour votre version — elle télécharge le compagnon depuis la page de publication du projet
 2. Démarrez DeepSeek Harness — le connecteur lance son broker local tout seul — puis affichez le code d'appairage : dsh plugin --profile web exec dsh-connector-broker --pairing-code
 3. Saisissez ce code une seule fois dans le panneau latéral de cette extension. Sa carte d'installation indique si le connecteur est joignable et montre ces commandes pour votre système.
 4. Choisissez une session, ouvrez l'onglet où elle doit travailler, puis appuyez sur « Attacher ».

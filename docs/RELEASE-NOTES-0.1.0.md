@@ -16,7 +16,7 @@ you are already signed in to. Two parts, released together at the same version:
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
 | `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `6da42e5736d6de7f50c6f612182fda17a1c89a676ddd443bebf6d4938d6b4f23` | 71418 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `9243ae53fbcaad4e44329da738e6dd5ab614992b470befb75b1068f872428da7` | 79882 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, the package `@corsen-ai/dsh-browser-connector` — served by this release, not by a package registry (ADR 0011) | `9243ae53fbcaad4e44329da738e6dd5ab614992b470befb75b1068f872428da7` | 79882 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows with the official Node.js builds. `SHA256SUMS` and
 `release-manifest.json` accompany them.
@@ -26,9 +26,11 @@ Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows 
 Requires DeepSeek Harness (`dsh`), Node.js 22.19 or newer, and pnpm on `PATH`.
 
 ```bash
-dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz
 dsh plugin --profile web exec dsh-connector-broker --pairing-code
 ```
+
+The extension's setup card shows the first command for its own version, with a Copy button.
 
 Start DeepSeek Harness — the connector starts its local broker by itself when nothing is listening
 — install the extension from the Chrome Web Store, open its side panel, type the pairing code once,
@@ -71,7 +73,7 @@ naming the stored file.
 
 ### Evidence
 
-389 tests: 295 unit and protocol, 17 on the shipped page module in a real Chrome, 77 real-browser
+392 tests: 298 unit and protocol, 17 on the shipped page module in a real Chrome, 77 real-browser
 end-to-end — multi-session isolation, a page built to leak hidden content, a page built to give a
 model instructions, web components read and clicked through open shadow roots, an attached tab
 that changes site mid-task, recovery from a killed worker, a restarted broker, a replaced agent, a

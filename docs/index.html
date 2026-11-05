@@ -37,8 +37,9 @@
 
 <h2 id="install">Install</h2>
 <p>Requires DeepSeek Harness (<code>dsh</code>), Node.js 22.19 or newer, and pnpm on <code>PATH</code> (<code>dsh plugin</code> forwards to it: <code>npm install -g pnpm</code>).</p>
-<pre><code>dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+<pre><code>dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz
 dsh plugin --profile web exec dsh-connector-broker --pairing-code</code></pre>
+<p>The companion is the tarball on this project's release of the same version; <code>dsh plugin add</code> downloads it like any tarball URL, and the extension's setup card shows this command for its own version. A newer release is the same command with the newer URL.</p>
 <p>Start DeepSeek Harness — the connector starts its local broker by itself when nothing is listening — then install the Chrome extension from the Chrome Web Store, open its side panel, type the pairing code once, pick your session, and press <strong>Attach</strong>. The panel's setup card says whether the connector is reachable and shows these commands for your system. Installers that do all of this and print the code are in the repository (<code>scripts/install.sh</code>, <code>scripts/Install Connector.cmd</code>).</p>
 
 <h2>Compatibility</h2>

@@ -106,10 +106,13 @@ node --experimental-strip-types scripts/capture-screenshots.ts   # the Store scr
 
 ## Publishing
 
-Publishing to npm and submitting to the Chrome Web Store are **manual actions requiring explicit
-owner authorization**. This repository prepares everything for them and performs neither.
+Creating the GitHub release and submitting to the Chrome Web Store are **manual actions requiring
+explicit owner authorization**. This repository prepares everything for them and performs neither.
 
-- npm: `npm publish --access public` from `companion/` at the tag.
+- GitHub release of the tag: the ZIP, the tarball `corsen-ai-dsh-browser-connector-<version>.tgz`,
+  `SHA256SUMS` and `release-manifest.json`. The tarball's URL on that release is what the extension's
+  setup card and both installers name (ADR 0011), so it must be public **before** the Store
+  submission; the companion is not published to npm.
 - Chrome Web Store: upload the ZIP through the developer dashboard, using the material in `store/`.
 
 ## After publishing
@@ -124,8 +127,9 @@ owner authorization**. This repository prepares everything for them and performs
 
 ## Rolling back
 
-An extension version cannot be un-published from the Store, only superseded. A package version can
-be deprecated on npm but not removed. Because the protocol version is checked for equality, an
+An extension version cannot be un-published from the Store, only superseded. A release's tarball
+stays on GitHub: a bad one is superseded by a new release, and the setup card of the new extension
+names the new URL. Because the protocol version is checked for equality, an
 extension that outruns the package produces a clear "update required" state rather than undefined
 behaviour — that is the rollback safety net, and why the mismatch check must never be softened.
 
@@ -133,9 +137,9 @@ behaviour — that is the rollback safety net, and why the mismatch check must n
 
 Nothing this project ships is a native executable, so **no signing certificate is required today**:
 
-- The companion is an npm package (`@corsen-ai/dsh-browser-connector`) of plain JavaScript that
-  runs under the user's own Node.js, installed by `dsh plugin ... add`. It is the same trust model
-  as DeepSeek Harness itself, which is also an npm package. macOS Gatekeeper and notarization apply
+- The companion is a package (`@corsen-ai/dsh-browser-connector`, a tarball on the GitHub release)
+  of plain JavaScript that runs under the user's own Node.js, installed by `dsh plugin ... add`. It
+  is the same trust model as DeepSeek Harness itself, which is an npm package. macOS Gatekeeper and notarization apply
   to Mach-O binaries, `.app` bundles, and `.pkg` installers, none of which exist here.
 - The Chrome extension is signed by the Chrome Web Store at publication; nothing is signed locally.
 

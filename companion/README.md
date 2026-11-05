@@ -10,11 +10,14 @@ DeepSeek.
 ## Install
 
 ```bash
-dsh plugin --profile web add @corsen-ai/dsh-browser-connector
+dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz
 ```
 
-That is the whole installation. The package declares `dsh.bundle.patch`, so DeepSeek Harness adds it
-to the profile's layer stack itself; there is no YAML to edit.
+The package is served as a tarball from the project's GitHub release of the same version, not from
+a package registry; `dsh plugin add` downloads it like any tarball URL, and the Chrome extension's
+setup card shows this command for its own version. That is the whole installation. The package
+declares `dsh.bundle.patch`, so DeepSeek Harness adds it to the profile's layer stack itself; there
+is no YAML to edit. A newer release is the same command with the newer version's URL.
 
 Then start DeepSeek Harness. The plugin starts the local broker by itself when nothing is
 listening on the port (a detached process that outlives the session; `autoStartBroker: false` in

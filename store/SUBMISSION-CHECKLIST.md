@@ -42,6 +42,7 @@ explicit owner authorization** — this repository prepares it and does not perf
 | Store icon 128×128 | done | `extension/assets/icon-128.png` |
 | Support URL | `https://corsenai.github.io/deepseek-harness-connector/support/` (and GitHub issues) | needs the remote and Pages |
 | Homepage URL | `https://corsenai.github.io/deepseek-harness-connector/` | needs the remote and Pages |
+| Companion tarball URL | `https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz` — what the setup card and the installers name (ADR 0011) | needs the GitHub release `v0.1.0` with the tarball attached, **public before submission**: a reviewer who follows the card must be able to install |
 
 ## Before pressing submit
 
