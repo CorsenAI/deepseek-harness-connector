@@ -69,6 +69,9 @@ Web Store item are published by the owner only.
 
 ## Repository administration
 
-`CODEOWNERS` routes reviews; it does not protect `main` by itself. An administrator should enable a
-ruleset that requires pull requests and the CI checks, and blocks force-pushes and branch deletion,
-and enable private vulnerability reporting (Settings → Security) so the link in `SECURITY.md` works.
+`CODEOWNERS` routes reviews; it does not protect `main` by itself. Two rulesets do, active since
+2026-11-05: one blocks force-pushes and the deletion of `main` for everyone, the administrator
+included; the other requires a pull request and the CI checks — every release-gating job and
+CodeQL, not the advisory `upstream` lane — and only the repository's administrator may bypass it,
+for maintenance commits. Private vulnerability reporting is enabled, so the link in `SECURITY.md`
+works.

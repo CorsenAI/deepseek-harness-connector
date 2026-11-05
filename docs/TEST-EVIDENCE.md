@@ -1689,3 +1689,9 @@ github.com URL is checked (above). What remains is Google's review.
   `57c2bbd`: **16 of 16 jobs passed**, that lane included.
 - The four directory submissions were filed on the owner's go (`marketing/LAUNCH-KIT.md` has the
   links).
+- `main` is protected by two rulesets, on the owner's go (`gh api -X POST repos/…/rulesets`):
+  "main: no force-push, no deletion" (`deletion`, `non_fast_forward`; no bypass actor) and
+  "main: pull requests and CI checks" (`pull_request` with no required approval — a single
+  maintainer — and `required_status_checks` on the sixteen gating checks, CodeQL included; bypass:
+  the repository administrator role, always). `GET repos/…/rules/branches/main` lists the four
+  rules as applying to `main`.
