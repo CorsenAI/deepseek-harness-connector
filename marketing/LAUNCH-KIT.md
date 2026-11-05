@@ -65,6 +65,16 @@ would install nothing useful.
 5. **Chrome Web Store** — the listing itself (`store/LISTING.md`), category Developer Tools, with
    the five screenshots and the tiles.
 
+### Submitted on 2026-11-05 (as CorsenAI, the owner's go)
+
+- dsh-plugin.org — https://github.com/dshplugin/dsh-plugin-hub/issues/640
+- awesome-dsh-plugins — https://github.com/kejixiaoliang/awesome-dsh-plugins/issues/193
+- HackSing/dsh-plugins — https://github.com/HackSing/dsh-plugins/issues/356
+- awesome-deepseek-harness (wiki table) — https://github.com/awesome-deepseekharness/awesome-deepseek-harness/issues/223
+- `0xsline/awesome-deepseek-harness` — indexes the `dsh-plugin` topic by itself (set on the repository)
+- Still the owner's: dshplugins.com (Google sign-in), the Discussions post (their voice);
+  `Fishsb/awesome-dsh-plugin` takes pull requests only (issues are off)
+
 ### dsh-plugin.org issue, filled
 
 Title:
