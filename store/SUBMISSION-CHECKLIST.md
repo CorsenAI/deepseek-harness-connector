@@ -47,8 +47,8 @@ explicit owner authorization** — this repository prepares it and does not perf
 ## Before pressing submit
 
 - [ ] All release-blocking gates in `docs/TEST-MATRIX.md` pass with evidence at the release tag.
-- [ ] The GitHub remote exists, CI has run green on it, and the privacy page is live at a public URL.
-- [ ] The npm package for the same version is published first, so a reviewer can install it.
+- [ ] The GitHub remote exists and CI has run green on it; the privacy page is live (`https://corsen.ai/privacy/deepseek-harness-connector/`, 2026-11-05).
+- [ ] The GitHub release of the same version is public first, with the companion tarball attached at the URL the setup card names, so a reviewer can install it (ADR 0011).
 - [ ] The ZIP hash matches `release-manifest.json` in the GitHub release.
 - [ ] Owner authorization recorded for this specific submission.
 
