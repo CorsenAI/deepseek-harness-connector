@@ -46,11 +46,11 @@ explicit owner authorization** — this repository prepares it and does not perf
 
 ## Before pressing submit
 
-- [ ] All release-blocking gates in `docs/TEST-MATRIX.md` pass with evidence at the release tag.
-- [ ] The GitHub remote exists and CI has run green on it; the privacy page is live (`https://corsen.ai/privacy/deepseek-harness-connector/`, 2026-11-05).
-- [ ] The GitHub release of the same version is public first, with the companion tarball attached at the URL the setup card names, so a reviewer can install it (ADR 0011).
-- [ ] The ZIP hash matches `release-manifest.json` in the GitHub release.
-- [ ] Owner authorization recorded for this specific submission.
+- [x] All release-blocking gates in `docs/TEST-MATRIX.md` pass with evidence at the release tag (2026-11-05, `v0.1.0`).
+- [x] The GitHub remote exists and CI has run green on it; the privacy page is live (`https://corsen.ai/privacy/deepseek-harness-connector/`, 2026-11-05).
+- [x] The GitHub release of the same version is public first, with the companion tarball attached at the URL the setup card names, so a reviewer can install it (ADR 0011) — `v0.1.0`, installed from that URL by the real `dsh` 0.2.1-rc.5 and 0.2.2-rc.1.
+- [x] The ZIP hash matches `release-manifest.json` in the GitHub release (`00a5b09e…`).
+- [x] Owner authorization recorded for this specific submission (2026-11-05: the owner asked for the publication and submitted the item, `ijhbmlkdfafhemdadhnmoigmimkdpcjn`, pending review).
 
 ## Positioning
 

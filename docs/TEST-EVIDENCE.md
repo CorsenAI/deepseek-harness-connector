@@ -1599,3 +1599,75 @@ channel) passes. Z: partial at the tag — the hosted run starts with the first 
 - DeepSeek Harness Desktop's own profile; a native x64 Windows machine.
 - That github.com serves the tarball exactly as the loopback stand-in does: the stand-in answers
   the 302 github.com answers; the real URL is checked once the release exists (the commit that follows the tag).
+
+## 2026-11-05 — the publication of 0.1.0 (after the tag `v0.1.0`, commit `f224d08`)
+
+**Why.** The owner decided to publish: the GitHub repository and release, the Chrome Web Store
+submission, the DeepSeek Harness directories. The repository could only be created from the tagged
+commit, so what happened after it is recorded here.
+
+### GitHub
+
+From the Mac, where `gh` is signed in as CorsenAI, with `.scratch/lanes/mac-publish.sh` and a `git
+bundle` of `main` and the tag made on the development machine (2026-11-05T09:04Z):
+
+```
+gh repo create CorsenAI/deepseek-harness-connector --public --source . --push   # main = v0.1.0 = f224d08
+git push origin refs/tags/v0.1.0
+gh repo edit … --add-topic dsh-plugin,deepseek-harness,deepseek,chrome-extension,browser-extension,
+   chrome-side-panel,manifest-v3,browser-automation,browser-control,ai-agent,ai-browser-agent,web-agent,local-first
+gh api -X POST repos/…/pages  (source main, /docs)       # https://corsenai.github.io/deepseek-harness-connector/
+gh api -X PUT repos/…/private-vulnerability-reporting    # enabled
+gh release create v0.1.0 <ZIP> <tarball> SHA256SUMS release-manifest.json --prerelease --verify-tag
+   # pre-release until the Store listing is public, as Hermes Connector's releases were
+```
+
+The four assets on the release: `dsh-browser-connector-extension-0.1.0.zip` 72311 bytes,
+`corsen-ai-dsh-browser-connector-0.1.0.tgz` 80015 bytes, `SHA256SUMS` 216, `release-manifest.json`
+1082 — built from the tagged commit, hashes `00a5b09e…` and `6592b040…` as on all three platforms.
+`https://corsenai.github.io/deepseek-harness-connector/`, `/support/` and `/privacy/`, and
+`https://corsen.ai/privacy/deepseek-harness-connector/`: 200.
+
+### The real release URL, installed by the real DeepSeek Harness
+
+`dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz`
+— the command the setup card prints — into a scratch `DSH_HOME` on Ubuntu:
+
+- **09:05:41Z, first attempt, about a minute after the release was created**: github.com answered
+  the asset with `504` (a 92-byte body); `dsh` 0.2.1-rc.5's install failed on that answer, and
+  0.2.2-rc.1's, ten seconds later, passed. Recorded as it came.
+- **09:08:32Z**: `302` to the asset store, `200`, 80015 bytes, SHA-256 `6592b040…` — identical to
+  `SHA256SUMS` and to the built artifact; `dsh` 0.2.1-rc.5 and 0.2.2-rc.1 each installed it
+  (`+ @corsen-ai/dsh-browser-connector <the URL>`), the broker present, the URL recorded as the
+  profile's dependency, the bundle in the `web` profile's stack, then `dsh plugin remove` left
+  nothing.
+
+### The first hosted CI run (gate Z)
+
+`CI` on the push of `main` at `f224d08`: **success**. Every release-gating job
+passed — unit, protocol, security on ubuntu, macos and windows; real browser on ubuntu and windows;
+package and verify; installer on ubuntu, macos and windows; the released pair in a real DeepSeek
+Harness on the `released` (npm `latest`), `next` and `minimum` (0.1.2-rc.1) lanes; real DeepSeek
+Harness `released` and `next`; provenance audit. The `upstream` lane (DeepSeek Harness built from its
+default branch) failed; it runs with `continue-on-error` by design and gates nothing. `CodeQL` on the
+same push: success.
+
+Dependabot opened five pull requests on the first scan; none is merged: `ws` 8.21.3 → 8.22.1 and
+`playwright` 1.63.0 → 1.64.1 pass every gating job; `@types/node` 22 → 26 and `typescript`
+5.9.3 → 7.0.2 (in `companion/`) fail the unit jobs (the typecheck); `@types/chrome` 0.2.9 → 0.3.7
+fails "package and verify". They are maintenance for the next version.
+
+### Chrome Web Store
+
+The owner created the item and submitted it from the developer dashboard (the dashboard cannot be
+scripted: Chrome refuses extension scripting on the Store), with the files and texts of
+`store/` (`store/DASHBOARD-WALKTHROUGH.md`): item `ijhbmlkdfafhemdadhnmoigmimkdpcjn`, version 0.1.0,
+2026-11-05, state **"En attente d'examen"** (pending review). The dashboard showed its standard
+notice for `<all_urls>` (consider `activeTab` or listed sites; the review may take longer);
+unchanged, per ADR 0009, with the host-permission justification of `store/PERMISSION-JUSTIFICATIONS.md`.
+The listing will be `https://chromewebstore.google.com/detail/ijhbmlkdfafhemdadhnmoigmimkdpcjn`.
+
+### Gates after this section
+
+Z passes: every lane has run by hand on three platforms and on GitHub's hosted runners. BA's real
+github.com URL is checked (above). What remains is Google's review.
