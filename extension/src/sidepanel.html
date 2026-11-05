@@ -7,109 +7,111 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <header class="bar">
-    <span class="mark" aria-hidden="true"></span>
-    <div class="bar-text">
-      <h1 id="product">DeepSeek Harness Connector</h1>
-      <p class="by" id="byline">by Corsen AI &middot; unofficial</p>
-    </div>
-    <button id="settings-toggle" class="ghost" type="button" aria-expanded="false">
-      <span data-i18n="settings">Settings</span>
-    </button>
+  <!-- One strip says where things stand: the dot's colour and one short line. Chrome's own side-panel
+       title above it already names the product and its publisher. -->
+  <header class="strip">
+    <span id="dot" class="dot" data-tone="busy" aria-hidden="true"></span>
+    <strong class="brand">DeepSeek Harness</strong>
+    <button id="settings-toggle" class="icon" type="button" aria-expanded="false" aria-controls="settings"
+            data-i18n-label="settings">&#9881;</button>
+    <span id="status" class="headline" role="status" aria-live="polite"></span>
   </header>
 
-  <!-- One status band, whose contents the panel replaces per state. Keeping a single region means
-       the user always looks in the same place to learn why an action did not run. -->
-  <section id="status" class="status" role="status" aria-live="polite"></section>
-
-  <!-- First run: what to install and whether the local connector is there yet. Shown whenever the
-       pairing form is, gone once paired. The commands are the same on every system; the installer
-       name and the wording follow the platform Chrome reports. -->
-  <section id="onboarding" class="card" hidden>
-    <h2 data-i18n="onboardingTitle">Set up in three steps</h2>
-    <p id="onboarding-detection" class="detection" data-tone="idle"></p>
-    <ol class="steps">
-      <li>
-        <span id="onboarding-step-install"></span>
-        <div class="cmd"><code id="cmd-install"></code><button type="button" class="ghost copy" data-copy="cmd-install" data-i18n="copy">Copy</button></div>
-      </li>
-      <li><span data-i18n="onboardingStepStart">Start DeepSeek Harness — for example dsh web. The connector starts its local broker by itself.</span></li>
-      <li>
-        <span data-i18n="onboardingStepCode">Print the pairing code, then type it below:</span>
-        <div class="cmd"><code id="cmd-code"></code><button type="button" class="ghost copy" data-copy="cmd-code" data-i18n="copy">Copy</button></div>
-        <p id="onboarding-installer" class="hint"></p>
-      </li>
-    </ol>
-    <div class="row">
-      <button type="button" id="onboarding-check" class="ghost" data-i18n="onboardingCheck">Check again</button>
-      <a id="onboarding-docs" class="linkish" href="https://github.com/CorsenAI/deepseek-harness-connector#installing" target="_blank"
-         rel="noreferrer noopener" data-i18n="onboardingDocs">Installation guide</a>
+  <!-- The route, compactly: which session, which tab it acts in, and the one line that says why an
+       action would not run. The product's whole value is that the user never has to guess which
+       session controls which tab (ADR 0008). -->
+  <section id="sessions" class="scope" hidden>
+    <div class="scope-row">
+      <select id="session-select" data-i18n-label="sessionSelectLabel"></select>
+      <button id="refresh" class="small" type="button" data-i18n-label="refresh">&#8635;</button>
     </div>
+    <div id="route" class="scope-row" hidden>
+      <div id="target" class="target"></div>
+      <button id="attach-active" class="small primary" type="button" data-i18n="attachActive">Attach this tab</button>
+      <button id="choose-tabs" class="small" type="button" aria-expanded="false" aria-controls="tab-picker">
+        <span data-i18n="tabsButton">Tabs</span><span id="tab-count"></span>
+      </button>
+      <button id="about-toggle" class="small" type="button" aria-expanded="false" aria-controls="about"
+              data-i18n-label="aboutLabel">&#9432;</button>
+    </div>
+    <p id="detail" class="detail"></p>
   </section>
 
-  <form id="pairing" class="card" hidden>
-    <h2 data-i18n="pairTitle">Pair with your local connector</h2>
-    <p class="hint" data-i18n="pairHint">
-      Run the installer, then type the pairing code it printed.
-    </p>
-    <label for="pairing-code" data-i18n="pairingCodeLabel">Pairing code</label>
-    <!-- The placeholder uses zeros, which the pairing alphabet excludes, so it can never be mistaken
-         for a real code by a reader or by the release leak scanner. -->
-    <input id="pairing-code" name="pairing-code" autocomplete="off" spellcheck="false"
-           placeholder="0000-0000-0000-0000-0000" inputmode="latin" required>
-    <p id="pairing-error" class="error" hidden></p>
-    <button type="submit" class="primary" data-i18n="pairAction">Pair</button>
-  </form>
+  <div id="tab-picker" class="popover" role="dialog" data-i18n-label="tabsButton" hidden>
+    <p class="popover-title" data-i18n="pickerAttached">This session's tabs</p>
+    <ul id="attached-list" class="rows"></ul>
+    <p class="popover-title" data-i18n="pickerOthers">Attach another tab</p>
+    <ul id="tab-list" class="rows"></ul>
+  </div>
 
-  <form id="settings" class="card" hidden>
-    <h2 data-i18n="settingsTitle">Settings</h2>
+  <div id="about" class="popover prose" role="dialog" data-i18n-label="aboutLabel" hidden>
+    <p data-i18n="aboutAccess"></p>
+    <p data-i18n="aboutData"></p>
+    <p class="fine" data-i18n="aboutPublisher"></p>
+  </div>
+
+  <form id="settings" class="popover" role="dialog" data-i18n-label="settings" hidden>
     <label for="broker-url" data-i18n="brokerUrlLabel">Connector address</label>
     <input id="broker-url" name="broker-url" autocomplete="off" spellcheck="false">
-    <p class="hint" data-i18n="brokerUrlHint">
-      Change this only if you changed the connector's port.
-    </p>
+    <p class="fine" data-i18n="brokerUrlHint">Change this only if you changed the connector's port.</p>
     <label for="settings-code" data-i18n="pairingCodeLabel">Pairing code</label>
-    <input id="settings-code" name="settings-code" autocomplete="off" spellcheck="false">
-    <div class="row">
-      <button type="submit" class="primary" data-i18n="save">Save</button>
-      <button type="button" id="reconnect" class="ghost" data-i18n="reconnect">Reconnect</button>
+    <input id="settings-code" name="settings-code" type="password" autocomplete="off" spellcheck="false">
+    <div class="actions">
+      <button type="submit" class="small primary" data-i18n="save">Save</button>
+      <button type="button" id="reconnect" class="small" data-i18n="reconnect">Reconnect</button>
+      <a id="help" class="link" href="https://github.com/CorsenAI/deepseek-harness-connector#readme" target="_blank"
+         rel="noreferrer noopener" data-i18n="help">Help</a>
     </div>
-    <p class="meta" id="version-line"></p>
+    <p class="fine" id="version-line"></p>
   </form>
 
-  <section id="sessions" class="card" hidden>
-    <h2 data-i18n="sessionsTitle">DeepSeek Harness sessions</h2>
-    <p class="hint" id="sessions-hint" data-i18n="sessionsHint">
-      Choose the session that should control your tabs.
-    </p>
-    <ul id="session-list" class="list"></ul>
-  </section>
+  <main class="stage">
+    <!-- First run: what to install, whether the local connector is there yet, and the code. Shown
+         whenever the pairing form is, gone once paired. The commands are the same on every system;
+         the installer name and the wording follow the platform Chrome reports. -->
+    <section id="onboarding" class="sheet" hidden>
+      <strong class="sheet-title" data-i18n="onboardingTitle">Set up in three steps</strong>
+      <p id="onboarding-detection" class="detection" data-tone="idle"></p>
+      <ol class="steps">
+        <li>
+          <span id="onboarding-step-install"></span>
+          <div class="cmd"><code id="cmd-install"></code><button type="button" class="small copy" data-copy="cmd-install" data-i18n="copy">Copy</button></div>
+        </li>
+        <li><span data-i18n="onboardingStepStart">Start DeepSeek Harness — for example dsh web. The connector starts its local broker by itself.</span></li>
+        <li>
+          <span data-i18n="onboardingStepCode">Print the pairing code, then type it below:</span>
+          <div class="cmd"><code id="cmd-code"></code><button type="button" class="small copy" data-copy="cmd-code" data-i18n="copy">Copy</button></div>
+        </li>
+      </ol>
+      <form id="pairing" class="pair" hidden>
+        <!-- The placeholder uses zeros, which the pairing alphabet excludes, so it can never be mistaken
+             for a real code by a reader or by the release leak scanner. -->
+        <input id="pairing-code" name="pairing-code" autocomplete="off" spellcheck="false"
+               placeholder="0000-0000-0000-0000-0000" inputmode="latin" required data-i18n-label="pairingCodeLabel">
+        <button type="submit" class="small primary" data-i18n="pairAction">Pair</button>
+      </form>
+      <p id="pairing-error" class="error" hidden></p>
+      <p id="onboarding-installer" class="fine"></p>
+      <div class="actions">
+        <button type="button" id="onboarding-check" class="small" data-i18n="onboardingCheck">Check again</button>
+        <a id="onboarding-docs" class="link" href="https://github.com/CorsenAI/deepseek-harness-connector#installing" target="_blank"
+           rel="noreferrer noopener" data-i18n="onboardingDocs">Installation guide</a>
+      </div>
+    </section>
 
-  <!-- The route, shown literally. The product's whole value is that the user never has to guess
-       which session controls which tab (ADR 0008). -->
-  <section id="route" class="card route" hidden>
-    <h2 data-i18n="routeTitle">What this session controls</h2>
-    <ol class="chain">
-      <li><span class="chain-label" data-i18n="chainSession">DeepSeek session</span><strong id="chain-session"></strong></li>
-      <li><span class="chain-label" data-i18n="chainBrowser">Chrome profile</span><strong id="chain-browser"></strong></li>
-      <li><span class="chain-label" data-i18n="chainTabs">Attached tabs</span><strong id="chain-tabs"></strong></li>
-    </ol>
-    <ul id="attached-list" class="list"></ul>
-    <div class="row">
-      <button type="button" id="attach-active" class="primary" data-i18n="attachActive">Attach this tab</button>
-      <button type="button" id="choose-tabs" class="ghost" data-i18n="chooseTabs">Choose tabs</button>
-    </div>
-    <div id="tab-picker" hidden>
-      <p class="hint" data-i18n="pickerHint">Pick a tab to attach to this session.</p>
-      <ul id="tab-list" class="list"></ul>
-    </div>
-  </section>
+    <!-- Every other state: one card in the middle of the panel, with the reason and the next step.
+         When a session can act, the card is the route itself. -->
+    <section id="card" class="card" hidden>
+      <strong id="card-title"></strong>
+      <p id="route-line" class="route-line" hidden>
+        <span id="route-session"></span><span class="arrow" aria-hidden="true">&#8594;</span><span id="route-browser"></span><span class="arrow" aria-hidden="true">&#8594;</span><span id="route-tabs"></span>
+      </p>
+      <p id="card-detail"></p>
+      <button type="button" id="open-dsh" class="small" hidden data-i18n="openDsh">Open DeepSeek Harness</button>
+    </section>
+  </main>
 
-  <footer class="foot">
-    <button type="button" id="open-dsh" class="ghost" hidden data-i18n="openDsh">Open DeepSeek Harness</button>
-    <a id="help" href="https://github.com/CorsenAI/deepseek-harness-connector#readme" target="_blank"
-       rel="noreferrer noopener" data-i18n="help">Help</a>
-  </footer>
+  <p class="foot" data-i18n="footNotice"></p>
 
   <script type="module" src="sidepanel.js"></script>
 </body>

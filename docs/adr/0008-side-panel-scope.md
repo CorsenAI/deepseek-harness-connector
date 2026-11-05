@@ -57,3 +57,13 @@ change, but nothing is embedded until the questions below are answered with evid
 - "Open DeepSeek Harness" needs the DSH surface's address. The plugin announces its Web address to the
   broker when it is running under a profile that has one; when it is not, the action is hidden rather
   than broken.
+
+## Amendment (2026-11-05): the layout of Corsen's connectors
+
+The panel's content is unchanged; its layout now follows Corsen's Hermes Connector, so the two
+connectors read as one family: a status strip (the dot, the product, the settings gear, the
+connection in one line), one compact strip with the session selector and the tab the session acts
+in, popovers for the tab list, the access notes and the settings, and a single card in the middle
+for whatever the user should know next. The route — session, Chrome profile, attached tabs — is the
+card itself once a session is chosen. Nothing is said twice: the strip carries the connection, the
+card the task.

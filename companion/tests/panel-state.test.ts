@@ -8,6 +8,7 @@
  */
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { PANEL_STATES, classifyProbe, onboardingFor, osFamily, probeUrlFor, resolvePanelState } from '../../extension/src/panel-state.js'
 import { LOCALES, REFERENCE_LOCALE, dictionary, t } from '../../extension/src/i18n.js'
@@ -225,6 +226,17 @@ describe('panel copy', () => {
   it('falls back to the reference locale for an unknown language', () => {
     assert.equal(dictionary('xx'), REFERENCE_LOCALE)
     assert.equal(dictionary('fr-CA'), (LOCALES as Record<string, unknown>)['fr'], 'a region variant shares its language')
+  })
+
+  it('has every key the panel markup names, as text or as an accessible name', () => {
+    // The panel is localized from `data-i18n` and `data-i18n-label` attributes; a key missing from
+    // the dictionary would show the key itself to the user, in every language.
+    const markup = readFileSync(new URL('../../extension/src/sidepanel.html', import.meta.url), 'utf8')
+    const keys = [...markup.matchAll(/data-i18n(?:-label)?="([^"]+)"/g)].map((match) => match[1] as string)
+    assert.ok(keys.length > 20, `found ${keys.length} localized elements`)
+    for (const key of keys) {
+      assert.ok(Object.hasOwn(REFERENCE_LOCALE as Record<string, string>, key), `sidepanel.html names ${key}, which the dictionary lacks`)
+    }
   })
 
   it('returns the key itself for a message that does not exist', () => {
