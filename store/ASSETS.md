@@ -75,4 +75,9 @@ fixture server's port. The promotional tiles were redrawn on 2026-11-05 in the C
 | `brand/corsen-mark.png` (source of the tiles) | 344×373 | 146349 | `dc328f34079643ad2ff76ebd98aeab5299ac9d20dc6305ffd7b953164a191854` |
 
 Environment of that capture: Ubuntu 26.04.1, Chrome for Testing 153.0.8010.12 (Playwright 1.63.0),
-Node v26.8.1, Xvfb.
+Node v26.8.1, headed — on the development machine's own desktop (GNOME on Wayland), not on Xvfb: the
+capture ran through `xvfb-run`, but Chrome for Testing 153 picks its window system from
+`XDG_SESSION_TYPE` and ignored the virtual display until `5cbfba6`. A recapture on the virtual display
+at `5cbfba6` shows the same content with the fonts rasterised differently (software rendering, other
+font fallback) and another fixture port; the committed files, rendered with the desktop's fonts, are
+kept.

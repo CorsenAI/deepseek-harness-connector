@@ -81,8 +81,12 @@ Deadline clock: 73.0 ns per read, 8.6 µs per snapshot at most.
 
 ### 2026-11-05 — the same machine (Ubuntu 26.04.1, Intel Core Ultra 9 285K, Node v26.8.1, Chrome for Testing 153.0.8010.12), commit `e127d3b`
 
-Headed, under Xvfb, after the DeepSeek Harness 0.2 work. The page code is unchanged since the
-measurement above, and so is every byte on the wire; the times are the same within run-to-run noise.
+Headed, after the DeepSeek Harness 0.2 work — and, it turned out, on the development machine's own
+desktop rather than the virtual display: the run went through `xvfb-run`, but Chrome for Testing 153
+chooses its window system from `XDG_SESSION_TYPE`, which names Wayland there, so the window was on
+the GNOME desktop with its GPU and fonts (fixed at `5cbfba6`; the measurement below is on the virtual
+display). The page code is unchanged since the measurement above, and so is every byte on the wire;
+the times are the same within run-to-run noise.
 
 | Task | Runs | Median ms | p95 ms | Min ms | Max ms | Result frame (median B) | Response frame (median B) | Truncated runs |
 |---|---|---|---|---|---|---|---|---|
@@ -97,6 +101,27 @@ measurement above, and so is every byte on the wire; the times are the same with
 | page-large find (last paragraph) | 30 | 9.8 | 18.0 | 9.2 | 23.8 | 172 | 174 | 0 |
 
 Deadline clock: 73.9 ns per read, 8.7 µs per snapshot at most.
+
+### 2026-11-05 — the same machine, commit `5cbfba6`, headed on the virtual display
+
+`xvfb-run --auto-servernum -- node --experimental-strip-types tests/perf/measure.ts --runs 30`, with the
+browser now asking for X11 (`5cbfba6`), so the window is on Xvfb's software-rendered display. The
+medians are a little above the desktop run above — software rendering, no GPU — and the bytes are the
+same.
+
+| Task | Runs | Median ms | p95 ms | Min ms | Max ms | Result frame (median B) | Response frame (median B) | Truncated runs |
+|---|---|---|---|---|---|---|---|---|
+| page-a snapshot | 30 | 2.7 | 4.8 | 2 | 5.1 | 832 | 834 | 0 |
+| page-a read_text | 30 | 4 | 5 | 2.5 | 6.5 | 299 | 301 | 0 |
+| page-a click | 30 | 2.5 | 3.1 | 1.5 | 3.4 | 148 | 150 | 0 |
+| page-a current_url | 30 | 2.6 | 3.1 | 1.9 | 3.1 | 128 | 130 | 0 |
+| page-c snapshot | 30 | 4.7 | 5.9 | 3.4 | 6 | 1013 | 1015 | 0 |
+| page-c find | 30 | 3 | 3.8 | 1.1 | 4.2 | 186 | 188 | 0 |
+| page-large snapshot | 30 | 20.8 | 31.6 | 17.2 | 32 | 64567 | 64569 | 30 |
+| page-large read_text | 30 | 3.5 | 11.4 | 2.6 | 17.3 | 40469 | 40471 | 30 |
+| page-large find (last paragraph) | 30 | 11.4 | 14.1 | 8.9 | 18.3 | 172 | 174 | 0 |
+
+Deadline clock: 72.2 ns per read, at most 118 reads per full-budget snapshot, 8.52 µs per snapshot at most.
 
 ### 2026-09-12 — same machine, Chrome for Testing 153, after the flat-tree walk (open shadow DOM)
 
