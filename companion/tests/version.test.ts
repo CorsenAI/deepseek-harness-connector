@@ -77,9 +77,11 @@ describe('classifying a DeepSeek Harness runtime', () => {
 
   it('describes the range in terms a user can act on', () => {
     const text = supportedRangeText()
-    assert.match(text, new RegExp(SUPPORTED_DSH.minimum.replace(/\./g, '\\.')))
+    // Escape every metacharacter, not only the dot: a version is text to find, not a pattern.
+    const literal = (value: string): RegExp => new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    assert.match(text, literal(SUPPORTED_DSH.minimum))
     assert.match(text, /0\.3\.0 and its prereleases are refused/)
-    assert.match(text, new RegExp(SUPPORTED_DSH.maximumTested.replace(/\./g, '\\.')))
+    assert.match(text, literal(SUPPORTED_DSH.maximumTested))
     assert.match(text, /tested/)
   })
 })

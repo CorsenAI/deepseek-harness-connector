@@ -73,7 +73,12 @@ function stripComments(text, ext) {
   if (ext === ".sh" || ext === ".yml" || ext === ".yaml" || ext === ".py" || ext === ".ps1") {
     return text.replace(/^\s*#.*$/gm, "");
   }
-  if (ext === ".html") return text.replace(/<!--[\s\S]*?-->/g, "");
+  if (ext === ".html") {
+    // Until nothing changes: one pass over "<!<!-- -->-- -->" would leave a comment behind.
+    let previous;
+    do { previous = text; text = text.replace(/<!--[\s\S]*?-->/g, ""); } while (text !== previous);
+    return text;
+  }
   return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\\])\/\/.*$/gm, "$1");
 }
 
