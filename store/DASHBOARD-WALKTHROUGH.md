@@ -30,7 +30,7 @@ the listing URL `https://chromewebstore.google.com/detail/<id>` to record afterw
 | Category | Developer Tools |
 | Language | English |
 | Store icon | `store/store-icon-128.png` (128×128: the Corsen mark with "Corsen AI", the file Hermes Connector uses) |
-| Screenshots (1280×800), in this order | `store/screenshots/01-pair.png`, `02-no-tabs.png`, `03-ready.png`, `04-snapshot.png`, `05-update-required.png` |
+| Screenshots (1280×800, 24-bit RGB without alpha, as the Store requires), in this order | `store/screenshots/01-pair.png`, `02-no-tabs.png`, `03-ready.png`, `04-snapshot.png`, `05-update-required.png` |
 | Small promo tile (440×280) | `store/promo-small-440x280.png` |
 | Marquee promo tile (1400×560) | `store/promo-marquee-1400x560.png` |
 | Official URL | leave empty unless `corsen.ai` is verified for this publisher in Search Console; then `https://corsen.ai/` |
@@ -77,9 +77,10 @@ short description and detailed description are there, character counts included.
 
 **Data usage** — tick, per `DATA-DISCLOSURES.md`:
 
+- Authentication information — yes (the pairing code the user types, kept in this browser profile and never transmitted: only proofs computed from it reach the local connector; declared as Hermes Connector declares its pairing credential)
 - Website content — yes (visible text, structure and controls of attached tabs; screenshots on request)
 - Web history — yes (the URL and title of attached tabs, and of open tabs shown locally in the tab chooser)
-- Everything else (personally identifiable information, health, financial and payment, authentication, personal communications, location, user activity) — no
+- Everything else (personally identifiable information, health, financial and payment, personal communications, location, user activity) — no
 
 **Certifications** — tick all three: not sold to third parties outside the approved use cases;
 not used or transferred for purposes unrelated to the single purpose; not used or transferred to

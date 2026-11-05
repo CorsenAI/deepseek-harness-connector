@@ -65,11 +65,11 @@ fixture server's port. The promotional tiles were redrawn on 2026-11-05 in the C
 
 | File | Size | Bytes | SHA-256 |
 |---|---|---|---|
-| `screenshots/01-pair.png` | 1280×800 | 136164 | `4b8ee82cd6424a0d5ce982777534372829f2bd8394a3bd3970a935bcf345b834` |
-| `screenshots/02-no-tabs.png` | 1280×800 | 115278 | `d7c61a4e7a2eb560ae131b0603f27a7b2b0d406cf4aef0734091f7cba95d6be3` |
-| `screenshots/03-ready.png` | 1280×800 | 114791 | `99f815a2fb108a46f210b73fdec841ef473681083ce024ea89c94bbd53c23a4d` |
-| `screenshots/04-snapshot.png` | 1280×800 | 106066 | `9a51fc6e3b7b598987ac03dc56f831af7aeadf6d2b69e7322142e86a9113e2df` |
-| `screenshots/05-update-required.png` | 1280×800 | 122872 | `166d86a27997865e8fff5fa59e865f7c523c46a255d9de77c6495766cde7c542` |
+| `screenshots/01-pair.png` | 1280×800 | 124057 | `560f93b09392981f4ef161fb42bb38b7abf0ff5efc78d197787d8ed5617a8f1c` |
+| `screenshots/02-no-tabs.png` | 1280×800 | 105175 | `269570f17fee42892f2ac303785e7e84b713a2e2666241f8b9ae38233ed3236e` |
+| `screenshots/03-ready.png` | 1280×800 | 104748 | `7584c58ca4833f5cc12d5187688e9965b07f090e799c952ee2211b7f3ee9cf1c` |
+| `screenshots/04-snapshot.png` | 1280×800 | 96048 | `80ab7eb87f0e29a3fc164fe5e0859d4bdcc70b1fb205314841039d86031e8e3b` |
+| `screenshots/05-update-required.png` | 1280×800 | 110448 | `1f90adb7b175ad00c27aa4624f30b2c4829823b83af10ee8974c7966c3ba3b28` |
 | `promo-small-440x280.png` | 440×280 | 120892 | `7edca4fa82afbc93a644199798608b26a7209f8d3b8f4823b11f3774a383f8bf` |
 | `promo-marquee-1400x560.png` | 1400×560 | 542431 | `1f3079a3c83d750819536fca5ce5c5e799b907feace3383dd258e165c477ecb1` |
 | `../extension/assets/icon-128.png` (the extension's icon) | 128×128 | 8327 | `6650826310ccf7703d0f97fa95b0d46f5572037f9407c3d78d96f2473d7e994e` |
@@ -79,5 +79,6 @@ fixture server's port. The promotional tiles were redrawn on 2026-11-05 in the C
 Environment of that capture: Ubuntu 26.04.1, Chrome for Testing 153.0.8010.12 (Playwright 1.63.0),
 Node v26.8.1, headed on the virtual display (`xvfb-run`, with the browser asking for X11 since `5cbfba6`;
 before that commit a run through `xvfb-run` on this Wayland desktop drew on the desktop itself). The
+screenshots are stored as 24-bit RGB without an alpha channel, which the Store requires ("PNG 24 bits, sans alpha"; re-encoded pixel for pixel from the opaque captures, the tiles were RGB already). The
 capture is deterministic on that display: a second run gives the same bytes for every file but the
 two whose fixture page shows the connector's random port.
