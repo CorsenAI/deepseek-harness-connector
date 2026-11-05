@@ -105,6 +105,9 @@ jobs:
       - run: npm ci --prefix companion
       - run: npm run build
       - run: mkdir -p dist && cd companion && npm pack --pack-destination ../dist
+      # `dsh plugin` forwards to pnpm, which DeepSeek Harness does not install for its users and the
+      # runner images do not promise.
+      - run: npm install -g pnpm
       - name: install a real dsh into a scratch directory
         shell: bash
         run: |
@@ -222,6 +225,8 @@ jobs:
       - run: npm ci --prefix companion
       - run: npm run build
       - run: mkdir -p dist && cd companion && npm pack --pack-destination ../dist
+      # `dsh plugin` forwards to pnpm (see the installer job).
+      - run: npm install -g pnpm
       - name: install dsh and the packaged connector
         run: |
           mkdir -p /tmp/dsh-int && cd /tmp/dsh-int && npm init -y >/dev/null
