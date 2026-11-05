@@ -82,23 +82,42 @@ export interface SessionObserver {
 }
 
 /**
+ * Run one observer callback so that nothing it does can escape into DeepSeek Harness.
+ * @param ctx - the plugin's context, for its logger.
+ * @param what - which callback, for the log line.
+ * @param callback - the callback.
+ */
+function contained(ctx: Context, what: string, callback: () => void): void {
+  try {
+    callback()
+  } catch (cause) {
+    ctx.logger?.warn?.(`corsen-browser-connector: ${what} failed and was ignored: ${(cause as Error)?.message ?? String(cause)}`)
+  }
+}
+
+/**
  * Track the sessions live in this DeepSeek Harness process.
  *
  * Session discovery is push-based so the panel can list sessions without querying any DSH HTTP API,
  * which keeps it working for the `headless`, `sdk`, and `acp` profiles that have no Web surface
  * (ADR 0001). Registration goes through `ctx.on`, so disposing the plugin fiber unsubscribes.
+ *
+ * Since DeepSeek Harness 0.2, `agent/created` is a serial event: DeepSeek Harness awaits every
+ * listener before a session's creation or resume completes, and a listener that throws rolls the
+ * creation back. Announcing a session to the browser is never a reason for that session not to
+ * start, so neither callback can throw out of here, and the created listener answers `undefined`
+ * at once — it has nothing to make DeepSeek Harness wait for.
  * @param ctx - the Cordis context this plugin was applied with.
  * @param observer - what to do as sessions start and end.
  */
 export function observeSessions(ctx: Context, observer: SessionObserver): void {
   ctx.on('agent/created', ({ agent }) => {
     const sessionId = String(agent.id)
-    if (!ID_PATTERN.test(sessionId)) return
-    observer.onStart({ sessionId, title: sessionId })
+    if (ID_PATTERN.test(sessionId)) contained(ctx, 'announcing a new session', () => { observer.onStart({ sessionId, title: sessionId }) })
+    return undefined
   })
   ctx.on('agent/disposed', ({ agent }) => {
     const sessionId = String(agent.id)
-    if (!ID_PATTERN.test(sessionId)) return
-    observer.onEnd(sessionId)
+    if (ID_PATTERN.test(sessionId)) contained(ctx, 'retiring an ended session', () => { observer.onEnd(sessionId) })
   })
 }
