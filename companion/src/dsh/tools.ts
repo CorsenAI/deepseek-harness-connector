@@ -11,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { ToolCallKind, ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { AgentClient } from '../agent-client.ts'
 import { BrowserActionError } from '../agent-client.ts'
 import { ACTION, type ActionKind } from '../protocol.ts'
@@ -175,6 +175,33 @@ function decodeDataUrl(dataUrl: string): Uint8Array {
   return new Uint8Array(Buffer.from(dataUrl.slice(comma + 1), 'base64'))
 }
 
+/**
+ * One model-supplied value as it may appear in a card title: on one line, and short.
+ * @param value - the argument.
+ * @returns the value with whitespace collapsed, cut at 80 characters.
+ */
+function short(value: string): string {
+  const line = value.replace(/\s+/g, ' ').trim()
+  return line.length > 80 ? `${line.slice(0, 79)}…` : line
+}
+
+/**
+ * The card a DeepSeek Harness client (Web, Desktop, an ACP editor) shows for one pending browser
+ * call, instead of the tool name over its raw arguments.
+ *
+ * Pure, as DeepSeek Harness requires: it may run while a call streams and again when a session log
+ * is replayed, and DeepSeek Harness validates the arguments first, showing its generic card for
+ * arguments that do not match the schema. Only the model's own arguments appear; nothing from the
+ * page does.
+ * @param title - what this call does, in a few words.
+ * @param kind - the category a client picks an icon by.
+ * @param rawInput - the salient input for an expanded view, when there is one.
+ * @returns the generic card.
+ */
+function card(title: string, kind: ToolCallKind, rawInput?: string): ToolCallView {
+  return rawInput === undefined ? { card: 'generic', title, kind } : { card: 'generic', title, kind, rawInput }
+}
+
 /** Fields every page-level result carries. */
 const PAGE_IDENTITY = {
   url: { type: 'string', required: true },
@@ -241,6 +268,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_snapshot',
+    presentCall: () => card('Read the attached tab', 'read'),
     description:
       'Read the browser tab attached to this session as structured text: its URL, title, visible text, '
       + 'and a list of interactive elements each carrying a `ref` you pass to the other browser tools. '
@@ -265,6 +293,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_read_text',
+    presentCall: () => card('Read the attached tab’s text', 'read'),
     description:
       'Read only the visible text of the browser tab attached to this session, without the element list. '
       + 'Use it when you need page content but are not about to interact with controls.',
@@ -281,6 +310,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_current_url',
+    presentCall: () => card('Check the attached tab’s address', 'read'),
     description: 'Report the current URL and title of the browser tab attached to this session.',
     parameters: {},
     output: {
@@ -294,6 +324,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_find',
+    presentCall: (args) => card(`Find “${short(args.text)}” in the attached tab`, 'search'),
     description:
       'Find visible text in the tab attached to this session and scroll the first match into view. '
       + 'Returns whether it was found, how many times, and a short snippet around the first match.',
@@ -309,6 +340,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_wait',
+    presentCall: () => card('Wait for the attached tab to settle', 'other'),
     description:
       'Wait for the tab attached to this session to finish loading and for its content to stop changing, '
       + 'up to a bounded time. Use it after a click or navigation that triggers loading.',
@@ -327,6 +359,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_click',
+    presentCall: (args) => card(`Click ${short(args.ref)}`, 'other'),
     description:
       'Click one element in the browser tab attached to this session, addressed by a `ref` from the most '
       + 'recent browser_snapshot. Take a fresh snapshot afterwards, because clicking usually changes the page. '
@@ -343,6 +376,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_type',
+    presentCall: (args) => card(`Type into ${short(args.ref)}${args.submit === true ? ' and submit' : ''}`, 'edit', args.text),
     description:
       'Type text into one input, textarea, or editable element in the browser tab attached to this session, '
       + 'addressed by a `ref` from the most recent browser_snapshot. With submit: true the containing form is submitted, '
@@ -380,6 +414,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_key',
+    presentCall: (args) => card(`Press ${short(args.key)}${args.ref === undefined ? '' : ` on ${short(args.ref)}`}`, 'other'),
     description:
       'Press one key in the tab attached to this session: a single character, or Enter, Tab, Escape, Backspace, '
       + 'Delete, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp, PageDown, Space, optionally with '
@@ -416,6 +451,11 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_scroll',
+    presentCall: (args) => card(
+      args.ref !== undefined ? `Scroll to ${short(args.ref)}`
+        : args.to !== undefined ? `Scroll to the ${short(args.to)}`
+          : args.dy !== undefined ? `Scroll by ${args.dy} px` : 'Scroll the attached tab',
+      'other'),
     description:
       'Scroll the tab attached to this session: to an element by `ref`, to the top or bottom with `to`, '
       + 'or by a number of pixels with `dy` (negative scrolls up). Take a fresh snapshot afterwards to see what is now visible.',
@@ -439,6 +479,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_hover',
+    presentCall: (args) => card(`Hover over ${short(args.ref)}`, 'other'),
     description: 'Move the pointer over one element in the tab attached to this session, to reveal a menu or tooltip. Take a fresh snapshot afterwards.',
     parameters: { ref: REF },
     output: {
@@ -452,6 +493,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_select_option',
+    presentCall: (args) => card(`Choose “${short(args.label ?? args.value ?? '')}” in ${short(args.ref)}`, 'edit'),
     description: 'Choose an option in a select control in the tab attached to this session, by option value or by its visible label.',
     parameters: {
       ref: REF,
@@ -472,6 +514,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_drag',
+    presentCall: (args) => card(`Drag ${short(args.from)} onto ${short(args.to)}`, 'move'),
     description: 'Drag one element onto another in the tab attached to this session, using refs from the latest browser_snapshot.',
     parameters: {
       from: { type: 'string', required: true, description: 'The element to drag.' },
@@ -509,6 +552,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_navigate',
+    presentCall: (args) => card(`Open ${short(args.url)}`, 'fetch', args.url),
     description: 'Navigate the tab attached to this session to an http or https URL and wait for it to load. Take a fresh snapshot afterwards.',
     parameters: { url: { type: 'string', required: true, description: 'An absolute http or https URL.' } },
     output: {
@@ -520,13 +564,14 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
     },
   }))
 
-  for (const [name, kind, verb] of [
-    ['browser_back', ACTION.BACK, 'Go back one page in the history of'],
-    ['browser_forward', ACTION.FORWARD, 'Go forward one page in the history of'],
-    ['browser_reload', ACTION.RELOAD, 'Reload'],
+  for (const [name, kind, verb, title] of [
+    ['browser_back', ACTION.BACK, 'Go back one page in the history of', 'Go back in the attached tab'],
+    ['browser_forward', ACTION.FORWARD, 'Go forward one page in the history of', 'Go forward in the attached tab'],
+    ['browser_reload', ACTION.RELOAD, 'Reload', 'Reload the attached tab'],
   ] as const) {
     register(defineTool({
       name,
+      presentCall: () => card(title, 'fetch'),
       description: `${verb} the tab attached to this session and wait for it to load. Take a fresh snapshot afterwards.`,
       parameters: {},
       output: {
@@ -543,6 +588,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_list_tabs',
+    presentCall: () => card('List this session’s tabs', 'read'),
     description: 'List the tabs attached to this session — only this session’s tabs — with a `tabRef` for each and which one is active.',
     parameters: {},
     output: {
@@ -561,6 +607,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_open_tab',
+    presentCall: (args) => card(args.url === undefined ? 'Open a new tab' : `Open a new tab at ${short(args.url)}`, 'fetch', args.url),
     description: 'Open a new tab, attach it to this session, and make it this session’s active tab. Optionally load a URL in it.',
     parameters: { url: { type: 'string', description: 'An absolute http or https URL to open. Defaults to a blank page.' } },
     output: {
@@ -575,6 +622,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_switch_tab',
+    presentCall: (args) => card(`Switch to tab ${short(args.tabRef)}`, 'other'),
     description:
       'Make one of this session’s tabs its active tab, so the other browser tools act there, and bring it to the '
       + 'front of the user’s window when Chrome allows; the result says whether it did. '
@@ -595,6 +643,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_close_tab',
+    presentCall: (args) => card(args.tabRef === undefined ? 'Close the active tab' : `Close tab ${short(args.tabRef)}`, 'delete'),
     description: 'Close one of this session’s tabs — the active one when no tabRef is given. Only this session’s own tabs can be closed.',
     parameters: { tabRef: { type: 'string', description: 'A tab reference from browser_list_tabs. Defaults to the active tab.' } },
     output: {
@@ -609,6 +658,7 @@ export function registerBrowserTools(ctx: Context, dependencies: ToolDependencie
 
   register(defineTool({
     name: 'browser_screenshot',
+    presentCall: () => card('Screenshot the attached tab', 'read'),
     description:
       'Capture what the tab attached to this session shows on screen, as an image the model can look at, '
       + 'with the page address and title. The tab is brought to the front of its window first if it is not '

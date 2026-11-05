@@ -540,3 +540,44 @@ describe('browser_screenshot', () => {
     assert.match(String(tools.get('browser_screenshot')?.description), /browser_snapshot/)
   })
 })
+
+describe('the cards DeepSeek Harness clients show for a pending call', () => {
+  it('gives every tool a titled generic card for its minimal arguments', () => {
+    const { tools } = mount()
+    for (const name of BROWSER_TOOL_NAMES) {
+      const view = tools.get(name)?.presentCall?.(MINIMAL_ARGS[name])
+      assert.ok(view, `${name} must present its call`)
+      assert.equal(view.card, 'generic', name)
+      assert.ok(view.card === 'generic' && view.title.trim() !== '' && !view.title.startsWith('browser_'), `${name} must have a readable title, not its tool name`)
+    }
+  })
+
+  it('names what the call does from the model’s own arguments', () => {
+    const { tools } = mount()
+    const title = (name: string, args: Record<string, unknown>): string => {
+      const view = tools.get(name)?.presentCall?.(args)
+      return view !== undefined && view.card === 'generic' ? view.title : ''
+    }
+    assert.equal(title('browser_navigate', { url: 'https://example.test/a' }), 'Open https://example.test/a')
+    assert.equal(title('browser_type', { ref: 'e3@2', text: 'hello', submit: true }), 'Type into e3@2 and submit')
+    assert.equal(title('browser_key', { key: 'Enter', ref: 'e1@1' }), 'Press Enter on e1@1')
+    assert.equal(title('browser_scroll', { dy: -200 }), 'Scroll by -200 px')
+    assert.equal(title('browser_close_tab', {}), 'Close the active tab')
+    assert.equal(title('browser_back', {}), 'Go back in the attached tab')
+  })
+
+  it('keeps a title on one short line whatever the model passed', () => {
+    const { tools } = mount()
+    const view = tools.get('browser_find')?.presentCall?.({ text: `first line\nsecond ${'x'.repeat(200)}` })
+    assert.ok(view !== undefined && view.card === 'generic')
+    assert.doesNotMatch(view.title, /\n/)
+    assert.ok(view.title.length <= 120, `title is ${view.title.length} characters`)
+    assert.match(view.title, /…/)
+  })
+
+  it('falls back to the generic card for arguments that do not match the schema, as a replayed old log may hold', () => {
+    const { tools } = mount()
+    assert.equal(tools.get('browser_click')?.presentCall?.({}), undefined)
+    assert.equal(tools.get('browser_navigate')?.presentCall?.({ url: 42 }), undefined)
+  })
+})
