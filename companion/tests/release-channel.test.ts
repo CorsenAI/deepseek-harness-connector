@@ -16,7 +16,8 @@ import { RELEASE_DOWNLOADS, companionTarballUrl, installCommandFor, onboardingFo
 const root = new URL('../../', import.meta.url)
 const read = (path: string): string => readFileSync(new URL(path, root), 'utf8')
 const version = (JSON.parse(read('extension/manifest.json')) as { version: string }).version
-const escaped = version.replace(/\./g, '\\.')
+// Every regular-expression metacharacter escaped, not only the dot: the version is text to match.
+const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 describe('the release channel', () => {
   it('names the companion tarball of the same version on the project\'s GitHub release', () => {
