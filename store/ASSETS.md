@@ -63,10 +63,10 @@ fixture server's port. The promotional tiles were redrawn on 2026-11-05 in the C
 
 | File | Size | Bytes | SHA-256 |
 |---|---|---|---|
-| `screenshots/01-pair.png` | 1280×800 | 127161 | `0a2ef774d0c2b8f66f3abe4bfa2ea3981c449acd8e7d8fc1ee5d81d24618795b` |
-| `screenshots/02-no-tabs.png` | 1280×800 | 111300 | `5d9f5b69da09ada6e3c1e74923e91f3f22011ee1762e50da161fbaba3afedc3e` |
-| `screenshots/03-ready.png` | 1280×800 | 110822 | `ac10fb91bf31a1121b1d1a4d9fbee0344da52dc3b955925ba90e9fc871dda213` |
-| `screenshots/04-snapshot.png` | 1280×800 | 107854 | `73289d7875a2dd960ff8c91db05a81c65e2aa0f94a0aaa11f3ce72561a333137` |
+| `screenshots/01-pair.png` | 1280×800 | 127342 | `28716288e63d2dc5cea4ed4f1367ce60b48ac6ab9134956b117eac935017aecc` |
+| `screenshots/02-no-tabs.png` | 1280×800 | 110631 | `9c1b0179881633cb848c63476c87c5263b4682af6af79ccd00626171ff6b8754` |
+| `screenshots/03-ready.png` | 1280×800 | 110616 | `9ffe4c9eb0e6ed82b77ff6b9821b25908fdafd23e37e35c4e9b41fa5c971eb99` |
+| `screenshots/04-snapshot.png` | 1280×800 | 107671 | `eb5eaa139b772e56e5b4f1180c4dae3b7930b2d510e6db4b65f2b489f50bea86` |
 | `screenshots/05-update-required.png` | 1280×800 | 106072 | `525dfa514ae74328bdc19dd27a95d5221128c113ce35b3775e8c4e3f76723840` |
 | `promo-small-440x280.png` | 440×280 | 118459 | `c6af9801f033a2cccc41c99547eb1896b1716aaf0249b17362c07835bfcfa133` |
 | `promo-marquee-1400x560.png` | 1400×560 | 507787 | `96c720e387c9e558a217764dcc1b20a38a4a78a878dcd518202fc7e77f8b6926` |
