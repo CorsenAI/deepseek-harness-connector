@@ -114,5 +114,5 @@ Projet communautaire non officiel de Corsen AI. Sans affiliation, approbation ni
 | 5 | `screenshots/05-update-required.png` | A version mismatch is a clear message, never undefined behaviour. | Une incompatibilité de versions est un message clair, jamais un comportement indéfini. |
 
 Promotional images: `promo-small-440x280.png` (required), `promo-marquee-1400x560.png` (optional).
-Store icon: `../extension/assets/icon-128.png`, the icon the extension ships. Provenance and hashes:
+Store icon: `store-icon-128.png`, the Corsen AI mark Hermes Connector also uses; the extension itself ships the same mark (`../extension/assets/icon-128.png`). Provenance and hashes:
 `ASSETS.md`.

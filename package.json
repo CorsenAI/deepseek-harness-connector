@@ -19,7 +19,6 @@
     "typecheck:extension": "node companion/node_modules/typescript/bin/tsc -p extension/tsconfig.json --noEmit",
     "typecheck:tests": "node companion/node_modules/typescript/bin/tsc -p tests/tsconfig.json --noEmit",
     "build": "node companion/node_modules/typescript/bin/tsc -p companion/tsconfig.build.json",
-    "icons": "node scripts/make-icons.mjs",
     "postinstall": "npm ci --prefix companion --no-audit --no-fund"
   },
   "devDependencies": {

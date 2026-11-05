@@ -17,7 +17,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from 'playwright'
 import { AgentClient } from '../companion/src/agent-client.ts'
@@ -158,29 +158,71 @@ await settle(400)
 await shot('05-update-required.png')
 await panel.evaluate(async () => { await chrome.storage.local.remove('updateNotice') })
 
-// Promotional tiles, rendered from the extension's own palette and mark.
-async function tile(name: string, width: number, height: number, titleSize: number, subtitleSize: number): Promise<void> {
+// Promotional tiles in the Corsen connector style Hermes Connector set: the Corsen mark glowing on
+// black, the product name, and one session's link fanning out to the tabs it was given. Drawn from
+// HTML and SVG at capture time; the only bitmap is the Corsen mark itself (store/brand).
+const corsenMark = `data:image/png;base64,${readFileSync(new URL('../store/brand/corsen-mark.png', import.meta.url)).toString('base64')}`
+
+async function tile(name: string, width: number, height: number): Promise<void> {
+  // The marquee carries the fan from one session to its tabs; the small tile is the mark and the
+  // name alone, which is all 440 pixels can say cleanly.
+  const compact = width < 800
+  const unit = height / 560
+  const px = (value: number): string => `${Math.round(value * unit)}px`
+  const tabs = [0.2, 0.4, 0.6, 0.8].map((y) => y * height)
+  const fromX = width * 0.62
+  const fromY = height * 0.76
+  const tabX = width - 150 * unit
+  const curves = compact ? '' : `<circle cx="${fromX}" cy="${fromY}" r="${6 * unit}" fill="#bfe8ff" filter="url(#glow)"/>` + tabs.map((y, index) => {
+    const tone = ['#1fb7ff', '#3d7bff', '#9b5cff', '#ff4fd8'][index]
+    return `<path d="M ${fromX} ${fromY} C ${fromX + 260 * unit} ${fromY}, ${tabX - 150 * unit} ${y}, ${tabX} ${y}" stroke="${tone}" stroke-width="${2.6 * unit}" fill="none" filter="url(#glow)"/>`
+      + `<circle cx="${tabX}" cy="${y}" r="${5 * unit}" fill="#fff" filter="url(#glow)"/>`
+      + `<g transform="translate(${tabX} ${y - 34 * unit})" filter="url(#soft)">`
+      + `<rect width="${126 * unit}" height="${78 * unit}" rx="${10 * unit}" fill="rgba(20,28,60,.55)" stroke="${tone}" stroke-width="${2 * unit}"/>`
+      + `<path d="M 0 ${20 * unit} H ${126 * unit}" stroke="${tone}" stroke-width="${1.5 * unit}"/>`
+      + [12, 24, 36].map((dx) => `<circle cx="${dx * unit}" cy="${10 * unit}" r="${3 * unit}" fill="${tone}"/>`).join('')
+      + '</g>'
+  }).join('')
+  const layout = compact
+    ? { markLeft: '16px', markHeight: '206px', textLeft: '212px', title: '25px', tagline: '12.5px', taglineGap: '12px', by: '8.5px', byGap: '13px' }
+    : { markLeft: px(70), markHeight: px(400), textLeft: px(470), title: px(52), tagline: px(27), taglineGap: px(22), by: px(16), byGap: px(24) }
   const page = await harness.context.newPage()
   await page.setViewportSize({ width, height })
   await page.setContent(`<!doctype html><meta charset="utf-8"><title>tile</title>
 <style>
-  body { margin: 0; width: ${width}px; height: ${height}px; box-sizing: border-box; padding: 0 ${Math.round(width * 0.07)}px; background: radial-gradient(120% 140% at 15% 20%, #1b2233 0%, #0e1016 55%); color: #e7ebf3; font-family: Inter, "Segoe UI", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; gap: ${Math.round(width * 0.06)}px; }
-  .mark { width: ${Math.round(height * 0.34)}px; height: ${Math.round(height * 0.34)}px; border-radius: ${Math.round(height * 0.07)}px; background: #161a23; border: 2px solid #242a36; position: relative; flex: none; }
-  .mark::before, .mark::after { content: ""; position: absolute; background: #58a6ff; border-radius: 2px; }
-  .mark::before { left: 24%; top: 22%; width: 9%; height: 56%; }
-  .mark::after { left: 20%; top: 46%; width: 62%; height: 9%; }
-  .text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  h1 { margin: 0; font-size: ${titleSize}px; font-weight: 700; letter-spacing: -0.01em; }
-  p { margin: 0; font-size: ${subtitleSize}px; color: #98a2b6; }
+  body { margin: 0; width: ${width}px; height: ${height}px; overflow: hidden; position: relative;
+    background: radial-gradient(60% 90% at 18% 55%, rgba(61,123,255,.20), transparent 70%),
+                radial-gradient(40% 60% at 60% 85%, rgba(155,92,255,.16), transparent 70%), #04050a;
+    font-family: Montserrat, "Ubuntu Sans", "Segoe UI", sans-serif; color: #f4f6ff; }
+  .mark { position: absolute; left: ${layout.markLeft}; top: 50%; height: ${layout.markHeight}; transform: translateY(-50%);
+    filter: drop-shadow(0 0 ${px(18)} rgba(64,170,255,.55)) drop-shadow(0 0 ${px(42)} rgba(170,90,255,.35)); }
+  .text { position: absolute; left: ${layout.textLeft}; top: 50%; transform: translateY(-${compact ? 50 : 62}%); }
+  h1 { margin: 0; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; line-height: 1.04;
+    font-size: ${layout.title}; text-shadow: 0 0 ${px(18)} rgba(120,160,255,.35); }
+  .tagline { margin: ${layout.taglineGap} 0 0; font-weight: 700; letter-spacing: .08em; font-size: ${layout.tagline}; text-transform: uppercase;
+    background: linear-gradient(90deg, #22c7ff, #8c6bff 55%, #ff5bd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .by { margin: ${layout.byGap} 0 0; font-weight: 600; letter-spacing: .2em; font-size: ${layout.by}; color: #6ea8ff; text-transform: uppercase; }
+  svg { position: absolute; inset: 0; }
 </style>
-<div class="mark" aria-hidden="true"></div>
-<div class="text"><h1>DeepSeek Harness Connector</h1><p>Your DeepSeek session, in the tabs you choose.</p></div>`)
-  await settle(200)
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${3 * unit}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${1.2 * unit}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  ${curves}
+</svg>
+<img class="mark" src="${corsenMark}" alt="">
+<div class="text">
+  <h1>${compact ? 'DeepSeek<br>Harness<br>Connector' : 'DeepSeek Harness<br>Connector'}</h1>
+  <p class="tagline">Your session.${compact ? '<br>' : ' '}Your tabs.</p>
+  <p class="by">Unofficial &middot; by Corsen AI</p>
+</div>`)
+  await settle(300)
   save(name, await page.screenshot({ type: 'png' }))
   await page.close()
 }
-await tile('promo-small-440x280.png', 440, 280, 21, 13)
-await tile('promo-marquee-1400x560.png', 1400, 560, 54, 26)
+await tile('promo-small-440x280.png', 440, 280)
+await tile('promo-marquee-1400x560.png', 1400, 560)
 
 process.stdout.write('\n| File | Bytes | SHA-256 |\n|---|---|---|\n')
 for (const entry of written) process.stdout.write(`| \`${entry.file}\` | ${entry.bytes} | \`${entry.sha256}\` |\n`)
