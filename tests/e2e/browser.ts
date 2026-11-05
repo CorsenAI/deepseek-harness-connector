@@ -46,6 +46,27 @@ export async function waitFor(describe: string, check: () => boolean | Promise<b
   }
 }
 
+/**
+ * Whether a headed Linux browser must be told to use X11, so that it draws on the display `DISPLAY`
+ * names.
+ *
+ * With no `--ozone-platform`, Chrome for Testing 153 on Linux takes its window system from
+ * `XDG_SESSION_TYPE` alone (`SetOzonePlatformForLinuxIfNeeded`, `ui/linux/display_server_utils.cc`):
+ * in a desktop session on Wayland it opens on that desktop, and the `DISPLAY` that `xvfb-run` sets
+ * is ignored. On 2026-11-05 every "headed under Xvfb" run on the development machine, a GNOME
+ * session on Wayland, put its windows on the owner's screen; the browser log named the Wayland
+ * platform. Asking for X11 whenever `DISPLAY` is set sends the window where `DISPLAY` points: the
+ * virtual display under `xvfb-run`, as on CI, and the X server of the desktop (XWayland on a
+ * Wayland session) for someone who runs the suites headed on purpose.
+ * @param headless - whether the run is headless, which draws nowhere and needs no window system.
+ * @param platform - the operating system, `process.platform` by default.
+ * @param env - the environment, `process.env` by default.
+ * @returns true for a headed run on Linux with an X display set.
+ */
+export function headedOnX11Display(headless: boolean, platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): boolean {
+  return !headless && platform === 'linux' && Boolean(env['DISPLAY'])
+}
+
 /** What one browser launch produces. */
 export interface LaunchedBrowser {
   context: BrowserContext
@@ -86,6 +107,7 @@ export async function launchBrowser(userDataDir: string, extensionDir: string): 
       `--load-extension=${extensionDir}`,
       '--no-first-run',
       '--no-default-browser-check',
+      ...(headedOnX11Display(headless) ? ['--ozone-platform=x11'] : []),
     ],
   })
 
