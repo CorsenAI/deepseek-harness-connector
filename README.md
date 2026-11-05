@@ -18,7 +18,7 @@ except what your own DeepSeek Harness sends to the model provider you configured
 
 **Release candidate, 0.1.0.** The routing core, the transport, the DeepSeek Harness plugin, the
 Chrome extension with all twenty-one browser actions, the installers, and the release packaging work
-end to end and are covered by 387 tests: 293 unit and protocol tests, 17 cases running the shipped
+end to end and are covered by 388 tests: 294 unit and protocol tests, 17 cases running the shipped
 page module in a real Chrome, and 77 real-browser end-to-end cases — multi-session isolation, a
 page built to leak hidden content, a page built to give a model instructions, an attached tab that
 changes origin mid-task, recovery from a killed service worker, a restarted broker, a replaced
@@ -202,7 +202,7 @@ Details in [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and
 npm install
 npm run build        # compile companion/ to lib/
 npm run typecheck
-npm run test:unit    # 293 tests, no browser needed
+npm run test:unit    # 294 tests, no browser needed
 npm run test:page    # 17 tests, the shipped page module in a real Chrome for Testing
 npm run test:e2e     # 77 tests, real Chrome with the extension loaded
 ```

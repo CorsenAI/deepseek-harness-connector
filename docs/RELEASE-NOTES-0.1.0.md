@@ -16,7 +16,7 @@ you are already signed in to. Two parts, released together at the same version:
 | Artifact | What it is | SHA-256 | Bytes |
 |---|---|---|---|
 | `dsh-browser-connector-extension-0.1.0.zip` | The Chrome extension (Manifest V3) — the file submitted to the Chrome Web Store | `9e2c08ed4e9deab95679cbbc40b86797d0581b872a35dc6afa2d560d6984857a` | 58647 |
-| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `18522051bcb0f8baa00ff276dce2c0e4b0fafe19c48e81a2c83aa1206e27200e` | 69342 |
+| `corsen-ai-dsh-browser-connector-0.1.0.tgz` | The companion: DeepSeek Harness plugin and local broker, published as `@corsen-ai/dsh-browser-connector` | `dd161a400eaae55999503f0bc3b65ad641fadbff16b5743da83a7e5a1090259c` | 69674 |
 
 Built from a clean tree; byte-identical when built on Ubuntu, macOS and Windows. `SHA256SUMS` and
 `release-manifest.json` accompany them.
@@ -71,7 +71,7 @@ naming the stored file.
 
 ### Evidence
 
-387 tests: 293 unit and protocol, 17 on the shipped page module in a real Chrome, 77 real-browser
+388 tests: 294 unit and protocol, 17 on the shipped page module in a real Chrome, 77 real-browser
 end-to-end — multi-session isolation, a page built to leak hidden content, a page built to give a
 model instructions, web components read and clicked through open shadow roots, an attached tab
 that changes site mid-task, recovery from a killed worker, a restarted broker, a replaced agent, a
