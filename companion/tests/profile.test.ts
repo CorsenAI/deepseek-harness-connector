@@ -68,6 +68,14 @@ describe('naming the profile that loaded the connector', () => {
     assert.equal(profileNameFromPath(url), 'desktop')
   })
 
+  it('reads the profile from a Windows installation path, whose separators are backslashes', () => {
+    // The Windows lane of 2026-11-05 found every Windows instance calling itself `unknown`: the
+    // path was split on `/` alone. The conversion is injected so this runs on every platform.
+    const windowsPath = 'C:\\Users\\Jane Doe\\.dsh\\profiles\\web\\node_modules\\@corsen-ai\\dsh-browser-connector\\lib\\plugin.js'
+    assert.equal(profileNameFromPath('file:///ignored', () => windowsPath), 'web')
+    assert.equal(profileNameFromPath('file:///ignored', () => 'C:\\Users\\Jane Doe\\.dsh\\profiles\\node_modules\\x\\plugin.js'), null)
+  })
+
   it('names no profile for a path outside any profile, and for the profiles directory’s own node_modules', () => {
     assert.equal(profileNameFromPath(pathToFileURL(join(OS_HOME, 'src', 'plugin.js')).href), null)
     assert.equal(profileNameFromPath(pathToFileURL(join(OS_HOME, '.dsh', 'profiles', 'node_modules', 'x', 'plugin.js')).href), null)

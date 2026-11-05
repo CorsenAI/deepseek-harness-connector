@@ -70,17 +70,22 @@ export function resolveDshHome(environment: NodeJS.ProcessEnv = process.env, osH
  * `<home>/profiles/<name>/node_modules/...`, so the loading path names the profile without any
  * configuration. A bundle resolved from the installation anchor instead has no profile in its path,
  * and the caller supplies one.
+ *
+ * The path is split on both separators. Until 2026-11-05 it was split on `/` alone, so on Windows,
+ * where the path has backslashes, no profile was ever found: every Windows instance identified
+ * itself as `unknown`, and two profiles in one home shared one name in the panel.
  * @param moduleUrl - this module's URL.
+ * @param toPath - the file-URL conversion, for tests that need another platform's paths.
  * @returns the profile name, or `null` when the path does not contain one.
  */
-export function profileNameFromPath(moduleUrl: string): string | null {
+export function profileNameFromPath(moduleUrl: string, toPath: (url: string) => string = fileURLToPath): string | null {
   let path: string
   try {
-    path = fileURLToPath(moduleUrl)
+    path = toPath(moduleUrl)
   } catch {
     return null // Not a file URL, so it carries no profile directory.
   }
-  const parts = path.split(/[\/]+/)
+  const parts = path.split(/[\\/]+/)
   const index = parts.lastIndexOf(PROFILES_DIR)
   if (index < 0 || index + 1 >= parts.length) return null
   const name = parts[index + 1]
