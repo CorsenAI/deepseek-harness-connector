@@ -113,7 +113,9 @@ Write-Output "=== install from the release URL (a loopback stand-in for github.c
 $urlPort = [int]$port + 100
 $tag = "v" + (([System.IO.Path]::GetFileNameWithoutExtension($Tarball)) -replace '^.*-', '')
 $serverOut = Join-Path $env:DSH_HOME "tarball-server.log"
-$server = Start-Process -FilePath node -ArgumentList @((Join-Path $here "tarball-server.mjs"), $Tarball, "$urlPort", $tag) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOut -RedirectStandardError (Join-Path $env:DSH_HOME "tarball-server.err")
+# Start-Process joins -ArgumentList with spaces and quotes nothing, and the tarball path has a space
+# in it on purpose (that is one of the things this suite tests): each path is quoted here.
+$server = Start-Process -FilePath node -ArgumentList @("`"$(Join-Path $here 'tarball-server.mjs')`"", "`"$Tarball`"", "$urlPort", $tag) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOut -RedirectStandardError (Join-Path $env:DSH_HOME "tarball-server.err")
 $listening = $false
 for ($i = 0; $i -lt 50 -and -not $listening; $i++) {
   Start-Sleep -Milliseconds 200
