@@ -212,11 +212,16 @@ if (existsSync(tarball)) {
 
   // An allowlist, not a deny-list: the review added `package/telemetry.js` to the archive, refreshed
   // its checksum, and every check still passed, because nothing asked what else was in there.
+  // The display metadata DeepSeek Harness reads for its plugin pages and index cards: one locale
+  // file per language under locale/, and the icon the package.json names.
+  const locales = readdirSync(join(root, "companion", "locale")).filter((name) => name.endsWith(".json")).sort();
   const expected = new Set([
     "package/package.json",
     "package/cordis.patch.yml",
     "package/README.md",
     "package/LICENSE",
+    "package/icon.png",
+    ...locales.map((name) => `package/locale/${name}`),
     ...built.map((rel) => `package/lib/${rel}`),
   ]);
   const shipped = entries.filter((entry) => entry.type === "0").map((entry) => entry.name);
@@ -245,6 +250,15 @@ if (existsSync(tarball)) {
     patch !== undefined && patch.data.equals(readFileSync(join(root, "companion", "cordis.patch.yml"))),
     "tarball cordis.patch.yml is byte-identical to the source",
   );
+  const icon = entries.find((entry) => entry.name === "package/icon.png");
+  check(
+    icon !== undefined && icon.data.equals(readFileSync(join(root, "extension", "assets", "icon-128.png"))),
+    "tarball icon.png is the extension's own 128-pixel icon",
+  );
+  for (const name of locales) {
+    const packed = entries.find((entry) => entry.name === `package/locale/${name}`);
+    check(packed !== undefined && packed.data.equals(readFileSync(join(root, "companion", "locale", name))), `tarball locale/${name} is byte-identical to the source`);
+  }
   const packedManifest = entries.find((entry) => entry.name === "package/package.json");
   check(
     packedManifest !== undefined && JSON.parse(packedManifest.data.toString("utf8")).version === manifest.version,

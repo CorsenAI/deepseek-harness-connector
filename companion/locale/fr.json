@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DeepSeek Harness Connector",
+    "description": "Permet à une session DeepSeek Harness d’agir dans les onglets Chrome que vous lui attachez, dans votre propre profil connecté, et nulle part ailleurs. Tout reste local : aucun relais, aucune télémétrie, aucun cookie. Nécessite l’extension DeepSeek Harness Connector dans Chrome. Non officiel, par Corsen AI."
+  }
+}

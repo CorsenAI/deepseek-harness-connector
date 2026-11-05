@@ -2,6 +2,7 @@
   "name": "@corsen-ai/dsh-browser-connector",
   "version": "0.1.0",
   "description": "Connect exact DeepSeek Harness sessions to explicitly selected tabs in your own signed-in Chrome profile. Unofficial, local-first, by Corsen AI.",
+  "icon": "./icon.png",
   "license": "MIT",
   "author": "Corsen AI",
   "homepage": "https://github.com/CorsenAI/deepseek-harness-connector",
@@ -34,12 +35,15 @@
       "default": "./lib/protocol.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
+    "locale/*.json",
+    "icon.png",
     "README.md",
     "LICENSE"
   ],

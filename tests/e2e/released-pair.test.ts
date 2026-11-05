@@ -347,6 +347,28 @@ describe('the released pair, installed as a user installs it', () => {
     assert.equal(evaluate(packaged, {}, dshVersion), undefined, `the DeepSeek Harness under test (${dshVersion}) must accept the package`)
   })
 
+  it('shows in DeepSeek Harness’s plugin pages by its own title, description and icon', { timeout: 60000, skip: skipReason }, async (t) => {
+    // DeepSeek Harness 0.2 reads an installed plugin's display metadata without running it — the
+    // exported locale files and the icon the manifest names — for its Plugins page and index cards.
+    // Its own reader, from the installation under test, reads the installed package here.
+    const appBoot = join(dshBin as string, '..', '@deepseek-ai', 'dsh-app-boot', 'lib', 'index.js')
+    type ReadMeta = (specifier: string, parentURL: string) => { title?: Record<string, string> | string, description?: Record<string, string> | string, icon?: string, error?: string } | undefined
+    const harness: { readPluginMeta?: ReadMeta } = existsSync(appBoot) ? await import(pathToFileURL(appBoot).href) as { readPluginMeta?: ReadMeta } : {}
+    const read = harness.readPluginMeta
+    if (typeof read !== 'function') {
+      t.skip(`DeepSeek Harness ${dshVersion} has no plugin display metadata reader`)
+      return
+    }
+    const meta = read('@corsen-ai/dsh-browser-connector', pathToFileURL(join(home, 'profiles', 'headless', 'package.json')).href)
+    assert.ok(meta, 'DeepSeek Harness found display metadata for the installed package')
+    assert.equal(meta.error, undefined, `DeepSeek Harness reported a metadata problem: ${String(meta.error)}`)
+    assert.deepEqual(meta.title, { en: 'DeepSeek Harness Connector', fr: 'DeepSeek Harness Connector' })
+    assert.ok(typeof meta.description === 'object' && /Unofficial, by Corsen AI/.test(meta.description['en'] ?? ''), 'the English description, unofficial status included')
+    assert.match(meta.icon ?? '', /^data:image\/png;base64,/, 'the icon the manifest names, read as a PNG')
+    const shipped = readFileSync(join(installed, 'icon.png'))
+    assert.ok(Buffer.from((meta.icon ?? '').slice('data:image/png;base64,'.length), 'base64').equals(shipped), 'the picture DeepSeek Harness shows is the shipped icon')
+  })
+
   it('applies the installed plugin in a real DeepSeek Harness process, which starts the broker it found missing; the only failure left is the missing API key', { timeout: 180000, skip: skipReason }, async () => {
     assert.equal(await brokerAnswers(), 0, 'nothing must listen on the port before the launch')
     // A real profile launch: DeepSeek Harness composes the tree, applies every plugin, and stops at

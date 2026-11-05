@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DeepSeek Harness Connector",
+    "description": "Lets a DeepSeek Harness session operate the Chrome tabs you attach to it, in your own signed-in profile, and nothing else. Local-first: no relay, no telemetry, no cookies. Needs the DeepSeek Harness Connector extension in Chrome. Unofficial, by Corsen AI."
+  }
+}
