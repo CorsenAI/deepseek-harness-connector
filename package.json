@@ -2,7 +2,24 @@
   "name": "deepseek-harness-connector",
   "version": "0.1.0",
   "private": true,
-  "description": "Development and test orchestration for the DeepSeek Harness Connector. The published package is companion/; the Chrome Web Store package is extension/.",
+  "description": "Development and test orchestration for the DeepSeek Harness Connector: a Chrome extension (extension/, the Chrome Web Store package) and a DeepSeek Harness plugin with its local broker (companion/, the package @corsen-ai/dsh-browser-connector, served as a tarball from the GitHub release: dsh plugin --profile web add https://github.com/CorsenAI/deepseek-harness-connector/releases/download/v0.1.0/corsen-ai-dsh-browser-connector-0.1.0.tgz). Unofficial, by Corsen AI.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CorsenAI/deepseek-harness-connector.git"
+  },
+  "homepage": "https://github.com/CorsenAI/deepseek-harness-connector",
+  "bugs": {
+    "url": "https://github.com/CorsenAI/deepseek-harness-connector/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "chrome-extension",
+    "browser-automation",
+    "ai-agent",
+    "manifest-v3"
+  ],
   "license": "MIT",
   "author": "Corsen AI",
   "type": "module",
