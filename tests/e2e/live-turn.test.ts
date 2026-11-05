@@ -421,7 +421,13 @@ describe('a live DeepSeek Harness turn through the released pair', () => {
     assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
     const { toolResult, images } = finalConversation(turn, 'browser_screenshot')
     assert.doesNotMatch(toolResult, /no attachment service|No screenshot was taken|could not capture|image omitted/, 'the capture must have been taken, saved and sent')
-    assert.match(toolResult, /Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), 1280×720 pixels/, 'the text beside the image names the page')
+    // The caption names the page and the capture's own size. That size is the tab's visible area
+    // as Chrome composites it: 1280×720 in the new headless mode, where the window is the emulated
+    // viewport, and the real content area of the window when headed (1264×739 under Xvfb on
+    // 2026-11-05). The assertion is that the caption tells the truth about the stored picture.
+    const caption = /Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), (\d+)×(\d+) pixels/.exec(toolResult)
+    assert.ok(caption, `the text beside the image names the page and its size: ${toolResult}`)
+    const captured = { width: Number(caption[1]), height: Number(caption[2]) }
     assert.match(toolResult, /sha256:[0-9a-f]{8}/, 'DeepSeek Harness names the durable attachment in the text it sends')
 
     // Exactly one image reached the provider for this tool result, inline (the mock has no files
@@ -435,12 +441,12 @@ describe('a live DeepSeek Harness turn through the released pair', () => {
     assert.ok(preview, `no request preview in the handle text: ${toolResult}`)
     const wireSize = jpegDimensions(image.bytes)
     assert.deepEqual(wireSize, { width: Number(preview[1]), height: Number(preview[2]) }, 'the pixels the provider received are the preview the text announced')
-    assert.ok(Math.abs(wireSize.width / wireSize.height - 1280 / 720) < 0.01, `the preview keeps the capture's proportions; got ${wireSize.width}×${wireSize.height}`)
+    assert.ok(Math.abs(wireSize.width / wireSize.height - captured.width / captured.height) < 0.01, `the preview keeps the capture's proportions; got ${wireSize.width}×${wireSize.height} for ${captured.width}×${captured.height}`)
 
-    // And the durable copy under the harness home is that same JPEG.
+    // And the durable copy under the harness home is that same capture, at the size the caption gave.
     const digest = /sha256:([0-9a-f]{8})/.exec(toolResult)![1]!
     const stored = storedAttachment(digest)
-    assert.deepEqual(jpegDimensions(stored), { width: 1280, height: 720 })
+    assert.deepEqual(jpegDimensions(stored), captured)
     assert.match(turn.stdout, /I can see the page/, `stdout was:\n${turn.stdout}`)
   })
 
@@ -451,11 +457,12 @@ describe('a live DeepSeek Harness turn through the released pair', () => {
     const turn = await runTurn('browser_screenshot', 'I cannot see, but I know a screenshot was taken.', catalogueModels(dshVersion).textOnly)
     assert.equal(turn.status, 0, `dsh exited ${turn.status}:\n${turn.stdout}\n${turn.stderr}`)
     const { messages, toolResult, images } = finalConversation(turn, 'browser_screenshot')
-    assert.match(toolResult, /^\[image omitted because this model accepts text only; attachment sha256:[0-9a-f]{8}\]Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), 1280×720 pixels\.$/)
+    const caption = /^\[image omitted because this model accepts text only; attachment sha256:[0-9a-f]{8}\]Screenshot of Connector fixture A \(http:\/\/127\.0\.0\.1:\d+\/page-a\.html\), (\d+)×(\d+) pixels\.$/.exec(toolResult)
+    assert.ok(caption, `DeepSeek Harness's placeholder, then the connector's caption: ${toolResult}`)
     assert.equal(images.length, 0, 'no pixels reach a text-only model with the tool result')
     assert.doesNotMatch(JSON.stringify(messages), /"type":"image(_url)?"/, 'and none anywhere else in the request')
     const digest = /sha256:([0-9a-f]{8})/.exec(toolResult)![1]!
-    assert.deepEqual(jpegDimensions(storedAttachment(digest)), { width: 1280, height: 720 }, 'the image was saved even though this model cannot see it')
+    assert.deepEqual(jpegDimensions(storedAttachment(digest)), { width: Number(caption[1]), height: Number(caption[2]) }, 'the image was saved, at the size the caption gave, even though this model cannot see it')
     assert.match(turn.stdout, /I cannot see/, `stdout was:\n${turn.stdout}`)
   })
 })
