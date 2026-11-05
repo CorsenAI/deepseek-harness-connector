@@ -172,12 +172,14 @@ records what was *run*: the published packages.
 | **released** | npm `latest` | release blocker | `.github/workflows/ci.yml`, jobs `dsh-integration` and `released-pair` |
 | **next** | npm `next` dist-tag | release blocker | same jobs |
 | **minimum** | `@deepseek-ai/dsh@0.1.2-rc.1`, the lowest declared version | release blocker | `released-pair` |
-| **upstream** | `deepseek-ai/deepseek-harness` `master`, scheduled | advisory — may fail without blocking a release; exists to discover a breaking change before users report it | `dsh-integration` |
+| **upstream** | npm `alpha` dist-tag (0.2.2-alpha.3 on 2026-11-05), the earliest build DeepSeek Harness publishes; on every run and weekly | advisory — may fail without blocking a release; exists to discover a breaking change before users report it, a 0.3 line included (refused by design until tested) | `dsh-integration` |
 
-The lanes are configured and have been **run locally, by hand** — on 2026-09-11, and on 2026-11-05
-for the 0.2 rows — with the same commands the jobs run (the rows above). They have never
-run on GitHub, because the repository has no remote yet (`TEST-MATRIX.md` gate Z stays partial
-until the first hosted run writes its row).
+The lanes ran by hand on 2026-09-11 and 2026-11-05 with the commands the jobs run, and on GitHub's
+hosted runners since the first push of 2026-11-05 (`TEST-MATRIX.md` gate Z). The upstream lane
+first installed DeepSeek Harness from its git repository, which npm cannot prepare (a pnpm
+monorepo), so it failed on every run before reaching the connector; it reads the `alpha` channel
+since, whose steps passed by hand on 2026-11-05 against 0.2.2-alpha.3 (installed, configured, the
+only failure the missing API key).
 
 ## When upstream breaks us
 
