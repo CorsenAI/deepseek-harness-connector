@@ -39,7 +39,7 @@
     "postinstall": "npm ci --prefix companion --no-audit --no-fund"
   },
   "devDependencies": {
-    "playwright": "1.63.0",
+    "playwright": "1.65.0",
     "ws": "^8.22.1"
   }
 }
