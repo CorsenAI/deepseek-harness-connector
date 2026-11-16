@@ -63,7 +63,7 @@
     "clean": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "ws": "^8.21.3"
+    "ws": "^8.23.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",
